@@ -28,7 +28,7 @@ def h(value):
     return html.escape(str(value or ""), quote=True)
 
 # --- ⚠️ 最新のGASウェブアプリURL ---
-GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyZ1SKEja21KSI3DLCyIds0nwRDysPSQRfR_AQortUo8BAYYDZ4Mu4UfB3qUnrwyg4KfA/exec"
+GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxC4Rvqe32N6XZPQhVSb7WvArXTjbtbgbehkPQr1CXOs-2f8T1t3bHbfZ3_sFvZZ0Oe6g/exec"
 
 # =================================================================
 # ⚙️ ナビゲーションシステム用マスターシート設定
