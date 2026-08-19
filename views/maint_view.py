@@ -18,8 +18,16 @@ def maintenance_admin_screen():
     # ----------------------------------------------------
     with tab1:
         st.write("#### 臨時納品 申請入力")
+
+        # 送信完了メッセージの表示制御
+        if st.session_state.get("maint_submit_success", False):
+            st.success("🎉 申請の書き込みが完了しました！")
+            st.session_state["maint_submit_success"] = False
+
         cust_master = load_customer_master()
-        c_code_input = st.text_input("顧客コードを入力").strip()
+        
+        # 顧客検索コード入力（キー設定で初期化可能に）
+        c_code_input = st.text_input("顧客コードを入力", key="search_c_code").strip()
         
         store_name, cust_name, store_code = "", "", ""
         if c_code_input in cust_master:
@@ -30,26 +38,25 @@ def maintenance_admin_screen():
             st.success(f"【該当顧客】 {cust_name} （加盟店: {store_name}）")
 
         with st.form("maint_form"):
-            applicant = st.text_input("担当者名", value=st.session_state.get("user_name", ""))
+            applicant = st.text_input("担当者名", value=st.session_state.get("user_name", ""), key="input_applicant")
             
             c1, c2 = st.columns(2)
             with c1:
-                customer_code = st.text_input("顧客コード", value=c_code_input)
-                customer_name = st.text_input("顧客名", value=cust_name)
+                customer_code = st.text_input("顧客コード", value=c_code_input, key="input_cust_code")
+                customer_name = st.text_input("顧客名", value=cust_name, key="input_cust_name")
             with c2:
-                store_code_val = st.text_input("加盟店コード", value=store_code)
-                store_name_val = st.text_input("加盟店名", value=store_name)
+                store_code_val = st.text_input("加盟店コード", value=store_code, key="input_store_code")
+                store_name_val = st.text_input("加盟店名", value=store_name, key="input_store_name")
 
             d1, d2 = st.columns(2)
             with d1:
-                delivery_date = st.text_input("納品希望日 (YYYY/MM/DD)", value=datetime.now().strftime("%Y/%m/%d"))
+                delivery_date = st.text_input("納品希望日 (YYYY/MM/DD)", value=datetime.now().strftime("%Y/%m/%d"), key="input_deliv_date")
             with d2:
-                route_code = st.text_input("納品ルートコード", value="")
+                route_code = st.text_input("納品ルートコード", key="input_route_code")
 
             st.write("---")
             st.write("##### 📦 申請商品（最大5件）")
 
-            # 入力保持用データ構造
             item_inputs = []
             for i in range(1, 6):
                 ic1, ic2, ic3, ic4 = st.columns([2, 1, 1, 1])
@@ -72,7 +79,6 @@ def maintenance_admin_screen():
             submitted = st.form_submit_button("送信する", type="primary", use_container_width=True)
 
             if submitted:
-                # 基本情報の未入力バリデーション（商品記号・単価・数量 以外のすべての項目）
                 required_fields = [
                     ("担当者名", applicant),
                     ("顧客コード", customer_code),
@@ -88,17 +94,12 @@ def maintenance_admin_screen():
                 if missing_labels:
                     st.error(f"⚠️ 以下の必須項目が未入力です: {', '.join(missing_labels)}")
                 else:
-                    # 商品データの成形（商品記号がない場合は伝票出力を空文字にする）
                     items_flat = []
                     for item in item_inputs:
                         p_code = item["p_code"]
                         qty = int(item["qty_str"]) if item["qty_str"].isdigit() else 0
                         price = int(item["price_str"]) if item["price_str"].isdigit() else 0
-                        
-                        if p_code:
-                            slip_val = item["slip"]
-                        else:
-                            slip_val = ""  # 商品記号がない場合は伝票出力を設定しない
+                        slip_val = item["slip"] if p_code else ""
                         
                         items_flat.extend([p_code, qty, price, slip_val])
 
@@ -118,13 +119,24 @@ def maintenance_admin_screen():
                     with st.spinner("送信中..."):
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
-                            st.success("🎉 申請の書き込みが完了しました！")
+                            # 送信成功フラグのセット
+                            st.session_state["maint_submit_success"] = True
+                            
+                            # 全入力項目のクリア処理
+                            st.session_state["search_c_code"] = ""
+                            st.session_state["input_route_code"] = ""
+                            for i in range(1, 6):
+                                st.session_state[f"p_code_{i}"] = ""
+                                st.session_state[f"qty_{i}"] = "0"
+                                st.session_state[f"amt_{i}"] = "0"
+                                st.session_state[f"slip_{i}"] = "有"
+                            
                             st.rerun()
                         else:
                             st.error(f"送信エラー: {res.get('message')}")
 
     # ----------------------------------------------------
-    # TAB 2: 管理職チェック（訂正・差戻し対応）
+    # TAB 2: 管理職チェック（変更なし）
     # ----------------------------------------------------
     with tab2:
         st.write("#### 🔍 申請データ確認・訂正・承認")
@@ -215,7 +227,6 @@ def maintenance_admin_screen():
                                 with ic3: ea = st.text_input(f"単価 {i+1}", value=a_val, key=f"ea_{row_id}_{i}").strip()
                                 with ic4: es = st.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=0 if s_val != "無" else 1, key=f"es_{row_id}_{i}")
                                 
-                                # 商品記号がない場合は数量・単価・伝票出力を空で処理
                                 eq_num = int(eq) if eq.isdigit() else 0
                                 ea_num = int(ea) if ea.isdigit() else 0
                                 es_str = es if ep else ""
