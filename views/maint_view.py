@@ -4,6 +4,19 @@ from datetime import datetime
 from utils import post_to_gas
 from data_loader import load_customer_master
 
+def on_search_change():
+    """検索欄に入力・Enterされた瞬間に発動するコールバック関数"""
+    search_code = st.session_state.get("search_c_code", "").strip()
+    cust_master = load_customer_master()
+    
+    # 型の違い（数値・文字列）を考慮して検索
+    if search_code in cust_master:
+        info = cust_master[search_code]
+        st.session_state["input_cust_code"] = search_code
+        st.session_state["input_cust_name"] = info.get("cust_name", "")
+        st.session_state["input_store_code"] = info.get("store_code", "")
+        st.session_state["input_store_name"] = info.get("store_name", "")
+
 def maintenance_admin_screen():
     st.markdown("### 📦 臨時納品・メンテナンス管理")
     
@@ -25,7 +38,7 @@ def maintenance_admin_screen():
             st.session_state["maint_submit_success"] = False
 
         cust_master = load_customer_master()
-        
+
         # フォーム用セッションステートの初期化
         if "input_applicant" not in st.session_state:
             st.session_state["input_applicant"] = st.session_state.get("user_name", "")
@@ -38,17 +51,21 @@ def maintenance_admin_screen():
         if "input_store_name" not in st.session_state:
             st.session_state["input_store_name"] = ""
 
-        # 顧客検索コード入力
-        c_code_input = st.text_input("顧客コードを入力", key="search_c_code").strip()
+        # 顧客検索コード入力（Enter押下時に on_change が発動）
+        st.text_input(
+            "🔍 顧客コードを入力（Enterでフォームに自動反映）", 
+            key="search_c_code", 
+            on_change=on_search_change
+        )
         
-        # 検索ヒット時に session_state を直接書き換えてフォームに自動反映
-        if c_code_input in cust_master:
-            info = cust_master[c_code_input]
-            st.session_state["input_cust_code"] = c_code_input
-            st.session_state["input_cust_name"] = info.get("cust_name", "")
-            st.session_state["input_store_code"] = info.get("store_code", "")
-            st.session_state["input_store_name"] = info.get("store_name", "")
-            st.success(f"【該当顧客】 {info.get('cust_name', '')} （加盟店: {info.get('store_name', '')}）")
+        # 検索結果メッセージ表示
+        current_search = st.session_state.get("search_c_code", "").strip()
+        if current_search:
+            if current_search in cust_master:
+                info = cust_master[current_search]
+                st.success(f"【該当顧客】 {info.get('cust_name', '')} （加盟店: {info.get('store_name', '')}）")
+            else:
+                st.warning(f"⚠️ 顧客コード「{current_search}」はマスタに見つかりませんでした。")
 
         with st.form("maint_form"):
             applicant = st.text_input("担当者名", key="input_applicant")
@@ -92,7 +109,6 @@ def maintenance_admin_screen():
             submitted = st.form_submit_button("送信する", type="primary", use_container_width=True)
 
             if submitted:
-                # 必須項目バリデーション
                 required_fields = [
                     ("担当者名", applicant),
                     ("顧客コード", customer_code),
@@ -135,7 +151,7 @@ def maintenance_admin_screen():
                         if res.get("status") == "success":
                             st.session_state["maint_submit_success"] = True
                             
-                            # 全入力欄を初期化（クリア）
+                            # クリア処理
                             st.session_state["search_c_code"] = ""
                             st.session_state["input_cust_code"] = ""
                             st.session_state["input_cust_name"] = ""
