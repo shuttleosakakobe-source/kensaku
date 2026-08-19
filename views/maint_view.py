@@ -31,6 +31,7 @@ def maintenance_admin_screen():
 
         with st.form("maint_form"):
             applicant = st.text_input("担当者名", value=st.session_state.get("user_name", ""))
+            
             c1, c2 = st.columns(2)
             with c1:
                 customer_code = st.text_input("顧客コード", value=c_code_input)
@@ -41,28 +42,66 @@ def maintenance_admin_screen():
 
             d1, d2 = st.columns(2)
             with d1:
-                delivery_date = st.date_input("納品希望日", datetime.now()).strftime("%Y/%m/%d")
+                delivery_date = st.text_input("納品希望日 (YYYY/MM/DD)", value=datetime.now().strftime("%Y/%m/%d"))
             with d2:
                 route_code = st.text_input("納品ルートコード", value="")
 
             st.write("---")
             st.write("##### 📦 申請商品（最大5件）")
 
-            items_flat = []
+            # 入力保持用データ構造
+            item_inputs = []
             for i in range(1, 6):
                 ic1, ic2, ic3, ic4 = st.columns([2, 1, 1, 1])
-                with ic1: p_code = st.text_input(f"品記号 {i}", key=f"p_code_{i}")
-                with ic2: qty = st.number_input(f"数量 {i}", min_value=0, value=0, key=f"qty_{i}")
-                with ic3: amt = st.number_input(f"金額 {i}", min_value=0, value=0, key=f"amt_{i}")
-                with ic4: slip = st.selectbox(f"伝票 {i}", ["要", "不要"], key=f"slip_{i}")
-                items_flat.extend([p_code, qty, amt, slip])
+                with ic1: 
+                    p_code = st.text_input(f"商品記号 {i}", key=f"p_code_{i}").strip()
+                with ic2: 
+                    qty_str = st.text_input(f"数量 {i}", value="0", key=f"qty_{i}").strip()
+                with ic3: 
+                    unit_price_str = st.text_input(f"単価 {i}", value="0", key=f"amt_{i}").strip()
+                with ic4: 
+                    slip = st.selectbox(f"伝票出力 {i}", ["有", "無"], key=f"slip_{i}")
+                
+                item_inputs.append({
+                    "p_code": p_code,
+                    "qty_str": qty_str,
+                    "price_str": unit_price_str,
+                    "slip": slip
+                })
 
             submitted = st.form_submit_button("送信する", type="primary", use_container_width=True)
 
             if submitted:
-                if not customer_code or not applicant:
-                    st.error("担当者名と顧客コードは必須入力です。")
+                # 基本情報の未入力バリデーション（商品記号・単価・数量 以外のすべての項目）
+                required_fields = [
+                    ("担当者名", applicant),
+                    ("顧客コード", customer_code),
+                    ("顧客名", customer_name),
+                    ("加盟店コード", store_code_val),
+                    ("加盟店名", store_name_val),
+                    ("納品希望日", delivery_date),
+                    ("納品ルートコード", route_code)
+                ]
+                
+                missing_labels = [label for label, val in required_fields if not str(val).strip()]
+
+                if missing_labels:
+                    st.error(f"⚠️ 以下の必須項目が未入力です: {', '.join(missing_labels)}")
                 else:
+                    # 商品データの成形（商品記号がない場合は伝票出力を空文字にする）
+                    items_flat = []
+                    for item in item_inputs:
+                        p_code = item["p_code"]
+                        qty = int(item["qty_str"]) if item["qty_str"].isdigit() else 0
+                        price = int(item["price_str"]) if item["price_str"].isdigit() else 0
+                        
+                        if p_code:
+                            slip_val = item["slip"]
+                        else:
+                            slip_val = ""  # 商品記号がない場合は伝票出力を設定しない
+                        
+                        items_flat.extend([p_code, qty, price, slip_val])
+
                     payload = {
                         "status": "SUBMIT_MAINTENANCE",
                         "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
@@ -75,6 +114,7 @@ def maintenance_admin_screen():
                         "route_code": route_code,
                         "items_flat": items_flat
                     }
+                    
                     with st.spinner("送信中..."):
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
@@ -96,7 +136,6 @@ def maintenance_admin_screen():
             if df.empty:
                 st.info("現在、申請データはありません。")
             else:
-                # 絞り込みフィルター
                 fc1, fc2, fc3 = st.columns(3)
                 with fc1:
                     filter_status = st.selectbox("ステータス表示", ["未対応（申請中）のみ", "差戻しのみ", "承認済みのみ", "すべて"])
@@ -107,7 +146,6 @@ def maintenance_admin_screen():
 
                 filtered_df = df.copy()
 
-                # ステータス列（28列目/AC列）が存在する場合のフィルタリング
                 if len(filtered_df.columns) >= 29:
                     if filter_status == "未対応（申請中）のみ":
                         filtered_df = filtered_df[filtered_df.iloc[:, 28].isna() | (filtered_df.iloc[:, 28] == "申請中")]
@@ -127,9 +165,8 @@ def maintenance_admin_screen():
                 st.dataframe(filtered_df, use_container_width=True)
                 st.write("---")
 
-                # アコーディオン詳細・編集・承認フォーム
                 for idx, row in filtered_df.iloc[::-1].iterrows():
-                    row_id = idx + 2 # スプレッドシートの行番号
+                    row_id = idx + 2
                     
                     timestamp = str(row.iloc[0]) if len(row) > 0 and pd.notna(row.iloc[0]) else ""
                     applicant = str(row.iloc[1]) if len(row) > 1 and pd.notna(row.iloc[1]) else ""
@@ -150,14 +187,13 @@ def maintenance_admin_screen():
                         st.markdown(f"**現在のステータス:** `{status_val}`" + (f" | **備考・差戻理由:** {comment_val}" if comment_val else ""))
                         st.markdown("##### ✏️ データの確認・訂正")
                         
-                        # 訂正用フォーム
                         with st.form(key=f"edit_form_{row_id}"):
                             ec1, ec2 = st.columns(2)
                             with ec1:
                                 edit_applicant = st.text_input("担当者名", value=applicant, key=f"e_app_{row_id}")
                                 edit_cust_code = st.text_input("顧客コード", value=cust_code, key=f"e_ccode_{row_id}")
                                 edit_cust_name = st.text_input("顧客名", value=cust_name, key=f"e_cname_{row_id}")
-                                edit_delivery = st.text_input("納品日", value=delivery_date, key=f"e_deliv_{row_id}")
+                                edit_delivery = st.text_input("納品希望日", value=delivery_date, key=f"e_deliv_{row_id}")
                             with ec2:
                                 edit_store_name = st.text_input("加盟店名", value=store_name, key=f"e_sname_{row_id}")
                                 edit_store_code = st.text_input("加盟店コード", value=store_code, key=f"e_scode_{row_id}")
@@ -167,17 +203,23 @@ def maintenance_admin_screen():
                             updated_items = []
                             for i in range(5):
                                 b_col = 8 + (i * 4)
-                                p_val = str(row.iloc[b_col]) if b_col < len(row) and pd.notna(row.iloc[b_col]) else ""
-                                q_val = int(row.iloc[b_col+1]) if b_col+1 < len(row) and pd.notna(row.iloc[b_col+1]) and str(row.iloc[b_col+1]).isdigit() else 0
-                                a_val = int(row.iloc[b_col+2]) if b_col+2 < len(row) and pd.notna(row.iloc[b_col+2]) and str(row.iloc[b_col+2]).isdigit() else 0
-                                s_val = str(row.iloc[b_col+3]) if b_col+3 < len(row) and pd.notna(row.iloc[b_col+3]) else "要"
+                                p_val = str(row.iloc[b_col]).strip() if b_col < len(row) and pd.notna(row.iloc[b_col]) else ""
+                                q_val = str(row.iloc[b_col+1]) if b_col+1 < len(row) and pd.notna(row.iloc[b_col+1]) else "0"
+                                a_val = str(row.iloc[b_col+2]) if b_col+2 < len(row) and pd.notna(row.iloc[b_col+2]) else "0"
+                                s_val = str(row.iloc[b_col+3]).strip() if b_col+3 < len(row) and pd.notna(row.iloc[b_col+3]) else "有"
 
                                 ic1, ic2, ic3, ic4 = st.columns([2, 1, 1, 1])
-                                with ic1: ep = st.text_input(f"品記号 {i+1}", value=p_val, key=f"ep_{row_id}_{i}")
-                                with ic2: eq = st.number_input(f"数量 {i+1}", value=q_val, min_value=0, key=f"eq_{row_id}_{i}")
-                                with ic3: ea = st.number_input(f"金額 {i+1}", value=a_val, min_value=0, key=f"ea_{row_id}_{i}")
-                                with ic4: es = st.selectbox(f"伝票 {i+1}", ["要", "不要"], index=0 if s_val=="要" else 1, key=f"es_{row_id}_{i}")
-                                updated_items.extend([ep, eq, ea, es])
+                                with ic1: ep = st.text_input(f"商品記号 {i+1}", value=p_val, key=f"ep_{row_id}_{i}").strip()
+                                with ic2: eq = st.text_input(f"数量 {i+1}", value=q_val, key=f"eq_{row_id}_{i}").strip()
+                                with ic3: ea = st.text_input(f"単価 {i+1}", value=a_val, key=f"ea_{row_id}_{i}").strip()
+                                with ic4: es = st.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=0 if s_val != "無" else 1, key=f"es_{row_id}_{i}")
+                                
+                                # 商品記号がない場合は数量・単価・伝票出力を空で処理
+                                eq_num = int(eq) if eq.isdigit() else 0
+                                ea_num = int(ea) if ea.isdigit() else 0
+                                es_str = es if ep else ""
+                                
+                                updated_items.extend([ep, eq_num, ea_num, es_str])
 
                             st.write("---")
                             mgr_comment = st.text_input("管理職コメント（承認時のメモ / 差戻し理由）", value=comment_val, key=f"comm_{row_id}")
