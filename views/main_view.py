@@ -18,7 +18,23 @@ def main_screen():
         if st.button("ログアウト", use_container_width=True):
             process_logout()
 
-    # --- アラート表示 ---
+    # --- 🚨 差戻し申請のアラート通知 ---
+    try:
+        maint_csv = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/export?format=csv&gid=0"
+        df_maint = pd.read_csv(maint_csv)
+        if len(df_maint.columns) >= 29:
+            # 自分の担当名かつステータスが「差戻し」のデータを抽出
+            my_rejections = df_maint[(df_maint.iloc[:, 1].astype(str) == u_name) & (df_maint.iloc[:, 28] == "差戻し")]
+            if not my_rejections.empty:
+                st.error(f"🚨 **差戻しされた臨時納品申請が {len(my_rejections)} 件あります！内容を確認して再申請してください。**")
+                for _, r in my_rejections.iterrows():
+                    reason = r.iloc[29] if len(r) >= 30 and pd.notna(r.iloc[29]) else "理由の記載なし"
+                    cust = r.iloc[3] if pd.notna(r.iloc[3]) else "不明"
+                    st.warning(f"・【{r.iloc[0]} 申請分】 顧客: **{cust}** | 差戻し理由: **{reason}**")
+    except Exception:
+        pass
+
+    # --- アラート表示（共通連絡事項） ---
     if st.session_state.get('needs_alert', False):
         st.error("⚠️ 本日の連絡事項または確認未完了項目があります。")
 
