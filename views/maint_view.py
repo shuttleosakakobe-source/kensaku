@@ -26,27 +26,40 @@ def maintenance_admin_screen():
 
         cust_master = load_customer_master()
         
-        # 顧客検索コード入力（キー設定で初期化可能に）
+        # フォーム用セッションステートの初期化
+        if "input_applicant" not in st.session_state:
+            st.session_state["input_applicant"] = st.session_state.get("user_name", "")
+        if "input_cust_code" not in st.session_state:
+            st.session_state["input_cust_code"] = ""
+        if "input_cust_name" not in st.session_state:
+            st.session_state["input_cust_name"] = ""
+        if "input_store_code" not in st.session_state:
+            st.session_state["input_store_code"] = ""
+        if "input_store_name" not in st.session_state:
+            st.session_state["input_store_name"] = ""
+
+        # 顧客検索コード入力
         c_code_input = st.text_input("顧客コードを入力", key="search_c_code").strip()
         
-        store_name, cust_name, store_code = "", "", ""
+        # 検索ヒット時に session_state を直接書き換えてフォームに自動反映
         if c_code_input in cust_master:
             info = cust_master[c_code_input]
-            store_name = info.get("store_name", "")
-            cust_name = info.get("cust_name", "")
-            store_code = info.get("store_code", "")
-            st.success(f"【該当顧客】 {cust_name} （加盟店: {store_name}）")
+            st.session_state["input_cust_code"] = c_code_input
+            st.session_state["input_cust_name"] = info.get("cust_name", "")
+            st.session_state["input_store_code"] = info.get("store_code", "")
+            st.session_state["input_store_name"] = info.get("store_name", "")
+            st.success(f"【該当顧客】 {info.get('cust_name', '')} （加盟店: {info.get('store_name', '')}）")
 
         with st.form("maint_form"):
-            applicant = st.text_input("担当者名", value=st.session_state.get("user_name", ""), key="input_applicant")
+            applicant = st.text_input("担当者名", key="input_applicant")
             
             c1, c2 = st.columns(2)
             with c1:
-                customer_code = st.text_input("顧客コード", value=c_code_input, key="input_cust_code")
-                customer_name = st.text_input("顧客名", value=cust_name, key="input_cust_name")
+                customer_code = st.text_input("顧客コード", key="input_cust_code")
+                customer_name = st.text_input("顧客名", key="input_cust_name")
             with c2:
-                store_code_val = st.text_input("加盟店コード", value=store_code, key="input_store_code")
-                store_name_val = st.text_input("加盟店名", value=store_name, key="input_store_name")
+                store_code_val = st.text_input("加盟店コード", key="input_store_code")
+                store_name_val = st.text_input("加盟店名", key="input_store_name")
 
             d1, d2 = st.columns(2)
             with d1:
@@ -79,6 +92,7 @@ def maintenance_admin_screen():
             submitted = st.form_submit_button("送信する", type="primary", use_container_width=True)
 
             if submitted:
+                # 必須項目バリデーション
                 required_fields = [
                     ("担当者名", applicant),
                     ("顧客コード", customer_code),
@@ -119,11 +133,14 @@ def maintenance_admin_screen():
                     with st.spinner("送信中..."):
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
-                            # 送信成功フラグのセット
                             st.session_state["maint_submit_success"] = True
                             
-                            # 全入力項目のクリア処理
+                            # 全入力欄を初期化（クリア）
                             st.session_state["search_c_code"] = ""
+                            st.session_state["input_cust_code"] = ""
+                            st.session_state["input_cust_name"] = ""
+                            st.session_state["input_store_code"] = ""
+                            st.session_state["input_store_name"] = ""
                             st.session_state["input_route_code"] = ""
                             for i in range(1, 6):
                                 st.session_state[f"p_code_{i}"] = ""
@@ -136,7 +153,7 @@ def maintenance_admin_screen():
                             st.error(f"送信エラー: {res.get('message')}")
 
     # ----------------------------------------------------
-    # TAB 2: 管理職チェック（変更なし）
+    # TAB 2: 管理職チェック
     # ----------------------------------------------------
     with tab2:
         st.write("#### 🔍 申請データ確認・訂正・承認")
