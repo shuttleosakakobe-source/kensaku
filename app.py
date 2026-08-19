@@ -10,6 +10,7 @@ import json
 import re
 import pandas as pd
 from datetime import datetime, timedelta, timezone
+from streamlit_javascript import st_javascript
 
 # --- 1. ページ設定 ---
 st.set_page_config(
@@ -23,11 +24,10 @@ def get_jst_today():
     jst = timezone(timedelta(hours=9))
     return datetime.now(jst).date()
 
-
 def h(value):
     return html.escape(str(value or ""), quote=True)
 
-# --- ⚠️ 最新のGASウェブアプリURLに差し替えてください ---
+# --- ⚠️ 最新のGASウェブアプリURL ---
 GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyYE1X3s54DpCN78iOpXODulShVvYzjBJYKjvLtBhmW1x2An4MubsM7rQy2dusVFOhg/exec"
 
 # =================================================================
@@ -56,7 +56,7 @@ def load_sheet_data(gid="0", custom_url=None):
     except:
         return None
 
-# --- 📇 顧客マスターデータの取得関数 ---
+# --- 📇 顧客マスターデータの取得関数（加盟店コード: E列対応版） ---
 @st.cache_data(ttl=300)
 def load_customer_master():
     url = "https://docs.google.com/spreadsheets/d/1-1zvVWOfHsXFWdUoAZwOUnxo1BgSdKMG6GubpRTVqeM/export?format=csv&gid=127347205"
@@ -69,14 +69,14 @@ def load_customer_master():
         if len(reader) < 2:
             return {}
             
-        # A列:加盟店名, B列:顧客コード, C列:顧客名, D列:加盟店コード
+        # A列:加盟店名(0), B列:顧客コード(1), C列:顧客名(2), E列:加盟店コード(4)
         customer_dict = {}
         for row in reader[1:]:
-            if len(row) >= 4:
+            if len(row) >= 5:
                 store_name = row[0].strip()       # A列：加盟店名
                 cust_code  = str(row[1]).strip() # B列：顧客コード
                 cust_name  = row[2].strip()       # C列：顧客名
-                store_code = str(row[3]).strip() # D列：加盟店コード
+                store_code = str(row[4]).strip() # E列：加盟店コード
                 
                 if cust_code:
                     customer_dict[cust_code] = {
@@ -274,7 +274,6 @@ def get_img_html(file_name, emoji, alert=False, width="100%"):
 
 # --- 4. 🔑 ログイン維持用関数 ---
 def set_login_storage(name, url, alert, role, code):
-    from streamlit_javascript import st_javascript
     values = {
         "shuttle_user_name": name,
         "shuttle_user_url": url,
@@ -290,7 +289,6 @@ def set_login_storage(name, url, alert, role, code):
 
 # --- 🔄 ログアウト処理関数 ---
 def process_logout():
-    from streamlit_javascript import st_javascript 
     st_javascript("sessionStorage.clear();")
     st_javascript("localStorage.clear();")
     st.session_state.login_status = False
@@ -438,7 +436,7 @@ def render_daily_checklist():
                     confirm_task_dialog(item)
 
 
-# --- 📦 臨時納品 フォームコンポーネント ---
+# --- 📦 臨時納品 フォームコンポーネント（A〜AB列マッピング対応） ---
 def render_temp_delivery_form():
     st.markdown("### 📦 臨時納品 申請")
     
@@ -447,7 +445,7 @@ def render_temp_delivery_form():
         st.warning("⚠️ 顧客マスターデータを読み込めませんでした。")
         return
 
-    # 🖼️ 画像レイアウト再現エリア
+    # 🖼️ 顧客選択および連動表示エリア
     col_code_lbl, col_code_val, _ = st.columns([1.5, 3, 3.5])
     with col_code_lbl:
         st.markdown("**顧客コード**")
@@ -476,7 +474,7 @@ def render_temp_delivery_form():
 
     st.write("---")
 
-    # 📋 商品入力エリア（最大5行）
+    # 📋 商品入力エリア（5行固定）
     st.markdown("#### 📋 商品明細（最大5行）")
     default_df = pd.DataFrame([
         {"品記号": "", "数量": 0, "単価": 0, "伝票出力": "有"} for _ in range(5)
@@ -509,24 +507,36 @@ def render_temp_delivery_form():
             st.error("⚠️ 顧客コードを選択してください。")
             return
             
-        valid_items = edited_df[edited_df["品記号"].str.strip() != ""].to_dict(orient="records")
-        if not valid_items:
-            st.error("⚠️ 品記号を少なくとも1件以上入力してください。")
+        first_item = str(edited_df.iloc[0]["品記号"]).strip()
+        if not first_item:
+            st.error("⚠️ 少なくとも商品記号①（1行目）を入力してください。")
             return
 
+        # 商品①〜⑤を20列（4列×5行）に展開（金額 = 数量 * 単価）
+        items_flat = []
+        for i in range(5):
+            row = edited_df.iloc[i]
+            p_code = str(row["品記号"]).strip()
+            qty = int(row["数量"])
+            price = int(row["単価"])
+            total_amount = qty * price
+            slip = str(row["伝票出力"])
+            
+            items_flat.extend([p_code, qty, total_amount, slip])
+
+        # A列〜AB列に対応するペイロード構築
         payload = {
             "status": "SUBMIT_MAINTENANCE",
             "maint_type": "臨時納品",
-            "applicant_code": st.session_state.get('user_code', ''),
-            "applicant_name": st.session_state.get('user_name', ''),
-            "customer_code": selected_code,
-            "store_name": selected_info["store_name"],
-            "store_code": selected_info["store_code"],
-            "customer_name": selected_info["cust_name"],
-            "items": valid_items,
-            "delivery_date": str(delivery_date),
-            "route_code": route_code,
-            "process_status": "未チェック"
+            "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
+            "applicant": st.session_state.get('user_name', ''),  # B: 担当者
+            "customer_code": selected_code,                       # C: 顧客コード
+            "customer_name": selected_info["cust_name"],          # D: 顧客名
+            "store_name": selected_info["store_name"],            # E: 加盟店
+            "store_code": selected_info["store_code"],            # F: 加盟店コード
+            "delivery_date": str(delivery_date),                 # G: 納品日
+            "route_code": route_code,                             # H: 納品ルート
+            "items_flat": items_flat                              # I〜AB: 商品①〜⑤（計20列）
         }
 
         with st.spinner("スプレッドシートへ送信中..."):
@@ -599,7 +609,7 @@ def route_navigation_screen():
     
     master_rows = load_sheet_data(gid=MASTER_GID)
     if not master_rows or len(master_rows) < 2:
-        st.error("ルート一覧マスターデータの読み込みに失敗しました。Webに公開されているか確認してください。")
+        st.error("ルート一覧マスターデータの読み込みに失敗しました。")
         return
 
     routes_header = [col.strip() for col in master_rows[0][1:] if col.strip()]
@@ -683,7 +693,7 @@ def route_navigation_screen():
     col_left, col_right = st.columns([1.8, 1.2])
 
     with col_left:
-        st.caption("📌 訪問する順番にタップしてください（選択した顧客は下へ移動します）")
+        st.caption("📌 訪問する順番にタップしてください")
         for customer in ordered_customers:
             name = customer["名前"]
             address = customer["住所"]
@@ -875,7 +885,7 @@ def main_screen():
 
     data_raw = load_sheet_data(gid="0")
     if not data_raw or len(data_raw) < 2:
-        st.error("マスターデータの読み込みに失敗しました。スプレッドシートの公開設定と通信状況を確認してください。")
+        st.error("マスターデータの読み込みに失敗しました。")
         return
 
     header = data_raw[0]
@@ -1039,7 +1049,6 @@ def main_screen():
         st.write("---")
         st.write("### 🛠️ メンテナンス管理メニュー")
 
-        # アプリ内専用システム起動ボタン
         if st.button("🚀 メンテナンス管理システム（新アプリ版）を開く", type="primary", use_container_width=True):
             st.session_state.current_page = "maint_admin"
             st.rerun()
@@ -1096,7 +1105,6 @@ if 'moved_to_bottom_names' not in st.session_state: st.session_state.moved_to_bo
 if 'needs_alert' not in st.session_state: st.session_state.needs_alert = False
 
 if not st.session_state.login_status and not st.session_state.logout_requested:
-    from streamlit_javascript import st_javascript 
     local_name = st_javascript("sessionStorage.getItem('shuttle_user_name');")
     local_role = st_javascript("sessionStorage.getItem('shuttle_user_role');")
     local_code = st_javascript("sessionStorage.getItem('shuttle_user_code');")
