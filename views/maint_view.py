@@ -119,6 +119,7 @@ def maintenance_admin_screen():
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
                             st.success("🎉 申請の書き込みが完了しました！")
+                            st.rerun()
                         else:
                             st.error(f"送信エラー: {res.get('message')}")
 
