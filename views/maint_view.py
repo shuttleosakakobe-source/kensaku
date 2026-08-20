@@ -11,7 +11,7 @@ def maintenance_admin_screen():
         st.session_state.current_page = "main"
         st.rerun()
 
-    tab1, tab2 = st.tabs(["📝 申請フォーム", "🔍 管理職チェック"])
+    tab1, tab2 = st.tabs(["📝 申請フォーム", "🔍 管理・確認・再送"])
 
     # ----------------------------------------------------
     # TAB 1: 申請フォーム
@@ -61,7 +61,6 @@ def maintenance_admin_screen():
             st.write("---")
             st.write("##### 📦 申請商品（最大5件）")
 
-            # 入力保持用データ構造
             item_inputs = []
             for i in range(1, 6):
                 ic1, ic2, ic3, ic4 = st.columns([2, 1, 1, 1])
@@ -81,7 +80,7 @@ def maintenance_admin_screen():
                     "slip": slip
                 })
 
-            submitted = st.form_submit_button("送信する", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("新規送信する", type="primary", use_container_width=True)
 
             if submitted:
                 required_fields = [
@@ -104,11 +103,7 @@ def maintenance_admin_screen():
                         p_code = item["p_code"]
                         qty = int(item["qty_str"]) if item["qty_str"].isdigit() else 0
                         price = int(item["price_str"]) if item["price_str"].isdigit() else 0
-                        
-                        if p_code:
-                            slip_val = item["slip"]
-                        else:
-                            slip_val = ""
+                        slip_val = item["slip"] if p_code else ""
                         
                         items_flat.extend([p_code, qty, price, slip_val])
 
@@ -133,10 +128,10 @@ def maintenance_admin_screen():
                             st.error(f"送信エラー: {res.get('message')}")
 
     # ----------------------------------------------------
-    # TAB 2: 管理職チェック（訂正・差戻し対応）
+    # TAB 2: 管理職・担当者チェック（訂正・再送・削除対応）
     # ----------------------------------------------------
     with tab2:
-        st.write("#### 🔍 申請データ確認・訂正・承認")
+        st.write("#### 🔍 申請データ確認・訂正・承認・再申請")
 
         TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/export?format=csv&gid=0"
 
@@ -195,7 +190,7 @@ def maintenance_admin_screen():
                     
                     with st.expander(expander_label):
                         st.markdown(f"**現在のステータス:** `{status_val}`" + (f" | **備考・差戻理由:** {comment_val}" if comment_val else ""))
-                        st.markdown("##### ✏️ データの確認・訂正")
+                        st.markdown("##### ✏️ データの確認・編集")
                         
                         with st.form(key=f"edit_form_{row_id}"):
                             ec1, ec2 = st.columns(2)
@@ -231,20 +226,26 @@ def maintenance_admin_screen():
                                 updated_items.extend([ep, eq_num, ea_num, es_str])
 
                             st.write("---")
-                            mgr_comment = st.text_input("管理職コメント（承認時のメモ / 差戻し理由）", value=comment_val, key=f"comm_{row_id}")
+                            mgr_comment = st.text_input("コメント（承認メモ / 差戻理由）", value=comment_val, key=f"comm_{row_id}")
 
-                            b_col1, b_col2 = st.columns(2)
+                            # 操作ボタン群
+                            b_col1, b_col2, b_col3, b_col4 = st.columns(4)
                             with b_col1:
-                                btn_approve = st.form_submit_button("✅ 訂正内容を保存して【承認】", type="primary", use_container_width=True)
+                                btn_approve = st.form_submit_button("✅ 保存して【承認】", type="primary", use_container_width=True)
                             with b_col2:
-                                btn_reject = st.form_submit_button("↩️ 【差戻し】を実行", use_container_width=True)
+                                btn_reject = st.form_submit_button("↩️ 【差戻し】実行", use_container_width=True)
+                            with b_col3:
+                                btn_resubmit = st.form_submit_button("🔄 修正して【再申請】", use_container_width=True)
+                            with b_col4:
+                                btn_delete = st.form_submit_button("🗑️ データを【削除】", use_container_width=True)
 
+                            updated_row = [
+                                timestamp, edit_applicant, edit_cust_code, edit_cust_name,
+                                edit_store_name, edit_store_code, edit_delivery, edit_route
+                            ] + updated_items
+
+                            # --- 承認処理 ---
                             if btn_approve:
-                                updated_row = [
-                                    timestamp, edit_applicant, edit_cust_code, edit_cust_name,
-                                    edit_store_name, edit_store_code, edit_delivery, edit_route
-                                ] + updated_items
-                                
                                 payload = {
                                     "status": "APPROVE_MAINTENANCE",
                                     "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
@@ -259,9 +260,10 @@ def maintenance_admin_screen():
                                         st.success("🎉 承認処理が完了しました！")
                                         st.rerun()
 
+                            # --- 差戻し処理 ---
                             if btn_reject:
                                 if not mgr_comment:
-                                    st.error("⚠️ 差戻しの場合は「管理職コメント」に理由を入力してください。")
+                                    st.error("⚠️ 差戻しの場合はコメントに理由を入力してください。")
                                 else:
                                     payload = {
                                         "status": "REJECT_MAINTENANCE",
@@ -275,6 +277,34 @@ def maintenance_admin_screen():
                                         if res.get("status") == "success":
                                             st.warning("↩️ 差戻し処理を完了しました。")
                                             st.rerun()
+
+                            # --- 再申請（再送）処理 ---
+                            if btn_resubmit:
+                                payload = {
+                                    "status": "RESUBMIT_MAINTENANCE",
+                                    "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
+                                    "row_index": row_id,
+                                    "updated_row": updated_row,
+                                    "comment": ""  # 再申請時は差戻しコメントをクリア
+                                }
+                                with st.spinner("再申請処理中..."):
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        st.success("🔄 修正して再申請（ステータス：申請中）を実行しました！")
+                                        st.rerun()
+
+                            # --- 削除処理 ---
+                            if btn_delete:
+                                payload = {
+                                    "status": "DELETE_MAINTENANCE",
+                                    "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
+                                    "row_index": row_id
+                                }
+                                with st.spinner("削除処理中..."):
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        st.warning("🗑️ 対象の申請データを削除しました。")
+                                        st.rerun()
 
         except Exception as e:
             st.error(f"⚠️ データの取得に失敗しました: {e}")
