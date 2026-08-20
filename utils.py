@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_javascript import st_javascript
 
 # ⚠️ 正しいGASウェブアプリURLに置き換えてください
-GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyUkAHvZ5ZKN6jzhun4jWeMRWqXLniu30pENrjgz_GPkin3iJcyI9RWDpZFLIjq8N-i5Q/exec"
+GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyy0CkI4oz-SBQFOfZXbF3Ufek4_Ukc21BwR-Ue_N0CFUk1Xc7sdqf55ZIK9CnwobVlEQ/exec"
 
 def get_jst_today():
     jst = timezone(timedelta(hours=9))
