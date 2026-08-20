@@ -135,7 +135,7 @@ def maintenance_admin_screen():
                                     updated_row = [
                                         timestamp, r_app, r_ccode, r_cname,
                                         r_sname, r_scode, r_deliv, r_route
-                                    ] + r_items + ["", "", ""]  # AC, AD, AE列を空にする
+                                    ] + r_items + ["", "", ""]  # AC, AD, AE列をクリア
                                     
                                     payload = {
                                         "status": "RESUBMIT_MAINTENANCE",
@@ -151,18 +151,25 @@ def maintenance_admin_screen():
                                             time.sleep(1.5)
                                             st.rerun()
 
-                                # 削除処理
+                                # 削除処理 (AC列に「削除」を書き込み更新)
                                 if btn_delete:
+                                    action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                                    updated_row = [
+                                        timestamp, r_app, r_ccode, r_cname,
+                                        r_sname, r_scode, r_deliv, r_route
+                                    ] + r_items + ["削除", action_time, "申請者による取り消し"]  # AC列:削除 / AD列:日時 / AE列:理由
+                                    
                                     payload = {
                                         "status": "DELETE_MAINTENANCE",
                                         "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
-                                        "row_index": row_id
+                                        "row_index": row_id,
+                                        "updated_row": updated_row
                                     }
-                                    with st.spinner("削除中..."):
+                                    with st.spinner("削除処理中..."):
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
                                             st.cache_data.clear()
-                                            st.toast("🗑️ 申請データを取り消しました。", icon="🗑️")
+                                            st.toast("🗑️ 申請ステータスを「削除」に変更しました。", icon="🗑️")
                                             time.sleep(1.5)
                                             st.rerun()
         except Exception as e:
@@ -388,7 +395,7 @@ def maintenance_admin_screen():
                                 with b_col2:
                                     btn_reject = st.form_submit_button("↩️ 【差戻し】を実行", use_container_width=True)
 
-                                # --- 承認時: AC列:管理職名 / AD列:タイムスタンプ / AE列:コメント ---
+                                # --- 承認時 ---
                                 if btn_approve:
                                     current_mgr = st.session_state.get("user_name", "管理職")
                                     action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
@@ -412,7 +419,7 @@ def maintenance_admin_screen():
                                             time.sleep(1.5)
                                             st.rerun()
 
-                                # --- 差戻時: AC列:「差戻し」 / AD列:タイムスタンプ / AE列:差戻し理由 ---
+                                # --- 差戻時 ---
                                 if btn_reject:
                                     if not mgr_comment:
                                         st.error("⚠️ 差戻しの場合は「管理職コメント」に理由を入力してください。")
