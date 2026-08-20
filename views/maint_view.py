@@ -1,8 +1,9 @@
-import streamlit as st
-import pandas as pd
+import time
 from datetime import datetime
-from utils import post_to_gas
+import pandas as pd
+import streamlit as st
 from data_loader import load_customer_master
+from utils import post_to_gas
 
 # ----------------------------------------------------
 # ユーザー権限判定関数（指定スプレッドシートのF列を参照）
@@ -10,15 +11,12 @@ from data_loader import load_customer_master
 def check_is_staff(user_name):
     USER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1-1zvVWOfHsXFWdUoAZwOUnxo1BgSdKMG6GubpRTVqeM/export?format=csv&gid=0"
     if not user_name:
-        return True  # ユーザー不明時は安全のため一般スタッフ扱い
+        return True  # ユーザー名未設定時は安全のためスタッフ扱い
     try:
         df_users = pd.read_csv(USER_MASTER_CSV)
-        # 全列からユーザー名を検索し該当行を特定
         user_row = df_users[df_users.apply(lambda row: row.astype(str).str.contains(user_name).any(), axis=1)]
         if not user_row.empty:
-            # F列（インデックス 5）の値を取得
             role_val = str(user_row.iloc[0, 5]).strip()
-            # F列が '2' の場合はスタッフ権限 (True)
             if role_val in ["2", "2.0"]:
                 return True
             else:
@@ -36,27 +34,29 @@ def maintenance_admin_screen():
 
     current_user = st.session_state.get("user_name", "")
     
-    # ユーザー権限の判定（F列が 2 なら True）
+    # スタッフ権限チェック (F列が 2 の場合は True)
     is_staff = check_is_staff(current_user)
 
-    # 権限に応じて表示するタブを制御
+    # 権限に応じてタブの表示を制御（スタッフには管理職チェックタブを表示しない）
     if is_staff:
-        # スタッフ権限：管理画面（Tab 2）は作成・表示しない
         tab1, = st.tabs(["📝 スタッフ申請・差戻し対応"])
         tab2 = None
     else:
-        # 管理職権限：両方のタブを表示
         tab1, tab2 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック"])
 
-    TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/export?format=csv&gid=0"
+    # GoogleスプレッドシートのCSV出力キャッシュを回避するためのタイムスタンプ付与
+    nocache_param = f"&_t={int(time.time())}"
+    TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/export?format=csv&gid=0" + nocache_param
 
     # ----------------------------------------------------
     # TAB 1: スタッフ画面（新規申請 ＆ 差戻し再送・削除）
     # ----------------------------------------------------
     with tab1:
-        st.markdown("#### 🔴 差戻し・要修正データの対応")
+        # --- 1. 差戻しデータの修正・再送・削除エリア ---
         try:
+            st.cache_data.clear()
             df_staff = pd.read_csv(TARGET_SHEET_CSV)
+            
             if not df_staff.empty and len(df_staff.columns) >= 29:
                 rejected_df = df_staff[df_staff.iloc[:, 28] == "差戻し"]
                 
@@ -65,10 +65,9 @@ def maintenance_admin_screen():
                 else:
                     user_rejected = rejected_df
 
-                if user_rejected.empty:
-                    st.info("現在、差戻されている申請はありません。")
-                else:
-                    st.warning(f"⚠️ {len(user_rejected)} 件の差戻しデータがあります。内容を確認・修正して再申請または削除してください。")
+                # 差戻しデータが存在する場合のみアナウンスを表示
+                if not user_rejected.empty:
+                    st.error(f"🚨 差戻しされた臨時納品申請が {len(user_rejected)} 件あります！内容を確認して再申請してください。")
                     
                     for idx, row in user_rejected.iloc[::-1].iterrows():
                         row_id = idx + 2
@@ -82,9 +81,11 @@ def maintenance_admin_screen():
                         route_code = str(row.iloc[7]) if pd.notna(row.iloc[7]) else ""
                         comment_val = str(row.iloc[29]) if len(row) >= 30 and pd.notna(row.iloc[29]) else "理由の記載なし"
 
-                        exp_label = f"🔴【差戻し】{cust_name}（コード: {cust_code}） | 申請日: {timestamp}"
+                        st.warning(f"・【{timestamp} 申請分】 顧客: **{cust_name}** | 差戻し理由: **{comment_val}**")
+
+                        exp_label = f"🔴【修正・再申請】{cust_name}（コード: {cust_code}） | 申請日: {timestamp}"
                         
-                        with st.expander(exp_label, expanded=True):
+                        with st.expander(exp_label, expanded=False):
                             st.error(f"💬 **管理職からの差戻し理由:** {comment_val}")
                             
                             with st.form(key=f"resubmit_form_{row_id}"):
@@ -126,6 +127,7 @@ def maintenance_admin_screen():
                                 with btn_col2:
                                     btn_delete = st.form_submit_button("🗑️ 申請を取り消す（削除）", use_container_width=True)
 
+                                # 再申請処理
                                 if btn_resubmit:
                                     updated_row = [
                                         timestamp, r_app, r_ccode, r_cname,
@@ -142,9 +144,12 @@ def maintenance_admin_screen():
                                     with st.spinner("再申請を送信中..."):
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
-                                            st.success("🎉 再申請が完了しました！（ステータス：申請中）")
+                                            st.cache_data.clear()
+                                            st.toast("🎉 再申請が完了しました！（ステータス：申請中）", icon="🎉")
+                                            time.sleep(1.5)
                                             st.rerun()
 
+                                # 削除処理
                                 if btn_delete:
                                     payload = {
                                         "status": "DELETE_MAINTENANCE",
@@ -154,13 +159,16 @@ def maintenance_admin_screen():
                                     with st.spinner("削除中..."):
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
-                                            st.warning("🗑️ 申請データを取り消しました。")
+                                            st.cache_data.clear()
+                                            st.toast("🗑️ 申請データを取り消しました。", icon="🗑️")
+                                            time.sleep(1.5)
                                             st.rerun()
         except Exception as e:
             st.error(f"⚠️ 差戻しデータの読み込み中にエラーが発生しました: {e}")
 
         st.write("---")
 
+        # --- 2. 新規臨時納品 申請入力フォーム ---
         st.markdown("#### 📝 新規 臨時納品 申請入力")
         cust_master = load_customer_master()
         
@@ -256,7 +264,10 @@ def maintenance_admin_screen():
                     with st.spinner("送信中..."):
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
-                            st.success("🎉 申請の書き込みが完了しました！")
+                            st.cache_data.clear()
+                            st.toast("🎉 申請の書き込みが完了しました！", icon="🎉")
+                            time.sleep(1.5)
+                            st.rerun()
                         else:
                             st.error(f"送信エラー: {res.get('message')}")
 
@@ -268,6 +279,7 @@ def maintenance_admin_screen():
             st.write("#### 🔍 申請データ確認・承認")
 
             try:
+                st.cache_data.clear()
                 df = pd.read_csv(TARGET_SHEET_CSV)
 
                 if df.empty:
@@ -382,7 +394,9 @@ def maintenance_admin_screen():
                                     with st.spinner("承認処理中..."):
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
-                                            st.success("🎉 承認処理が完了しました！")
+                                            st.cache_data.clear()
+                                            st.toast("🎉 承認処理が完了しました！", icon="🎉")
+                                            time.sleep(1.5)
                                             st.rerun()
 
                                 if btn_reject:
@@ -399,7 +413,9 @@ def maintenance_admin_screen():
                                         with st.spinner("差戻し処理中..."):
                                             res = post_to_gas(payload)
                                             if res.get("status") == "success":
-                                                st.warning("↩️ 差戻し処理を完了しました。")
+                                                st.cache_data.clear()
+                                                st.toast("↩️ 差戻し処理を完了しました。", icon="↩️")
+                                                time.sleep(1.5)
                                                 st.rerun()
 
             except Exception as e:
