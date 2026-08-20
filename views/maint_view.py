@@ -6,7 +6,7 @@ from data_loader import load_customer_master
 from utils import post_to_gas
 
 # ----------------------------------------------------
-# ユーザー権限判定関数（指定スプレッドシートのF列を参照）
+# ユーザー権限判定関数（スプレッドシートのF列を参照）
 # ----------------------------------------------------
 def check_is_staff(user_name):
     USER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1-1zvVWOfHsXFWdUoAZwOUnxo1BgSdKMG6GubpRTVqeM/export?format=csv&gid=0"
@@ -37,14 +37,14 @@ def maintenance_admin_screen():
     # スタッフ権限チェック (F列が 2 の場合は True)
     is_staff = check_is_staff(current_user)
 
-    # 権限に応じてタブの表示を制御（スタッフには管理職チェックタブを表示しない）
+    # 権限に応じてタブの表示を制御
     if is_staff:
         tab1, = st.tabs(["📝 スタッフ申請・差戻し対応"])
         tab2 = None
     else:
         tab1, tab2 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック"])
 
-    # GoogleスプレッドシートのCSV出力キャッシュを回避するためのタイムスタンプ付与
+    # キャッシュ回避用のタイムスタンプ付与
     nocache_param = f"&_t={int(time.time())}"
     TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/export?format=csv&gid=0" + nocache_param
 
@@ -58,14 +58,15 @@ def maintenance_admin_screen():
             df_staff = pd.read_csv(TARGET_SHEET_CSV)
             
             if not df_staff.empty and len(df_staff.columns) >= 29:
-                rejected_df = df_staff[df_staff.iloc[:, 28] == "差戻し"]
+                # AC列（インデックス28）が「差戻し」のデータのみを抽出
+                rejected_df = df_staff[df_staff.iloc[:, 28].astype(str).str.strip() == "差戻し"]
                 
                 if current_user:
-                    user_rejected = rejected_df[rejected_df.iloc[:, 1] == current_user]
+                    user_rejected = rejected_df[rejected_df.iloc[:, 1].astype(str).str.strip() == current_user]
                 else:
                     user_rejected = rejected_df
 
-                # 差戻しデータが存在する場合のみアナウンスを表示
+                # 「差戻し」データが存在する場合のみ表示
                 if not user_rejected.empty:
                     st.error(f"🚨 差戻しされた臨時納品申請が {len(user_rejected)} 件あります！内容を確認して再申請してください。")
                     
@@ -79,7 +80,9 @@ def maintenance_admin_screen():
                         store_code = str(row.iloc[5]) if pd.notna(row.iloc[5]) else ""
                         delivery_date = str(row.iloc[6]) if pd.notna(row.iloc[6]) else ""
                         route_code = str(row.iloc[7]) if pd.notna(row.iloc[7]) else ""
-                        comment_val = str(row.iloc[29]) if len(row) >= 30 and pd.notna(row.iloc[29]) else "理由の記載なし"
+                        
+                        # AE列（インデックス30）から差戻し理由を取得
+                        comment_val = str(row.iloc[30]).strip() if len(row) >= 31 and pd.notna(row.iloc[30]) else "理由の記載なし"
 
                         st.warning(f"・【{timestamp} 申請分】 顧客: **{cust_name}** | 差戻し理由: **{comment_val}**")
 
@@ -127,19 +130,18 @@ def maintenance_admin_screen():
                                 with btn_col2:
                                     btn_delete = st.form_submit_button("🗑️ 申請を取り消す（削除）", use_container_width=True)
 
-                                # 再申請処理
+                                # 再申請処理 (AC列・AD列・AE列をクリア)
                                 if btn_resubmit:
                                     updated_row = [
                                         timestamp, r_app, r_ccode, r_cname,
                                         r_sname, r_scode, r_deliv, r_route
-                                    ] + r_items
+                                    ] + r_items + ["", "", ""]  # AC, AD, AE列を空にする
                                     
                                     payload = {
                                         "status": "RESUBMIT_MAINTENANCE",
                                         "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
                                         "row_index": row_id,
-                                        "updated_row": updated_row,
-                                        "comment": ""
+                                        "updated_row": updated_row
                                     }
                                     with st.spinner("再申請を送信中..."):
                                         res = post_to_gas(payload)
@@ -296,12 +298,13 @@ def maintenance_admin_screen():
                     filtered_df = df.copy()
 
                     if len(filtered_df.columns) >= 29:
+                        status_series = filtered_df.iloc[:, 28].astype(str).str.strip()
                         if filter_status == "未対応（申請中）のみ":
-                            filtered_df = filtered_df[filtered_df.iloc[:, 28].isna() | (filtered_df.iloc[:, 28] == "申請中")]
+                            filtered_df = filtered_df[filtered_df.iloc[:, 28].isna() | (status_series == "") | (status_series == "申請中") | (status_series == "nan")]
                         elif filter_status == "差戻しのみ":
-                            filtered_df = filtered_df[filtered_df.iloc[:, 28] == "差戻し"]
+                            filtered_df = filtered_df[status_series == "差戻し"]
                         elif filter_status == "承認済みのみ":
-                            filtered_df = filtered_df[filtered_df.iloc[:, 28] == "承認済み"]
+                            filtered_df = filtered_df[(~filtered_df.iloc[:, 28].isna()) & (status_series != "") & (status_series != "申請中") & (status_series != "差戻し") & (status_series != "nan")]
 
                     if filter_applicant != "すべて":
                         filtered_df = filtered_df[filtered_df.iloc[:, 1] == filter_applicant]
@@ -326,14 +329,22 @@ def maintenance_admin_screen():
                         delivery_date = str(row.iloc[6]) if pd.notna(row.iloc[6]) else ""
                         route_code = str(row.iloc[7]) if pd.notna(row.iloc[7]) else ""
                         
-                        status_val = str(row.iloc[28]) if len(row) >= 29 and pd.notna(row.iloc[28]) else "申請中"
-                        comment_val = str(row.iloc[29]) if len(row) >= 30 and pd.notna(row.iloc[29]) else ""
+                        ac_val = str(row.iloc[28]).strip() if len(row) >= 29 and pd.notna(row.iloc[28]) else ""
+                        ad_val = str(row.iloc[29]).strip() if len(row) >= 30 and pd.notna(row.iloc[29]) else ""
+                        ae_val = str(row.iloc[30]).strip() if len(row) >= 31 and pd.notna(row.iloc[30]) else ""
 
-                        badge = "🟡 申請中" if status_val == "申請中" else ("🔴 差戻し" if status_val == "差戻し" else "🟢 承認済み")
+                        # バッジのステータス表示判定
+                        if ac_val == "差戻し":
+                            badge = "🔴 差戻し"
+                        elif ac_val in ["", "申請中", "nan"]:
+                            badge = "🟡 申請中"
+                        else:
+                            badge = f"🟢 承認済み（承認者: {ac_val}）"
+
                         expander_label = f"{badge} | 【{timestamp}】 {applicant} 担当 | {cust_name}（{cust_code}）"
                         
                         with st.expander(expander_label):
-                            st.markdown(f"**現在のステータス:** `{status_val}`" + (f" | **備考・差戻理由:** {comment_val}" if comment_val else ""))
+                            st.markdown(f"**AC列（状態/管理職名）:** `{ac_val if ac_val else '未設定'}` | **AD列（日時）:** `{ad_val}` | **AE列（理由・メモ）:** `{ae_val}`")
                             
                             with st.form(key=f"mgr_form_{row_id}"):
                                 ec1, ec2 = st.columns(2)
@@ -369,7 +380,7 @@ def maintenance_admin_screen():
                                     updated_items.extend([ep, eq_num, ea_num, es_str])
 
                                 st.write("---")
-                                mgr_comment = st.text_input("管理職コメント（承認時のメモ / 差戻し理由）", value=comment_val, key=f"m_comm_{row_id}")
+                                mgr_comment = st.text_input("管理職コメント（承認時メモ / 差戻し理由）", value=ae_val, key=f"m_comm_{row_id}")
 
                                 b_col1, b_col2 = st.columns(2)
                                 with b_col1:
@@ -377,38 +388,47 @@ def maintenance_admin_screen():
                                 with b_col2:
                                     btn_reject = st.form_submit_button("↩️ 【差戻し】を実行", use_container_width=True)
 
+                                # --- 承認時: AC列:管理職名 / AD列:タイムスタンプ / AE列:コメント ---
                                 if btn_approve:
+                                    current_mgr = st.session_state.get("user_name", "管理職")
+                                    action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                                    
                                     updated_row = [
                                         timestamp, edit_applicant, edit_cust_code, edit_cust_name,
                                         edit_store_name, edit_store_code, edit_delivery, edit_route
-                                    ] + updated_items
+                                    ] + updated_items + [current_mgr, action_time, mgr_comment]
                                     
                                     payload = {
                                         "status": "APPROVE_MAINTENANCE",
                                         "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
                                         "row_index": row_id,
-                                        "updated_row": updated_row,
-                                        "comment": mgr_comment,
-                                        "manager_name": st.session_state.get("user_name", "管理職")
+                                        "updated_row": updated_row
                                     }
                                     with st.spinner("承認処理中..."):
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
                                             st.cache_data.clear()
-                                            st.toast("🎉 承認処理が完了しました！", icon="🎉")
+                                            st.toast(f"🎉 承認処理が完了しました！（承認者: {current_mgr}）", icon="🎉")
                                             time.sleep(1.5)
                                             st.rerun()
 
+                                # --- 差戻時: AC列:「差戻し」 / AD列:タイムスタンプ / AE列:差戻し理由 ---
                                 if btn_reject:
                                     if not mgr_comment:
                                         st.error("⚠️ 差戻しの場合は「管理職コメント」に理由を入力してください。")
                                     else:
+                                        action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                                        
+                                        updated_row = [
+                                            timestamp, edit_applicant, edit_cust_code, edit_cust_name,
+                                            edit_store_name, edit_store_code, edit_delivery, edit_route
+                                        ] + updated_items + ["差戻し", action_time, mgr_comment]
+                                        
                                         payload = {
                                             "status": "REJECT_MAINTENANCE",
                                             "target_sheet_url": "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0",
                                             "row_index": row_id,
-                                            "comment": mgr_comment,
-                                            "manager_name": st.session_state.get("user_name", "管理職")
+                                            "updated_row": updated_row
                                         }
                                         with st.spinner("差戻し処理中..."):
                                             res = post_to_gas(payload)
