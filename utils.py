@@ -1,154 +1,291 @@
 import streamlit as st
-import os
-import base64
-import html
+import pandas as pd
+import requests
 import json
-import urllib.request
-import re
-from datetime import datetime, timedelta, timezone
-from streamlit_javascript import st_javascript
+from datetime import datetime
+import time
 
-# ⚠️ 正しいGASウェブアプリURLに置き換えてください
-GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwq7IOhDNIgyUrO6Vh7gn1Ja4t73LK46RrXZZSoZN_v7Qhr59OebNIKAZg2GiDye1oifw/exec"
+# --- 定数設定 ---
+GAS_URL = "YOUR_GAS_WEB_APP_URL"  # ⚠️ ご自身のGASウェブアプリデプロイURLに置き換えてください
 
-def get_jst_today():
-    jst = timezone(timedelta(hours=9))
-    return datetime.now(jst).date()
+TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
+TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
+DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
 
-def h(value):
-    return html.escape(str(value or ""), quote=True)
 
-@st.cache_data
-def _get_base64_img(file_name):
-    if os.path.exists(file_name):
-        with open(file_name, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    return None
-
-def get_img_html(file_name, emoji, alert=False, width="100%"):
-    border = "5px solid red" if alert else "5px solid transparent"
-    shadow = "box-shadow: 0 0 15px red; filter: drop-shadow(0 0 5px red);" if alert else ""
-    data = _get_base64_img(file_name)
-    if data:
-        img_code = f'data:image/png;base64,{data}'
-        return f'<img src="{img_code}" style="width:{width}; aspect-ratio:1/1; object-fit:contain; border-radius:15px; border:{border}; {shadow}; display: block; margin: 0 auto;">'
-    return f'<div style="width:{width}; aspect-ratio:1/1; background:#f0f2f6; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:40px; border:{border}; {shadow}; margin: 0 auto;">{emoji}</div>'
-
-def set_login_storage(name, url, alert, role, code):
-    values = {
-        "shuttle_user_name": name,
-        "shuttle_user_url": url,
-        "shuttle_needs_alert": alert,
-        "shuttle_user_role": role,
-        "shuttle_user_code": code,
-    }
-    script = "\n".join(
-        f"sessionStorage.setItem({json.dumps(key)}, {json.dumps(str(value or ''))});"
-        for key, value in values.items()
-    )
-    st_javascript(script)
-
-def check_session_storage():
-    local_name = st_javascript("sessionStorage.getItem('shuttle_user_name');")
-    local_role = st_javascript("sessionStorage.getItem('shuttle_user_role');")
-    local_code = st_javascript("sessionStorage.getItem('shuttle_user_code');")
-    local_url = st_javascript("sessionStorage.getItem('shuttle_user_url');")
-    
-    if local_name and local_role and local_code:
-        st.session_state.user_name = str(local_name)
-        st.session_state.user_role = str(local_role)
-        st.session_state.user_code = str(local_code)
-        st.session_state.user_url = str(local_url) if local_url else ""
-        st.session_state.login_status = True
-
-def process_logout():
-    st_javascript("sessionStorage.clear();")
-    st_javascript("localStorage.clear();")
-    st.session_state.login_status = False
-    st.session_state.logout_requested = True
-    st.session_state.show_timecard = False
-    st.session_state.current_page = "main"
-    if 'user_name' in st.session_state: del st.session_state.user_name
-    if 'user_code' in st.session_state: del st.session_state.user_code
-    if 'user_role' in st.session_state: del st.session_state.user_role
-    st.rerun()
-
-def inject_pwa_blocker():
-    icon_data = _get_base64_img("icon.png")
-    if icon_data:
-        block_html = f'''
-            <script>
-                const links = parent.document.getElementsByTagName("link");
-                for (let link of links) {{
-                    if (link.rel === "manifest" || link.href.includes("manifest")) {{
-                        link.href = "data:application/json;base64,e30=";
-                    }}
-                }}
-                let appleLink = parent.document.querySelector("link[rel='apple-touch-icon']");
-                if (!appleLink) {{
-                    appleLink = parent.document.createElement("link");
-                    appleLink.rel = "apple-touch-icon";
-                    parent.document.head.appendChild(appleLink);
-                }}
-                appleLink.href = "data:image/png;base64,{icon_data}";
-
-                let iconLink = parent.document.querySelector("link[sizes='192x192']");
-                if (!iconLink) {{
-                    iconLink = parent.document.createElement("link");
-                    iconLink.rel = "icon";
-                    iconLink.sizes = "192x192";
-                    parent.document.head.appendChild(iconLink);
-                }}
-                iconLink.href = "data:image/png;base64,{icon_data}";
-            </script>
-        '''
-        st.components.v1.html(block_html, height=0, width=0)
-
+# --- GAS通信用ヘルパー関数 ---
 def post_to_gas(payload):
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        GAS_WEBAPP_URL, 
-        data=data, 
-        headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            return json.loads(response.read().decode('utf-8'))
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers)
+    return response.json()
 
-def extract_ss_details(url_str):
-    if not url_str or "docs.google.com" not in url_str:
-        return None, None
-    ss_id = None
-    gid = "0"
-    id_match = re.search(r'/d/([a-zA-Z0-9-_]+)', url_str)
-    if id_match:
-        ss_id = id_match.group(1)
-    gid_match = re.search(r'gid=([0-9]+)', url_str)
-    if gid_match:
-        gid = gid_match.group(1)
-    return ss_id, gid
 
-def parse_flexible_date(date_str):
-    if not date_str:
-        return None
-    cleaned = str(date_str).strip().split(" ")[0]
+# --- 画像と同じ入力フォーム形式でデータ表示する共通関数 ---
+def render_item_form_display(row, prefix_key):
+    # 基本情報
+    st.write("**📋 申請基本情報**")
+    b1, b2, b3 = st.columns(3)
+    b1.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"{prefix_key}_app")
+    b1.text_input("得意先コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"{prefix_key}_ccode")
+    b2.text_input("得意先名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"{prefix_key}_cname")
+    b2.text_input("店舗名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"{prefix_key}_sname")
+    b3.text_input("店舗コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"{prefix_key}_scode")
+    b3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"{prefix_key}_ddate")
+
+    st.write("---")
+    st.write("**📦 申請商品（最大5件）**")
     
-    match_jp = re.match(r'^(\d{4})年(\d{1,2})月(\d{1,2})日', cleaned)
-    if match_jp:
+    # 画像と同様に商品1〜5を横並び(列)で表示
+    for i in range(5):
+        base_idx = 8 + (i * 4)
+        p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+        q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
+        pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
+        flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
+
+        c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+        c1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"{prefix_key}_p_{i}")
+        c2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"{prefix_key}_q_{i}")
+        c3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"{prefix_key}_pr_{i}")
+        c4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"{prefix_key}_flg_{i}")
+
+
+# --- メイン画面関数 ---
+def maintenance_admin_screen():
+    st.title("📦 メンテナンス申請・承認・業務処理システム")
+
+    if "user_name" not in st.session_state:
+        st.session_state["user_name"] = "担当者"
+    st.sidebar.text_input("操作者名", key="user_name")
+
+    tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
+
+    # ====================================================
+    # TAB 1: スタッフ申請・差戻し対応
+    # ====================================================
+    with tab1:
+        st.write("### 📝 新規申請 / 差戻しデータ修正")
+        
+        with st.expander("➕ 新規申請フォームを開く", expanded=False):
+            with st.form("submit_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    applicant = st.text_input("申請者名", value=st.session_state["user_name"])
+                    customer_code = st.text_input("得意先コード")
+                    customer_name = st.text_input("得意先名")
+                    store_name = st.text_input("店舗名")
+                with col2:
+                    store_code = st.text_input("店舗コード")
+                    delivery_date = st.date_input("納品日").strftime("%Y/%m/%d")
+                    route_code = st.text_input("ルートコード")
+
+                st.write("---")
+                st.write("**📦 申請商品（最大5件）**")
+                items_flat = []
+                for i in range(5):
+                    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+                    p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{i}")
+                    qty = c2.number_input(f"数量 {i+1}", min_value=0, value=0, key=f"q_{i}")
+                    price = c3.number_input(f"単価 {i+1}", min_value=0, value=0, key=f"pr_{i}")
+                    print_flg = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], key=f"flg_{i}")
+                    if p_code:
+                        items_flat.extend([p_code, str(qty), str(price), print_flg])
+
+                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+
+                if btn_submit:
+                    payload = {
+                        "status": "SUBMIT_MAINTENANCE",
+                        "target_sheet_url": TARGET_SHEET_URL,
+                        "applicant": applicant,
+                        "customer_code": customer_code,
+                        "customer_name": customer_name,
+                        "store_name": store_name,
+                        "store_code": store_code,
+                        "delivery_date": delivery_date,
+                        "route_code": route_code,
+                        "items_flat": items_flat
+                    }
+                    res = post_to_gas(payload)
+                    if res.get("status") == "success":
+                        st.toast("新規申請を送信しました！", icon="🎉")
+                        time.sleep(1)
+                        st.rerun()
+
+        st.write("---")
+        st.write("#### ⚠️ 差戻し・再修正が必要なデータ")
         try:
-            year, month, day = map(int, match_jp.groups())
-            return datetime(year, month, day).date()
-        except:
-            return None
-            
-    cleaned = cleaned.replace("-", "/")
-    match_slash = re.match(r'^(\d{4})/(\d{1,2})/(\d{1,2})', cleaned)
-    if match_slash:
+            st.cache_data.clear()
+            df = pd.read_csv(TARGET_SHEET_CSV)
+            if not df.empty and len(df.columns) >= 29:
+                rejected_df = df[df.iloc[:, 28].astype(str).str.strip() == "差戻し"]
+                if rejected_df.empty:
+                    st.info("現在、差戻しデータはありません。")
+                else:
+                    for idx, row in rejected_df.iloc[::-1].iterrows():
+                        row_id = idx + 2
+                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
+                        comment = str(row.iloc[29]) if pd.notna(row.iloc[29]) else ""
+                        
+                        with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {comment}"):
+                            with st.form(key=f"resubmit_form_{row_id}"):
+                                edit_applicant = st.text_input("申請者", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "")
+                                edit_cust_code = st.text_input("得意先コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "")
+                                edit_cust_name = st.text_input("得意先名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "")
+                                edit_store_name = st.text_input("店舗名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "")
+                                edit_store_code = st.text_input("店舗コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "")
+                                edit_deliv_date = st.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "")
+                                edit_route_code = st.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "")
+
+                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
+
+                                if btn_resubmit:
+                                    updated_row = [
+                                        str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
+                                        edit_store_name, edit_store_code, edit_deliv_date, edit_route_code
+                                    ]
+                                    updated_row.extend([str(x) if pd.notna(x) else "" for x in row.iloc[8:28].values])
+                                    updated_row.extend(["申請中", "", ""])
+
+                                    payload = {
+                                        "status": "RESUBMIT_MAINTENANCE",
+                                        "target_sheet_url": TARGET_SHEET_URL,
+                                        "row_index": row_id,
+                                        "updated_row": updated_row
+                                    }
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        st.toast("再申請が完了しました！")
+                                        time.sleep(1)
+                                        st.rerun()
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
+
+    # ====================================================
+    # TAB 2: 管理職チェック（画像フォーマットで表示）
+    # ====================================================
+    with tab2:
+        st.write("### 🔍 管理職：申請承認・チェック")
         try:
-            year, month, day = map(int, match_slash.groups())
-            return datetime(year, month, day).date()
-        except:
-            return None
-    return None
+            st.cache_data.clear()
+            df = pd.read_csv(TARGET_SHEET_CSV)
+            if not df.empty and len(df.columns) >= 29:
+                pending_df = df[df.iloc[:, 28].astype(str).str.strip() == "申請中"]
+                if pending_df.empty:
+                    st.info("現在、未承認の申請はありません。")
+                else:
+                    st.warning(f"承認待ちデータ: **{len(pending_df)} 件**")
+                    for idx, row in pending_df.iloc[::-1].iterrows():
+                        row_id = idx + 2
+                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
+                        cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
+
+                        with st.expander(f"⏳ 【承認待ち】{cust_name}（{cust_code}） | 行: {row_id}"):
+                            # 画像と同じ形式でデータを整列表示
+                            render_item_form_display(row, prefix_key=f"mgr_view_{row_id}")
+
+                            with st.form(key=f"mgr_form_{row_id}"):
+                                comment = st.text_input("コメント / 差戻し理由", key=f"comment_{row_id}")
+                                col_app, col_rej, col_del = st.columns(3)
+                                btn_approve = col_app.form_submit_button("✅ 承認", type="primary", use_container_width=True)
+                                btn_reject = col_rej.form_submit_button("↩️ 差戻し", use_container_width=True)
+                                btn_delete = col_del.form_submit_button("🗑️ 削除", use_container_width=True)
+
+                                mgr_name = st.session_state["user_name"]
+                                now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+
+                                if btn_approve or btn_reject or btn_delete:
+                                    updated_row = [str(x) if pd.notna(x) else "" for x in row.iloc[:28].values]
+                                    status_type = ""
+
+                                    if btn_approve:
+                                        status_type = "APPROVE_MAINTENANCE"
+                                        updated_row.extend([mgr_name, now_str, comment])
+                                    elif btn_reject:
+                                        status_type = "REJECT_MAINTENANCE"
+                                        updated_row.extend(["差戻し", now_str, comment])
+                                    elif btn_delete:
+                                        status_type = "DELETE_MAINTENANCE"
+                                        updated_row.extend(["削除", now_str, comment])
+
+                                    payload = {
+                                        "status": status_type,
+                                        "target_sheet_url": TARGET_SHEET_URL,
+                                        "row_index": row_id,
+                                        "updated_row": updated_row
+                                    }
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        st.toast("処理が完了しました！")
+                                        time.sleep(1)
+                                        st.rerun()
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
+
+    # ====================================================
+    # TAB 3: 業務担当（画像フォーマットで表示）
+    # ====================================================
+    with tab3:
+        st.write("### 🚚 業務担当：承認済みデータの転記・処理")
+        try:
+            st.cache_data.clear()
+            df = pd.read_csv(TARGET_SHEET_CSV)
+
+            if df.empty or len(df.columns) < 29:
+                st.info("現在、処理可能なデータはありません。")
+            else:
+                ac_series = df.iloc[:, 28].astype(str).str.strip()
+                approved_df = df[
+                    (~df.iloc[:, 28].isna()) & 
+                    (~ac_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+                ]
+
+                if approved_df.empty:
+                    st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
+                else:
+                    st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
+
+                    for idx, row in approved_df.iloc[::-1].iterrows():
+                        row_id = idx + 2
+                        timestamp = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
+                        cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
+                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
+                        mgr_name = str(row.iloc[28]) if pd.notna(row.iloc[28]) else ""
+
+                        expander_label = f"🟢【承認済】{cust_name}（{cust_code}） | 承認者: {mgr_name} | 申請日: {timestamp}"
+
+                        with st.expander(expander_label):
+                            # 画像と同じ形式でデータを整列表示
+                            render_item_form_display(row, prefix_key=f"op_view_{row_id}")
+
+                            with st.form(key=f"transfer_form_{row_id}"):
+                                op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
+                                btn_transfer = st.form_submit_button("📋 別シート（業務管理用）へ出力・転記", type="primary", use_container_width=True)
+
+                                if btn_transfer:
+                                    action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                                    op_user = st.session_state["user_name"]
+
+                                    base_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
+                                    transfer_row = base_row + [action_time, op_user, op_memo]
+
+                                    payload = {
+                                        "status": "TRANSFER_TO_OPERATOR",
+                                        "target_sheet_url": TARGET_SHEET_URL,
+                                        "dest_sheet_url": DEST_SHEET_URL,
+                                        "row_index": row_id,
+                                        "transfer_row": transfer_row,
+                                        "op_user": op_user,
+                                        "action_time": action_time
+                                    }
+
+                                    with st.spinner("業務シートへ転記中..."):
+                                        res = post_to_gas(payload)
+                                        if res.get("status") == "success":
+                                            st.cache_data.clear()
+                                            st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
+                                            time.sleep(1.5)
+                                            st.rerun()
+
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
