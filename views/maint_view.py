@@ -4,16 +4,12 @@ import requests
 import json
 from datetime import datetime
 import time
-from io import StringIO
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbzg61d-nNxC4WXWKLMgqSiEuMjE_5BvUvKvRU0DWzDEPgo71MXuNdC3vCdHdIWNTMnM/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
-
-# 顧客マスタデータ用URL（認証リダイレクトを回避するGViz API形式）
-CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 
 def post_to_gas(payload):
@@ -62,45 +58,29 @@ def maintenance_admin_screen():
             btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary")
 
             if btn_search:
-                if cust_code_input:
-                    try:
-                        # セッションおよびヘッダーを設定してCSVデータを取得
-                        session = requests.Session()
-                        res = session.get(
-                            CUSTOMER_MASTER_CSV, 
-                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}, 
-                            timeout=10,
-                            allow_redirects=True
-                        )
-                        
-                        # レスポンスチェック
-                        if res.status_code != 200 or "<html" in res.text.lower():
-                            st.error(f"スプレッドシートからの応答エラー (Status: {res.status_code})。アクセス制限またはログイン要求が発生しています。")
-                        else:
-                            df_master = pd.read_csv(StringIO(res.text), dtype=str)
+                if cust_code_input.strip():
+                    with st.spinner("顧客データを検索中..."):
+                        payload = {
+                            "status": "GET_CUSTOMER_MASTER",
+                            "customer_code": cust_code_input.strip()
+                        }
+                        res = post_to_gas(payload)
 
-                            # B列（index 1: 顧客コード）で照合（前後の空白を除去）
-                            search_str = str(cust_code_input).strip()
-                            matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == search_str]
+                        if res.get("status") == "success":
+                            cust_data = res.get("data")
+                            if cust_data:
+                                st.session_state["searched_ccode"] = cust_code_input.strip()
+                                st.session_state["master_sname"] = cust_data.get("sname", "")
+                                st.session_state["master_cname"] = cust_data.get("cname", "")
+                                st.session_state["master_scode"] = cust_data.get("scode", "")
 
-                            if not matched.empty:
-                                last_row = matched.iloc[-1]
-                                st.session_state["searched_ccode"] = search_str
-                                
-                                # A列(index 0): 顧客担当者名
-                                # C列(index 2): 顧客名
-                                # E列(index 4): 納品書印字顧客コード
-                                st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
-                                st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
-                                st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
-                                
                                 st.toast("顧客情報を取得しました！", icon="✅")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                st.warning(f"「{search_str}」に該当する顧客データが見つかりませんでした。")
-                    except Exception as e:
-                        st.error(f"マスタ参照エラー: {e}")
+                                st.warning(f"「{cust_code_input}」に該当する顧客データが見つかりませんでした。")
+                        else:
+                            st.error(f"取得エラー: {res.get('message')}")
                 else:
                     st.warning("顧客コードを入力してください。")
 
@@ -110,16 +90,15 @@ def maintenance_admin_screen():
             with st.form("submit_form"):
                 st.write("**📋 申請基本情報**")
                 
-                # フォーム一括リセット用のSuffix
                 clear_suffix = f"_{st.session_state['form_clear_key']}"
                 
-                # 1行目： 顧客コード | 顧客名（得意先名） | 納品書印字顧客コード
+                # 1行目： 顧客コード | 顧客名 | 納品書印字顧客コード
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
                 customer_code = row1_col1.text_input("顧客コード", value=st.session_state["searched_ccode"], key=f"ccode{clear_suffix}")
                 customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"], key=f"cname{clear_suffix}")
                 store_code = row1_col3.text_input("納品書印字顧客コード", value=st.session_state["master_scode"], key=f"scode{clear_suffix}")
 
-                # 2行目： 顧客担当者名 | ルートコード | 納品日（初期値を空に設定）
+                # 2行目： 顧客担当者名 | ルートコード | 納品日
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
                 store_name = row2_col1.text_input("顧客担当者名", value=st.session_state["master_sname"], key=f"sname{clear_suffix}")
                 route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
@@ -139,7 +118,6 @@ def maintenance_admin_screen():
                     p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{i}{clear_suffix}")
                     qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{i}{clear_suffix}")
                     price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{i}{clear_suffix}")
-                    # 選択肢先頭を空文字にし初期状態を空白化
                     print_flg = c4.selectbox(f"伝票出力 {i+1}", ["", "有", "無"], index=0, key=f"flg_{i}{clear_suffix}")
                     
                     if p_code.strip():
@@ -158,15 +136,15 @@ def maintenance_admin_screen():
                     else:
                         now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
                         full_row = [
-                            now_str,           # A列: タイムスタンプ
-                            applicant,         # B列: 申請者名
-                            customer_code,     # C列: 顧客コード
-                            customer_name,     # D列: 顧客名
-                            store_name,        # E列: 顧客担当者名
-                            store_code,        # F列: 納品書印字顧客コード
-                            delivery_date,     # G列: 納品日
-                            route_code,        # H列: ルートコード
-                            delivery_person    # I列: 納品者
+                            now_str,           # A列
+                            applicant,         # B列
+                            customer_code,     # C列
+                            customer_name,     # D列
+                            store_name,        # E列
+                            store_code,        # F列
+                            delivery_date,     # G列
+                            route_code,        # H列
+                            delivery_person    # I列
                         ] + items_flat + [app_comment, "申請中", "", ""]
 
                         payload = {
@@ -178,7 +156,6 @@ def maintenance_admin_screen():
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             
-                            # 検索結果セッション & フォーム入力状態を完全初期化
                             st.session_state["searched_ccode"] = ""
                             st.session_state["master_cname"] = ""
                             st.session_state["master_sname"] = ""
@@ -276,203 +253,11 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 2: 管理職承認
-    # ==========================================
-    with tab2:
-        st.subheader("🔍 管理職：申請承認・編集")
-        try:
-            st.cache_data.clear()
-            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
-            if not df.empty and len(df.columns) >= 30:
-                pending_df = df[df.iloc[:, 30].astype(str).str.strip() == "申請中"]
-                if pending_df.empty:
-                    st.info("現在、未承認の申請はありません。")
-                else:
-                    st.warning(f"承認待ちデータ: **{len(pending_df)} 件**")
-                    for idx, row in pending_df.iloc[::-1].iterrows():
-                        row_id = idx + 2
-                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
-                        cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
+    # TAB 2: 管理具体的な状況や問題の文脈（「解決策1」の内容など）がわからないため、的確なアドバイスをするために詳しい情報を教えていただけますでしょうか？
 
-                        with st.expander(f"⏳ 【承認待ち】{cust_name}（{cust_code}） | 行: {row_id}"):
-                            with st.form(key=f"mgr_edit_form_{row_id}"):
-                                st.write("**📋 申請基本情報（修正可能）**")
-                                
-                                m1_1, m1_2, m1_3 = st.columns(3)
-                                edit_ccode = m1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"m_ccode_{row_id}")
-                                edit_cname = m1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"m_cname_{row_id}")
-                                edit_scode = m1_3.text_input("納品書印字顧客コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
+もし差し支えなければ、以下の点について教えてください。
 
-                                m2_1, m2_2, m2_3 = st.columns(3)
-                                edit_sname = m2_1.text_input("顧客担当者名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
-                                edit_rcode = m2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"m_rcode_{row_id}")
-                                edit_ddate = m2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"m_ddate_{row_id}")
+* **どのような問題（または課題）を解決しようとしていますか？**
+* **「解決策1」ではどのような方法を検討・試されましたか？**
 
-                                m3_1, m3_2, m3_3 = st.columns(3)
-                                edit_dperson = m3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"m_dperson_{row_id}")
-                                edit_app = m3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"m_app_{row_id}")
-
-                                st.write("---")
-                                st.write("**📦 申請商品（修正可能）**")
-                                edit_items = []
-                                for i in range(5):
-                                    base_idx = 9 + (i * 4)
-                                    p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
-                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
-                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
-                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
-
-                                    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-                                    p_in = c1.text_input(f"商品コード {i+1}", value=p_val, key=f"m_p_{row_id}_{i}")
-                                    q_in = c2.text_input(f"数量 {i+1}", value=q_val, key=f"m_q_{row_id}_{i}")
-                                    pr_in = c3.text_input(f"単価 {i+1}", value=pr_val, key=f"m_pr_{row_id}_{i}")
-                                    
-                                    opts = ["", "有", "無"]
-                                    flg_idx = opts.index(flg_val) if flg_val in opts else 0
-                                    flg_in = c4.selectbox(f"伝票出力 {i+1}", opts, index=flg_idx, key=f"m_flg_{row_id}_{i}")
-
-                                    if p_in.strip():
-                                        edit_items.extend([p_in, q_in, pr_in, flg_in])
-                                    else:
-                                        edit_items.extend(["", "", "", ""])
-
-                                st.write("---")
-                                edit_app_comment = st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"m_app_com_{row_id}")
-                                mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"mgr_com_{row_id}")
-                                
-                                col_app, col_rej, col_del = st.columns(3)
-                                btn_approve = col_app.form_submit_button("✅ 承認（変更内容を反映）", type="primary", use_container_width=True)
-                                btn_reject = col_rej.form_submit_button("↩️ 差戻し", use_container_width=True)
-                                btn_delete = col_del.form_submit_button("🗑️ 削除", use_container_width=True)
-
-                                mgr_name = st.session_state["user_name"]
-                                now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-
-                                if btn_approve or btn_reject or btn_delete:
-                                    updated_row = [
-                                        str(row.iloc[0]), edit_app, edit_ccode, edit_cname,
-                                        edit_sname, edit_scode, edit_ddate, edit_rcode, edit_dperson
-                                    ] + edit_items + [edit_app_comment]
-
-                                    status_type = ""
-                                    if btn_approve:
-                                        status_type = "APPROVE_MAINTENANCE"
-                                        updated_row.extend([mgr_name, now_str, mgr_comment])
-                                    elif btn_reject:
-                                        status_type = "REJECT_MAINTENANCE"
-                                        updated_row.extend(["差戻し", now_str, mgr_comment])
-                                    elif btn_delete:
-                                        status_type = "DELETE_MAINTENANCE"
-                                        updated_row.extend(["削除", now_str, mgr_comment])
-
-                                    payload = {
-                                        "status": status_type,
-                                        "target_sheet_url": TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": updated_row
-                                    }
-                                    res = post_to_gas(payload)
-                                    if res.get("status") == "success":
-                                        st.toast("処理が完了しました！")
-                                        time.sleep(1)
-                                        st.rerun()
-        except Exception as e:
-            st.error(f"データ取得エラー: {e}")
-
-    # ==========================================
-    # TAB 3: 業務担当
-    # ==========================================
-    with tab3:
-        st.subheader("🚚 業務担当：承認済みデータの転記・処理")
-        try:
-            st.cache_data.clear()
-            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
-
-            if df.empty or len(df.columns) < 31:
-                st.info("現在、処理可能なデータはありません。")
-            else:
-                ac_series = df.iloc[:, 30].astype(str).str.strip()
-                approved_df = df[
-                    (~df.iloc[:, 30].isna()) & 
-                    (~ac_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
-                ]
-
-                if approved_df.empty:
-                    st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
-                else:
-                    st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
-
-                    for idx, row in approved_df.iloc[::-1].iterrows():
-                        row_id = idx + 2
-                        timestamp = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
-                        cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
-                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
-                        mgr_name = str(row.iloc[30]) if pd.notna(row.iloc[30]) else ""
-
-                        expander_label = f"🟢【承認済】{cust_name}（{cust_code}） | 承認者: {mgr_name} | 申請日: {timestamp}"
-
-                        with st.expander(expander_label):
-                            st.write("**📋 申請内容**")
-                            
-                            o1_1, o1_2, o1_3 = st.columns(3)
-                            o1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"op_ccode_{row_id}")
-                            o1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"op_cname_{row_id}")
-                            o1_3.text_input("納品書印字顧客コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"op_scode_{row_id}")
-
-                            o2_1, o2_2, o2_3 = st.columns(3)
-                            o2_1.text_input("顧客担当者名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"op_sname_{row_id}")
-                            o2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"op_rcode_{row_id}")
-                            o2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"op_ddate_{row_id}")
-
-                            o3_1, o3_2, o3_3 = st.columns(3)
-                            o3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"op_dperson_{row_id}")
-                            o3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"op_app_{row_id}")
-
-                            st.write("---")
-                            st.write("**📦 申請商品**")
-                            for i in range(5):
-                                base_idx = 9 + (i * 4)
-                                p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
-                                q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
-                                pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
-                                flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
-
-                                c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-                                c1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"op_p_{row_id}_{i}")
-                                c2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"op_q_{row_id}_{i}")
-                                c3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"op_pr_{row_id}_{i}")
-                                c4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"op_flg_{row_id}_{i}")
-
-                            st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", disabled=True, key=f"op_app_com_{row_id}")
-
-                            with st.form(key=f"transfer_form_{row_id}"):
-                                op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
-                                btn_transfer = st.form_submit_button("📋 別シート（業務管理用）へ出力・転記", type="primary", use_container_width=True)
-
-                                if btn_transfer:
-                                    action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-                                    op_user = st.session_state["user_name"]
-
-                                    base_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
-                                    transfer_row = base_row + [action_time, op_user, op_memo]
-
-                                    payload = {
-                                        "status": "TRANSFER_TO_OPERATOR",
-                                        "target_sheet_url": TARGET_SHEET_URL,
-                                        "dest_sheet_url": DEST_SHEET_URL,
-                                        "row_index": row_id,
-                                        "transfer_row": transfer_row,
-                                        "op_user": op_user,
-                                        "action_time": action_time
-                                    }
-
-                                    with st.spinner("業務シートへ転記中..."):
-                                        res = post_to_gas(payload)
-                                        if res.get("status") == "success":
-                                            st.cache_data.clear()
-                                            st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
-                                            time.sleep(1.5)
-                                            st.rerun()
-
-        except Exception as e:
-            st.error(f"データ取得エラー: {e}")
+詳細を教えていただければ、より適切な「解決策2」をご提案いたします。
