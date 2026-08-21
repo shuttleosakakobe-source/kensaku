@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-# ルートディレクトリを検索パスに追加（Streamlit Cloud等でのImportErrorを絶対防止）
+# ルートディレクトリを検索パスに追加（ImportError防止）
 sys.path.append(str(Path(__file__).parent))
 
 import streamlit as st
@@ -22,7 +22,7 @@ st.set_page_config(
 # --- 2. セッション状態の初期化 ---
 if 'login_status' not in st.session_state: st.session_state.login_status = False
 if 'logout_requested' not in st.session_state: st.session_state.logout_requested = False
-if 'current_page' not in st.session_state: st.session_state.current_page = "maint_admin" # 初期画面設定
+if 'current_page' not in st.session_state: st.session_state.current_page = "maint_admin"
 if 'selected_route_nodes' not in st.session_state: st.session_state.selected_route_nodes = [{"名前": "📌 現在地", "住所": "現在地"}]
 if 'moved_to_bottom_names' not in st.session_state: st.session_state.moved_to_bottom_names = []
 if 'needs_alert' not in st.session_state: st.session_state.needs_alert = False
@@ -33,9 +33,9 @@ if not st.session_state.login_status and not st.session_state.logout_requested:
 
 # --- 4. 画面ルーティング制御 ---
 if st.session_state.login_status:
-    # サイドバーに画面切り替えメニューを表示
     with st.sidebar:
         st.write(f"👤 ログイン中: **{st.session_state.get('user_name', '担当者')}**")
+        st.caption(f"権限: {st.session_state.get('user_role', 'なし')}")
         if st.button("🚪 ログアウト", use_container_width=True):
             st.session_state.login_status = False
             st.session_state.logout_requested = True
@@ -53,7 +53,6 @@ if st.session_state.login_status:
         elif page == "🗺️ ナビ画面":
             st.session_state.current_page = "navi"
 
-    # 指定ページの表示
     if st.session_state.current_page in ["navi", "nav"]:
         route_navigation_screen()
     elif st.session_state.current_page == "maint_admin":
@@ -70,45 +69,54 @@ else:
             st.image("1.png", use_container_width=True)
         st.title("🔑 業務システム ログイン")
             
-        u_code = st.text_input("担当者コード").strip()
+        u_email = st.text_input("メールアドレス").strip()
         u_pass = st.text_input("パスワード", type="password").strip()
         
         if st.button("ログイン", type="primary", use_container_width=True):
             raw = load_sheet_data(gid="0")
-            if raw:
-                h = raw[0]
-                rows = [dict(zip(h, r)) for r in raw[1:]]
-                user = next((r for r in rows if str(r.get('担当者コード')).strip() == u_code and str(r.get('パスワード')).strip() == u_pass), None)
+            if raw and len(raw) > 1:
+                # 行ごとに判定 (A列: 0[メール], C列: 2[名前], D列: 3[パスワード], F列: 5[権限])
+                user_found = None
+                for row in raw[1:]:
+                    if len(row) >= 6:
+                        email_val = str(row[0]).strip() # A列
+                        pass_val = str(row[3]).strip()  # D列
+                        
+                        if email_val.lower() == u_email.lower() and pass_val == u_pass:
+                            user_found = {
+                                "email": email_val,
+                                "name": str(row[2]).strip(), # C列
+                                "role": str(row[5]).strip()  # F列
+                            }
+                            break
                 
-                if user:
-                    vals = list(user.values())
-                    st.session_state.user_name = user.get('担当者名')
-                    st.session_state.user_url = user.get('URL')
-                    st.session_state.needs_alert = (str(vals[5]).strip() not in ["0", ""]) if len(vals) > 5 else False
-                    st.session_state.user_role = str(vals[6]).strip() if len(vals) >= 7 else "2"
-                    st.session_state.user_code = u_code
+                if user_found:
+                    st.session_state.user_name = user_found["name"]
+                    st.session_state.user_role = user_found["role"]
+                    st.session_state.user_code = user_found["email"]
                     st.session_state.login_status = True
                     st.session_state.logout_requested = False
                     st.session_state.current_page = "maint_admin"
                     
                     set_login_storage(
                         st.session_state.user_name,
-                        st.session_state.user_url,
-                        st.session_state.needs_alert,
+                        "",
+                        False,
                         st.session_state.user_role,
                         st.session_state.user_code
                     )
                     st.rerun()
                 else:
-                    st.error("認証失敗: 担当者コードまたはパスワードが正しくありません")
+                    st.error("認証失敗: メールアドレスまたはパスワードが正しくありません")
             else:
-                # デモ用フォールバック（マスター接続不可時のテスト用）
-                if u_code == "admin" and u_pass == "admin":
+                # テスト用フォールバック
+                if u_email == "admin@example.com" and u_pass == "admin":
                     st.session_state.user_name = "管理者"
-                    st.session_state.user_code = u_code
+                    st.session_state.user_role = "管理者"
+                    st.session_state.user_code = u_email
                     st.session_state.login_status = True
                     st.session_state.logout_requested = False
                     st.session_state.current_page = "maint_admin"
                     st.rerun()
                 else:
-                    st.error("マスターデータの読み込みに失敗しました")
+                    st.error("マスターデータの読み込みに失敗しました。シートの共有設定（アクセス権限）を確認してください。")
