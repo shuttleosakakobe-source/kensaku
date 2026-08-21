@@ -12,8 +12,8 @@ TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgH
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
 
-# 顧客マスタデータ用URL（標準のCSVエクスポート形式）
-CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/export?format=csv&gid=127347205"
+# 顧客マスタデータ用URL（認証リダイレクトを回避するGViz API形式）
+CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 
 def post_to_gas(payload):
@@ -64,33 +64,41 @@ def maintenance_admin_screen():
             if btn_search:
                 if cust_code_input:
                     try:
-                        # User-Agentを指定してスプレッドシートのCSVを取得
-                        res = requests.get(CUSTOMER_MASTER_CSV, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-                        res.raise_for_status()
+                        # セッションおよびヘッダーを設定してCSVデータを取得
+                        session = requests.Session()
+                        res = session.get(
+                            CUSTOMER_MASTER_CSV, 
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}, 
+                            timeout=10,
+                            allow_redirects=True
+                        )
                         
-                        df_master = pd.read_csv(StringIO(res.text), dtype=str)
-
-                        # B列（index 1: 顧客コード）で照合（前後の空白を除去）
-                        search_str = str(cust_code_input).strip()
-                        matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == search_str]
-
-                        if not matched.empty:
-                            last_row = matched.iloc[-1]
-                            st.session_state["searched_ccode"] = search_str
-                            
-                            # マスタのヘッダー対応：
-                            # A列(index 0): 担当者名（顧客担当者）
-                            # C列(index 2): 顧客名
-                            # E列(index 4): 納品書印字顧客コード
-                            st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 担当者名
-                            st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""  # C列: 顧客名
-                            st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 納品書印字顧客コード
-                            
-                            st.toast("顧客情報を取得しました！", icon="✅")
-                            time.sleep(0.5)
-                            st.rerun()
+                        # レスポンスチェック
+                        if res.status_code != 200 or "<html" in res.text.lower():
+                            st.error(f"スプレッドシートからの応答エラー (Status: {res.status_code})。アクセス制限またはログイン要求が発生しています。")
                         else:
-                            st.warning(f"「{search_str}」に該当する顧客データが見つかりませんでした。")
+                            df_master = pd.read_csv(StringIO(res.text), dtype=str)
+
+                            # B列（index 1: 顧客コード）で照合（前後の空白を除去）
+                            search_str = str(cust_code_input).strip()
+                            matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == search_str]
+
+                            if not matched.empty:
+                                last_row = matched.iloc[-1]
+                                st.session_state["searched_ccode"] = search_str
+                                
+                                # A列(index 0): 顧客担当者名
+                                # C列(index 2): 顧客名
+                                # E列(index 4): 納品書印字顧客コード
+                                st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
+                                st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
+                                st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
+                                
+                                st.toast("顧客情報を取得しました！", icon="✅")
+                                time.sleep(0.5)
+                                st.rerun()
+                            else:
+                                st.warning(f"「{search_str}」に該当する顧客データが見つかりませんでした。")
                     except Exception as e:
                         st.error(f"マスタ参照エラー: {e}")
                 else:
