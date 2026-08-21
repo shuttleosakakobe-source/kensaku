@@ -40,10 +40,13 @@ def maintenance_admin_screen():
                     if res_json.get("status") == "success":
                         data = res_json.get("data")
                         if data:
+                            # セッションの値を更新
                             st.session_state["sname"] = data.get("sname", "")
                             st.session_state["cname"] = data.get("cname", "")
                             st.session_state["scode"] = data.get("scode", "")
                             st.success("顧客データを取得しました！")
+                            # ★画面を強制再描画してフォームに値を即座に反映させる
+                            st.rerun()
                         else:
                             st.error("該当する顧客コードは見つかりませんでした。")
                     else:
@@ -52,8 +55,8 @@ def maintenance_admin_screen():
                 except Exception as e:
                     st.error(f"通信エラーが発生しました: {e}")
 
-    # 2. 結果表示（自動反映フォーム）
+    # 2. 結果表示（キーにセッション変数を割り当ててリアルタイム反映）
     st.subheader("顧客情報")
-    st.text_input("顧客担当者名", value=st.session_state["sname"], key="sname_field")
-    st.text_input("顧客名", value=st.session_state["cname"], key="cname_field")
-    st.text_input("納品書印字顧客コード", value=st.session_state["scode"], key="scode_field")
+    st.text_input("顧客担当者名", value=st.session_state["sname"], key="field_sname")
+    st.text_input("顧客名", value=st.session_state["cname"], key="field_cname")
+    st.text_input("納品書印字顧客コード", value=st.session_state["scode"], key="field_scode")
