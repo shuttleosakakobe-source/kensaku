@@ -6,14 +6,14 @@ from datetime import datetime
 import time
 from io import StringIO
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbySnxfJOaQo7g7bFeHbnfsFBoJSxr3to0vg8GAavB-d49FuCXfxb8BeT5groozOPQks/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbyVRKr8MKGrQbNFGzvUbgn24uOnQboav4HuzyhwtdEHlIfqDpHGPcTcX1I_UbaE4Du4QQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
 
-# 顧客マスタデータ用URL
-CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
+# 顧客マスタデータ用URL（標準のCSVエクスポート形式）
+CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/export?format=csv&gid=127347205"
 
 
 def post_to_gas(payload):
@@ -64,22 +64,28 @@ def maintenance_admin_screen():
             if btn_search:
                 if cust_code_input:
                     try:
-                        # requestsを使ってヘッダー付きで取得（403拒否・キャッシュ問題回避）
+                        # User-Agentを指定してスプレッドシートのCSVを取得
                         res = requests.get(CUSTOMER_MASTER_CSV, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                         res.raise_for_status()
                         
                         df_master = pd.read_csv(StringIO(res.text), dtype=str)
 
-                        # B列（index 1）: 顧客コード で照合（前後空白除去）
+                        # B列（index 1: 顧客コード）で照合（前後の空白を除去）
                         search_str = str(cust_code_input).strip()
                         matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == search_str]
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
                             st.session_state["searched_ccode"] = search_str
-                            st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 加盟店名
+                            
+                            # マスタのヘッダー対応：
+                            # A列(index 0): 担当者名（顧客担当者）
+                            # C列(index 2): 顧客名
+                            # E列(index 4): 納品書印字顧客コード
+                            st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 担当者名
                             st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""  # C列: 顧客名
-                            st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
+                            st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 納品書印字顧客コード
+                            
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.5)
                             st.rerun()
@@ -99,15 +105,15 @@ def maintenance_admin_screen():
                 # フォーム一括リセット用のSuffix
                 clear_suffix = f"_{st.session_state['form_clear_key']}"
                 
-                # 1行目： 顧客コード | 顧客名（得意先名） | 加盟店コード（店舗コード）
+                # 1行目： 顧客コード | 顧客名（得意先名） | 納品書印字顧客コード
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
                 customer_code = row1_col1.text_input("顧客コード", value=st.session_state["searched_ccode"], key=f"ccode{clear_suffix}")
                 customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"], key=f"cname{clear_suffix}")
-                store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"], key=f"scode{clear_suffix}")
+                store_code = row1_col3.text_input("納品書印字顧客コード", value=st.session_state["master_scode"], key=f"scode{clear_suffix}")
 
-                # 2行目： 加盟店名（店舗名） | ルートコード | 納品日（初期値を空に設定）
+                # 2行目： 顧客担当者名 | ルートコード | 納品日（初期値を空に設定）
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
-                store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"], key=f"sname{clear_suffix}")
+                store_name = row2_col1.text_input("顧客担当者名", value=st.session_state["master_sname"], key=f"sname{clear_suffix}")
                 route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
                 delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
                 delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
@@ -148,8 +154,8 @@ def maintenance_admin_screen():
                             applicant,         # B列: 申請者名
                             customer_code,     # C列: 顧客コード
                             customer_name,     # D列: 顧客名
-                            store_name,        # E列: 加盟店名
-                            store_code,        # F列: 加盟店コード
+                            store_name,        # E列: 顧客担当者名
+                            store_code,        # F列: 納品書印字顧客コード
                             delivery_date,     # G列: 納品日
                             route_code,        # H列: ルートコード
                             delivery_person    # I列: 納品者
@@ -198,10 +204,10 @@ def maintenance_admin_screen():
                                 r1_1, r1_2, r1_3 = st.columns(3)
                                 edit_cust_code = r1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}")
                                 edit_cust_name = r1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
+                                edit_store_code = r1_3.text_input("納品書印字顧客コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
 
                                 r2_1, r2_2, r2_3 = st.columns(3)
-                                edit_store_name = r2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}")
+                                edit_store_name = r2_1.text_input("顧客担当者名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}")
                                 edit_route_code = r2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"re_rcode_{row_id}")
                                 edit_deliv_date = r2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"re_ddate_{row_id}")
 
@@ -287,10 +293,10 @@ def maintenance_admin_screen():
                                 m1_1, m1_2, m1_3 = st.columns(3)
                                 edit_ccode = m1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"m_ccode_{row_id}")
                                 edit_cname = m1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"m_cname_{row_id}")
-                                edit_scode = m1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
+                                edit_scode = m1_3.text_input("納品書印字顧客コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
 
                                 m2_1, m2_2, m2_3 = st.columns(3)
-                                edit_sname = m2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
+                                edit_sname = m2_1.text_input("顧客担当者名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
                                 edit_rcode = m2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"m_rcode_{row_id}")
                                 edit_ddate = m2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"m_ddate_{row_id}")
 
@@ -403,10 +409,10 @@ def maintenance_admin_screen():
                             o1_1, o1_2, o1_3 = st.columns(3)
                             o1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"op_ccode_{row_id}")
                             o1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"op_cname_{row_id}")
-                            o1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"op_scode_{row_id}")
+                            o1_3.text_input("納品書印字顧客コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"op_scode_{row_id}")
 
                             o2_1, o2_2, o2_3 = st.columns(3)
-                            o2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"op_sname_{row_id}")
+                            o2_1.text_input("顧客担当者名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"op_sname_{row_id}")
                             o2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"op_rcode_{row_id}")
                             o2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"op_ddate_{row_id}")
 
