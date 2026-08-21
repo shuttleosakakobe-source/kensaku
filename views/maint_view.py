@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-# GASのウェブアプリURL（ご自身のURLに置き換えてください）
+# ★ご自身のGASウェブアプリURLに置き換えてください★
 GAS_URL = "https://script.google.com/macros/s/AKfycbwFcd8_UiYH9WqRJtnuDkrTq7mTb3ETviMnKhZmeykDnkitnlBgIbdAAonxNd_oTMCHcQ/exec"
 
 def maintenance_admin_screen():
@@ -20,8 +20,8 @@ def maintenance_admin_screen():
     with col1:
         customer_code_input = st.text_input("顧客コードを入力", key="input_cust_code")
     with col2:
-        st.write(" ")  # 位置調整用の空行
-        search_btn = st.button("マスタ検索")
+        st.write(" ")  # 位置調整用
+        search_btn = st.button("マスタ検索", key="btn_cust_search")
 
     # 検索処理
     if search_btn:
@@ -52,7 +52,7 @@ def maintenance_admin_screen():
                 except Exception as e:
                     st.error(f"通信エラーが発生しました: {e}")
 
-    # 2. 結果出力（フォーム）
+    # 2. 結果表示（自動反映フォーム）
     st.subheader("顧客情報")
     st.text_input("顧客担当者名", value=st.session_state["sname"], key="sname_field")
     st.text_input("顧客名", value=st.session_state["cname"], key="cname_field")
