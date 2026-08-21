@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 # GASのウェブアプリURL（ご自身のURLに置き換えてください）
-GAS_URL = "https://script.google.com/macros/s/AKfycbzFqoLxnt4nwS7bSLK-nFrO4qzpTGD9cVTDWOiSvylmglHDCXuDvxG0XHBnE54pZC8O/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbwFcd8_UiYH9WqRJtnuDkrTq7mTb3ETviMnKhZmeykDnkitnlBgIbdAAonxNd_oTMCHcQ/exec"
 
 def maintenance_admin_screen():
     st.title("メンテナンス・顧客マスタ検索")
