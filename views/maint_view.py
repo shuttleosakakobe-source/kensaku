@@ -89,88 +89,89 @@ def maintenance_admin_screen():
 
             st.write("---")
 
-            # --- 申請フォーム ---
-            with st.form("submit_form"):
-                st.write("**📋 申請基本情報**")
+# --- 申請フォーム ---
+with st.form("submit_form"):
+    st.write("**📋 申請基本情報**")
+    
+    # フォームのリセット用Suffix（キーを変化させて画面を初期化）
+    clear_suffix = f"_{st.session_state['form_clear_key']}"
+    
+    # 1行目： 顧客コード | 顧客名（得意先名） | 加盟店コード（店舗コード）
+    row1_col1, row1_col2, row1_col3 = st.columns(3)
+    customer_code = row1_col1.text_input("顧客コード", value=st.session_state["searched_ccode"], key=f"ccode{clear_suffix}")
+    customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"], key=f"cname{clear_suffix}")
+    store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"], key=f"scode{clear_suffix}")
+
+    # 2行目： 加盟店名（店舗名） | ルートコード | 納品日（初期値を空に設定）
+    row2_col1, row2_col2, row2_col3 = st.columns(3)
+    store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"], key=f"sname{clear_suffix}")
+    route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
+    delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
+    delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
+
+    # 3行目： 納品者 | 申請者名
+    row3_col1, row3_col2, row3_col3 = st.columns(3)
+    delivery_person = row3_col1.text_input("納品者", value=st.session_state["user_name"], key=f"dperson{clear_suffix}")
+    applicant = row3_col2.text_input("申請者名", value=st.session_state["user_name"], key=f"app{clear_suffix}")
+
+    st.write("---")
+    st.write("**📦 申請商品（最大5件）**")
+    items_flat = []
+    for i in range(5):
+        c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+        p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{i}{clear_suffix}")
+        qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{i}{clear_suffix}")
+        price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{i}{clear_suffix}")
+        print_flg = c4.selectbox(f"伝票出力 {i+1}", ["", "有", "無"], index=0, key=f"flg_{i}{clear_suffix}")
+        
+        if p_code.strip():
+            items_flat.extend([p_code, qty, price, print_flg])
+        else:
+            items_flat.extend(["", "", "", ""])
+
+    st.write("---")
+    app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください", key=f"app_com{clear_suffix}")
+
+    btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+
+    if btn_submit:
+        # バリデーションチェック
+        if not route_code.strip() or not delivery_date:
+            st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
+        else:
+            now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+            full_row = [
+                now_str,           # A列: タイムスタンプ
+                applicant,         # B列: 申請者名
+                customer_code,     # C列: 顧客コード
+                customer_name,     # D列: 顧客名
+                store_name,        # E列: 加盟店名
+                store_code,        # F列: 加盟店コード
+                delivery_date,     # G列: 納品日
+                route_code,        # H列: ルートコード
+                delivery_person    # I列: 納品者
+            ] + items_flat + [app_comment, "申請中", "", ""]
+
+            payload = {
+                "status": "SUBMIT_MAINTENANCE",
+                "target_sheet_url": TARGET_SHEET_URL,
+                "full_row": full_row
+            }
+            res = post_to_gas(payload)
+            if res.get("status") == "success":
+                st.toast("新規申請を送信しました！", icon="🎉")
                 
-                # 1行目： 顧客コード | 顧客名（得意先名） | 加盟店コード（店舗コード）
-                row1_col1, row1_col2, row1_col3 = st.columns(3)
-                customer_code = row1_col1.text_input("顧客コード", value=st.session_state["searched_ccode"])
-                customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"])
-                store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"])
-
-                # 2行目： 加盟店名（店舗名） | ルートコード | 納品日（初期値を空に設定）
-                row2_col1, row2_col2, row2_col3 = st.columns(3)
-                store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"])
-                route_code = row2_col2.text_input("ルートコード", value="")
-                delivery_date_val = row2_col3.date_input("納品日", value=None)
-                delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
-
-                # 3行目： 納品者 | 申請者名
-                row3_col1, row3_col2, row3_col3 = st.columns(3)
-                delivery_person = row3_col1.text_input("納品者", value=st.session_state["user_name"])
-                applicant = row3_col2.text_input("申請者名", value=st.session_state["user_name"])
-
-                st.write("---")
-                st.write("**📦 申請商品（最大5件）**")
-                items_flat = []
-                for i in range(5):
-                    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-                    p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{st.session_state['form_clear_key']}_{i}")
-                    qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{st.session_state['form_clear_key']}_{i}")
-                    price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{st.session_state['form_clear_key']}_{i}")
-                    # 選択肢の先頭に空文字 "" を追加して初期選択状態を空白化
-                    print_flg = c4.selectbox(f"伝票出力 {i+1}", ["", "有", "無"], index=0, key=f"flg_{st.session_state['form_clear_key']}_{i}")
-                    
-                    # 商品コード未入力時はその行のデータをすべて空文字にする
-                    if p_code.strip():
-                        items_flat.extend([p_code, qty, price, print_flg])
-                    else:
-                        items_flat.extend(["", "", "", ""])
-
-                st.write("---")
-                app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください", key=f"app_com_{st.session_state['form_clear_key']}")
-
-                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
-
-                if btn_submit:
-                    # バリデーションチェック
-                    if not route_code.strip() or not delivery_date:
-                        st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
-                    else:
-                        now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-                        full_row = [
-                            now_str,           # A列: タイムスタンプ
-                            applicant,         # B列: 申請者名
-                            customer_code,     # C列: 顧客コード
-                            customer_name,     # D列: 顧客名
-                            store_name,        # E列: 加盟店名
-                            store_code,        # F列: 加盟店コード
-                            delivery_date,     # G列: 納品日
-                            route_code,        # H列: ルートコード
-                            delivery_person    # I列: 納品者
-                        ] + items_flat + [app_comment, "申請中", "", ""]
-
-                        payload = {
-                            "status": "SUBMIT_MAINTENANCE",
-                            "target_sheet_url": TARGET_SHEET_URL,
-                            "full_row": full_row
-                        }
-                        res = post_to_gas(payload)
-                        if res.get("status") == "success":
-                            st.toast("新規申請を送信しました！", icon="🎉")
-                            
-                            # クリア処理：マスタ情報とフォーム用キーの更新
-                            st.session_state["searched_ccode"] = ""
-                            st.session_state["master_cname"] = ""
-                            st.session_state["master_sname"] = ""
-                            st.session_state["master_scode"] = ""
-                            st.session_state["form_clear_key"] += 1
-                            
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error(f"送信失敗: {res.get('message')}")
+                # 入力データ・マスタ情報の初期化 ＆ キーの更新（フォーム完全クリア）
+                st.session_state["searched_ccode"] = ""
+                st.session_state["master_cname"] = ""
+                st.session_state["master_sname"] = ""
+                st.session_state["master_scode"] = ""
+                st.session_state["form_clear_key"] += 1
+                
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error(f"送信失敗: {res.get('message')}")
 
         st.write("---")
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
