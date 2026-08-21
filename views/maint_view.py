@@ -4,12 +4,15 @@ import requests
 import json
 from datetime import datetime
 import time
+from io import StringIO
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbySnxfJOaQo7g7bFeHbnfsFBoJSxr3to0vg8GAavB-d49FuCXfxb8BeT5groozOPQks/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
+
+# 顧客マスタデータ用URL
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 
@@ -61,24 +64,27 @@ def maintenance_admin_screen():
             if btn_search:
                 if cust_code_input:
                     try:
-                        df_master = pd.read_csv(
-                            CUSTOMER_MASTER_CSV,
-                            dtype=str,
-                            storage_options={"User-Agent": "Mozilla/5.0"}
-                        )
-                        matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
+                        # requestsを使ってヘッダー付きで取得（403拒否・キャッシュ問題回避）
+                        res = requests.get(CUSTOMER_MASTER_CSV, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                        res.raise_for_status()
+                        
+                        df_master = pd.read_csv(StringIO(res.text), dtype=str)
+
+                        # B列（index 1）: 顧客コード で照合（前後空白除去）
+                        search_str = str(cust_code_input).strip()
+                        matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == search_str]
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
-                            st.session_state["searched_ccode"] = str(cust_code_input)
-                            st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
-                            st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
-                            st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
+                            st.session_state["searched_ccode"] = search_str
+                            st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 加盟店名
+                            st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""  # C列: 顧客名
+                            st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.5)
                             st.rerun()
                         else:
-                            st.warning("該当する顧客データが見つかりませんでした。")
+                            st.warning(f"「{search_str}」に該当する顧客データが見つかりませんでした。")
                     except Exception as e:
                         st.error(f"マスタ参照エラー: {e}")
                 else:
@@ -90,19 +96,23 @@ def maintenance_admin_screen():
             with st.form("submit_form"):
                 st.write("**📋 申請基本情報**")
                 
+                # フォーム一括リセット用のSuffix
                 clear_suffix = f"_{st.session_state['form_clear_key']}"
                 
+                # 1行目： 顧客コード | 顧客名（得意先名） | 加盟店コード（店舗コード）
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
                 customer_code = row1_col1.text_input("顧客コード", value=st.session_state["searched_ccode"], key=f"ccode{clear_suffix}")
                 customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"], key=f"cname{clear_suffix}")
                 store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"], key=f"scode{clear_suffix}")
 
+                # 2行目： 加盟店名（店舗名） | ルートコード | 納品日（初期値を空に設定）
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
                 store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"], key=f"sname{clear_suffix}")
                 route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
                 delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
                 delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
 
+                # 3行目： 納品者 | 申請者名
                 row3_col1, row3_col2, row3_col3 = st.columns(3)
                 delivery_person = row3_col1.text_input("納品者", value=st.session_state["user_name"], key=f"dperson{clear_suffix}")
                 applicant = row3_col2.text_input("申請者名", value=st.session_state["user_name"], key=f"app{clear_suffix}")
@@ -115,6 +125,7 @@ def maintenance_admin_screen():
                     p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{i}{clear_suffix}")
                     qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{i}{clear_suffix}")
                     price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{i}{clear_suffix}")
+                    # 選択肢先頭を空文字にし初期状態を空白化
                     print_flg = c4.selectbox(f"伝票出力 {i+1}", ["", "有", "無"], index=0, key=f"flg_{i}{clear_suffix}")
                     
                     if p_code.strip():
@@ -133,8 +144,15 @@ def maintenance_admin_screen():
                     else:
                         now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
                         full_row = [
-                            now_str, applicant, customer_code, customer_name,
-                            store_name, store_code, delivery_date, route_code, delivery_person
+                            now_str,           # A列: タイムスタンプ
+                            applicant,         # B列: 申請者名
+                            customer_code,     # C列: 顧客コード
+                            customer_name,     # D列: 顧客名
+                            store_name,        # E列: 加盟店名
+                            store_code,        # F列: 加盟店コード
+                            delivery_date,     # G列: 納品日
+                            route_code,        # H列: ルートコード
+                            delivery_person    # I列: 納品者
                         ] + items_flat + [app_comment, "申請中", "", ""]
 
                         payload = {
@@ -146,6 +164,7 @@ def maintenance_admin_screen():
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             
+                            # 検索結果セッション & フォーム入力状態を完全初期化
                             st.session_state["searched_ccode"] = ""
                             st.session_state["master_cname"] = ""
                             st.session_state["master_sname"] = ""
