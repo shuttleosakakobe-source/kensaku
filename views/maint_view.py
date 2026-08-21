@@ -5,43 +5,68 @@ import json
 from datetime import datetime
 import time
 
-# --- 定数設定（実際のURLを埋め込み済み） ---
-GAS_URL = "https://script.google.com/macros/s/AKfycbyQFSv5PqIlOiBZB8bN4jR7I0tQ0UtXM23wE16mnHOZe640eDZXPjPP1Wzt9bSB4RzWtg/exec"  # ⚠️ ご自身のGASウェブアプリデプロイURLに置き換えてください
+# --- 定数設定 ---
+GAS_URL = "YOUR_GAS_WEB_APP_URL"  # ⚠️ ご自身のGASウェブアプリデプロイURLに置き換えてください
 
-# 元データ用スプレッドシート
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
-
-# 業務担当用スプレッドシート（転記先）
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
 
 
 # --- GAS通信用ヘルパー関数 ---
 def post_to_gas(payload):
     headers = {"Content-Type": "application/json"}
-    response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers)
-    return response.json()
+    try:
+        response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers, timeout=10)
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
-# --- メイン画面関数 ---
+# --- 画像と同じレイアウト（商品コード/数量/単価/伝票出力）でデータ表示する共通関数 ---
+def render_item_form_display(row, prefix_key):
+    st.write("**📋 申請基本情報**")
+    b1, b2, b3 = st.columns(3)
+    b1.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"{prefix_key}_app")
+    b1.text_input("得意先コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"{prefix_key}_ccode")
+    b2.text_input("得意先名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"{prefix_key}_cname")
+    b2.text_input("店舗名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"{prefix_key}_sname")
+    b3.text_input("店舗コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"{prefix_key}_scode")
+    b3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"{prefix_key}_ddate")
+
+    st.write("---")
+    st.write("**📦 申請商品（最大5件）**")
+    
+    # 画像通り横一列（商品コード / 数量 / 単価 / 伝票出力）に配置
+    for i in range(5):
+        base_idx = 8 + (i * 4)
+        p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+        q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
+        pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
+        flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
+
+        c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+        c1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"{prefix_key}_p_{i}")
+        c2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"{prefix_key}_q_{i}")
+        c3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"{prefix_key}_pr_{i}")
+        c4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"{prefix_key}_flg_{i}")
+
+
+# --- メンテナンス画面メイン関数 ---
 def maintenance_admin_screen():
-    st.title("📦 メンテナンス申請・承認・業務処理システム")
+    st.header("📦 メンテナンス申請・承認・業務処理システム")
 
-    # ユーザー名（サイドバー）
     if "user_name" not in st.session_state:
         st.session_state["user_name"] = "担当者"
-    st.sidebar.text_input("操作者名", key="user_name")
 
-    # タブ作成
     tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
 
     # ====================================================
     # TAB 1: スタッフ申請・差戻し対応
     # ====================================================
     with tab1:
-        st.write("### 📝 新規申請 / 差戻しデータ修正")
+        st.subheader("📝 新規申請 / 差戻しデータ修正")
         
-        # --- 新規申請フォーム ---
         with st.expander("➕ 新規申請フォームを開く", expanded=False):
             with st.form("submit_form"):
                 col1, col2 = st.columns(2)
@@ -87,10 +112,11 @@ def maintenance_admin_screen():
                         st.toast("新規申請を送信しました！", icon="🎉")
                         time.sleep(1)
                         st.rerun()
+                    else:
+                        st.error(f"送信失敗: {res.get('message')}")
 
-        # --- 差戻しデータ対応 ---
         st.write("---")
-        st.write("#### ⚠️ 差戻し・再修正が必要なデータ")
+        st.subheader("⚠️ 差戻し・再修正が必要なデータ")
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV)
@@ -139,10 +165,10 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ====================================================
-    # TAB 2: 管理職チェック（承認・差戻し・削除）
+    # TAB 2: 管理職チェック（画像フォーマット表示）
     # ====================================================
     with tab2:
-        st.write("### 🔍 管理職：申請承認・チェック")
+        st.subheader("🔍 管理職：申請承認・チェック")
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV)
@@ -158,7 +184,9 @@ def maintenance_admin_screen():
                         cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
 
                         with st.expander(f"⏳ 【承認待ち】{cust_name}（{cust_code}） | 行: {row_id}"):
-                            st.dataframe(pd.DataFrame([row.fillna("")]), use_container_width=True)
+                            # 画像通りの入力フォーム形式で確認表示
+                            render_item_form_display(row, prefix_key=f"mgr_view_{row_id}")
+
                             with st.form(key=f"mgr_form_{row_id}"):
                                 comment = st.text_input("コメント / 差戻し理由", key=f"comment_{row_id}")
                                 col_app, col_rej, col_del = st.columns(3)
@@ -198,10 +226,10 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ====================================================
-    # TAB 3: 業務担当（承認済みデータを別シートへ転記）
+    # TAB 3: 業務担当（画像フォーマット表示）
     # ====================================================
     with tab3:
-        st.write("### 🚚 業務担当：承認済みデータの転記・処理")
+        st.subheader("🚚 業務担当：承認済みデータの転記・処理")
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV)
@@ -230,7 +258,8 @@ def maintenance_admin_screen():
                         expander_label = f"🟢【承認済】{cust_name}（{cust_code}） | 承認者: {mgr_name} | 申請日: {timestamp}"
 
                         with st.expander(expander_label):
-                            st.dataframe(pd.DataFrame([row.fillna("")]), use_container_width=True)
+                            # 画像通りの入力フォーム形式で確認表示
+                            render_item_form_display(row, prefix_key=f"op_view_{row_id}")
 
                             with st.form(key=f"transfer_form_{row_id}"):
                                 op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
@@ -240,7 +269,6 @@ def maintenance_admin_screen():
                                     action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
                                     op_user = st.session_state["user_name"]
 
-                                    # 元データ1行分 + 末尾に「業務転記日時」「業務担当者名」「業務メモ」を追加
                                     base_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
                                     transfer_row = base_row + [action_time, op_user, op_memo]
 
