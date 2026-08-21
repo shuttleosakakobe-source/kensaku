@@ -30,13 +30,15 @@ def maintenance_admin_screen():
     if "user_name" not in st.session_state:
         st.session_state["user_name"] = "担当者"
 
-    # マスタ検索結果の保持用セッション状態（自動反映のため）
+    # マスタ検索結果の保持用セッション状態（初期化）
     if "master_cname" not in st.session_state:
         st.session_state["master_cname"] = ""
     if "master_sname" not in st.session_state:
         st.session_state["master_sname"] = ""
     if "master_scode" not in st.session_state:
         st.session_state["master_scode"] = ""
+    if "searched_ccode" not in st.session_state:
+        st.session_state["searched_ccode"] = ""
 
     tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
 
@@ -45,18 +47,16 @@ def maintenance_admin_screen():
     # ==========================================
     with tab1:
         st.subheader("📝 新規申請 / 差戻しデータ修正")
-        with st.expander("➕ 新規申請フォームを開く", expanded=False):
+        with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
-            # --- 顧客コード検索機能（入力欄 ＋ 横に検索ボタン） ---
+            # --- 顧客コード検索エリア ---
             col_search_input, col_search_btn = st.columns([4, 1])
-            cust_code_input = col_search_input.text_input("🔍 顧客コード検索", key="cust_code_search")
+            cust_code_input = col_search_input.text_input("🔍 顧客コード入力", value=st.session_state["searched_ccode"], key="cust_code_search")
             btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary")
 
-            # 検索ボタンが押された場合のみマスタ取得・更新処理を実施
             if btn_search:
                 if cust_code_input:
                     try:
-                        # 常に最新を取得するためにヘッダーを追加
                         df_master = pd.read_csv(
                             CUSTOMER_MASTER_CSV,
                             dtype=str,
@@ -67,26 +67,29 @@ def maintenance_admin_screen():
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
+                            st.session_state["searched_ccode"] = str(cust_code_input)
                             st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 加盟店名
                             st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""  # C列: 顧客名
                             st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
-                            st.success("顧客情報を取得しました！")
+                            st.toast("顧客情報を取得しました！", icon="✅")
+                            time.sleep(0.5)
+                            st.rerun()  # 画面を再描画してフォームに値を確定反映させる
                         else:
                             st.warning("該当する顧客データが見つかりませんでした。")
-                            st.session_state["master_sname"] = ""
-                            st.session_state["master_cname"] = ""
-                            st.session_state["master_scode"] = ""
                     except Exception as e:
                         st.error(f"マスタ参照エラー: {e}")
                 else:
                     st.warning("顧客コードを入力してください。")
 
+            st.write("---")
+
+            # --- 申請フォーム ---
             with st.form("submit_form"):
                 st.write("**📋 申請基本情報**")
                 
-                # 1行目： 顧客コード（入力用） | 顧客名（得意先名） | 加盟店コード（店舗コード）
+                # 1行目： 顧客コード | 顧客名（得意先名） | 加盟店コード（店舗コード）
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
-                customer_code = row1_col1.text_input("顧客コード（入力用）", value=cust_code_input)
+                customer_code = row1_col1.text_input("顧客コード", value=st.session_state["searched_ccode"])
                 customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"])
                 store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"])
 
@@ -119,6 +122,8 @@ def maintenance_admin_screen():
                 btn_submit = st.form_submit_button("新規申請を送信", type="primary")
 
                 if btn_submit:
+                    # ⚠️ GASの1列目（タイムスタンプ）はGAS側で自動補完されるため、
+                    # Pythonからは【2列目：申請者名】以降のデータ配列を送信します。
                     base_data = [
                         applicant, customer_code, customer_name,
                         store_name, store_code, delivery_date, route_code, delivery_person
@@ -133,12 +138,15 @@ def maintenance_admin_screen():
                     res = post_to_gas(payload)
                     if res.get("status") == "success":
                         st.toast("新規申請を送信しました！", icon="🎉")
-                        # 送信後に状態リセット
+                        # 入力状態をクリア
+                        st.session_state["searched_ccode"] = ""
                         st.session_state["master_cname"] = ""
                         st.session_state["master_sname"] = ""
                         st.session_state["master_scode"] = ""
                         time.sleep(1)
                         st.rerun()
+                    else:
+                        st.error(f"送信失敗: {res.get('message')}")
 
         st.write("---")
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
@@ -159,19 +167,16 @@ def maintenance_admin_screen():
                             with st.form(key=f"resubmit_form_{row_id}"):
                                 st.write("**📋 申請基本情報修正**")
                                 
-                                # 1行目： 顧客コード（入力用） | 顧客名 | 加盟店コード
                                 r1_1, r1_2, r1_3 = st.columns(3)
                                 edit_cust_code = r1_1.text_input("顧客コード（入力用）", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}")
                                 edit_cust_name = r1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}")
                                 edit_store_code = r1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
 
-                                # 2行目： 加盟店名 | ルートコード | 納品日
                                 r2_1, r2_2, r2_3 = st.columns(3)
                                 edit_store_name = r2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}")
                                 edit_route_code = r2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"re_rcode_{row_id}")
                                 edit_deliv_date = r2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"re_ddate_{row_id}")
 
-                                # 3行目： 納品者 | 申請者名
                                 r3_1, r3_2, r3_3 = st.columns(3)
                                 edit_deliv_person = r3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"re_dperson_{row_id}")
                                 edit_applicant = r3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"re_app_{row_id}")
@@ -221,7 +226,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 2: 管理職承認（レイアウト統一・入力編集可能）
+    # TAB 2: 管理職承認
     # ==========================================
     with tab2:
         st.subheader("🔍 管理職：申請承認・編集")
@@ -243,19 +248,16 @@ def maintenance_admin_screen():
                             with st.form(key=f"mgr_edit_form_{row_id}"):
                                 st.write("**📋 申請基本情報（修正可能）**")
                                 
-                                # 1行目： 顧客コード（入力用） | 顧客名 | 加盟店コード
                                 m1_1, m1_2, m1_3 = st.columns(3)
                                 edit_ccode = m1_1.text_input("顧客コード（入力用）", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"m_ccode_{row_id}")
                                 edit_cname = m1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"m_cname_{row_id}")
                                 edit_scode = m1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
 
-                                # 2行目： 加盟店名 | ルートコード | 納品日
                                 m2_1, m2_2, m2_3 = st.columns(3)
                                 edit_sname = m2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
                                 edit_rcode = m2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"m_rcode_{row_id}")
                                 edit_ddate = m2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"m_ddate_{row_id}")
 
-                                # 3行目： 納品者 | 申請者名
                                 m3_1, m3_2, m3_3 = st.columns(3)
                                 edit_dperson = m3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"m_dperson_{row_id}")
                                 edit_app = m3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"m_app_{row_id}")
@@ -274,7 +276,6 @@ def maintenance_admin_screen():
                                     p_in = c1.text_input(f"商品コード {i+1}", value=p_val, key=f"m_p_{row_id}_{i}")
                                     q_in = c2.text_input(f"数量 {i+1}", value=q_val, key=f"m_q_{row_id}_{i}")
                                     pr_in = c3.text_input(f"単価 {i+1}", value=pr_val, key=f"m_pr_{row_id}_{i}")
-                                    
                                     flg_idx = 0 if flg_val in ["有", "要", ""] else 1
                                     flg_in = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=flg_idx, key=f"m_flg_{row_id}_{i}")
 
@@ -358,19 +359,16 @@ def maintenance_admin_screen():
                         with st.expander(expander_label):
                             st.write("**📋 申請内容**")
                             
-                            # 1行目
                             o1_1, o1_2, o1_3 = st.columns(3)
                             o1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"op_ccode_{row_id}")
                             o1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"op_cname_{row_id}")
                             o1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"op_scode_{row_id}")
 
-                            # 2行目
                             o2_1, o2_2, o2_3 = st.columns(3)
                             o2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"op_sname_{row_id}")
                             o2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"op_rcode_{row_id}")
                             o2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"op_ddate_{row_id}")
 
-                            # 3行目
                             o3_1, o3_2, o3_3 = st.columns(3)
                             o3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"op_dperson_{row_id}")
                             o3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"op_app_{row_id}")
