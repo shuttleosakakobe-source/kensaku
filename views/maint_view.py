@@ -73,7 +73,7 @@ def maintenance_admin_screen():
                             st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.5)
-                            st.rerun()  # 画面を再描画してフォームに値を確定反映させる
+                            st.rerun()  # 画面を再描画してフォームに反映
                         else:
                             st.warning("該当する顧客データが見つかりませんでした。")
                     except Exception as e:
@@ -122,13 +122,19 @@ def maintenance_admin_screen():
                 btn_submit = st.form_submit_button("新規申請を送信", type="primary")
 
                 if btn_submit:
-                    # ⚠️ GASの1列目（タイムスタンプ）はGAS側で自動補完されるため、
-                    # Pythonからは【2列目：申請者名】以降のデータ配列を送信します。
-                    base_data = [
-                        applicant, customer_code, customer_name,
-                        store_name, store_code, delivery_date, route_code, delivery_person
-                    ]
-                    full_row = base_data + items_flat + [app_comment, "申請中", "", ""]
+                    # 💡 A列（タイムスタンプ）を先頭(0番目)に配置して全33列のデータを正確に生成
+                    now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                    full_row = [
+                        now_str,           # A列: タイムスタンプ
+                        applicant,         # B列: 申請者名
+                        customer_code,     # C列: 顧客コード
+                        customer_name,     # D列: 顧客名
+                        store_name,        # E列: 加盟店名
+                        store_code,        # F列: 加盟店コード
+                        delivery_date,     # G列: 納品日
+                        route_code,        # H列: ルートコード
+                        delivery_person    # I列: 納品者
+                    ] + items_flat + [app_comment, "申請中", "", ""]  # 商品20列 + コメント + ステータス等
 
                     payload = {
                         "status": "SUBMIT_MAINTENANCE",
