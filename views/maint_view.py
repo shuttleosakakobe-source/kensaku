@@ -11,6 +11,9 @@ TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgH
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
 
+# 顧客マスタデータ用URL（指定スプレッドシートのCSV形式）
+CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
+
 
 def post_to_gas(payload):
     headers = {"Content-Type": "application/json"}
@@ -42,21 +45,21 @@ def maintenance_admin_screen():
             # フォーム外で顧客コードを入力して自動補完をトリガー可能に
             cust_code_input = st.text_input("🔍 顧客コード検索（入力してEnterで自動検索）", key="cust_code_search")
             
-            # 過去データやCSVから自動参照する処理（簡易ルックアップ）
+            # 顧客マスタデータ（CSV）から自動参照する処理
             found_cname = ""
             found_sname = ""
             found_scode = ""
             found_rcode = ""
             if cust_code_input:
                 try:
-                    df_temp = pd.read_csv(TARGET_SHEET_CSV)
-                    matched = df_temp[df_temp.iloc[:, 2].astype(str).str.strip() == str(cust_code_input).strip()]
+                    df_master = pd.read_csv(CUSTOMER_MASTER_CSV)
+                    # B列（index 1）: 顧客コード で照合
+                    matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
                     if not matched.empty:
                         last_row = matched.iloc[-1]
-                        found_cname = str(last_row.iloc[3]) if pd.notna(last_row.iloc[3]) else ""
-                        found_sname = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
-                        found_scode = str(last_row.iloc[5]) if pd.notna(last_row.iloc[5]) else ""
-                        found_rcode = str(last_row.iloc[7]) if pd.notna(last_row.iloc[7]) else ""
+                        found_sname = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 加盟店名
+                        found_cname = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""  # C列: 顧客名
+                        found_scode = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
                 except Exception:
                     pass
 
