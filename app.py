@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+# ★ ルートディレクトリをパスに追加してImportErrorを防止
+sys.path.append(str(Path(__file__).parent))
+
 import streamlit as st
 import os
 from utils import inject_pwa_blocker, set_login_storage, check_session_storage
