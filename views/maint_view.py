@@ -73,7 +73,7 @@ def maintenance_admin_screen():
                             st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.5)
-                            st.rerun()  # 画面を再描画してフォームに反映
+                            st.rerun()
                         else:
                             st.warning("該当する顧客データが見つかりませんでした。")
                     except Exception as e:
@@ -93,11 +93,12 @@ def maintenance_admin_screen():
                 customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"])
                 store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"])
 
-                # 2行目： 加盟店名（店舗名） | ルートコード | 納品日
+                # 2行目： 加盟店名（店舗名） | ルートコード | 納品日（初期値を空に設定）
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
                 store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"])
                 route_code = row2_col2.text_input("ルートコード", value="")
-                delivery_date = row2_col3.date_input("納品日").strftime("%Y/%m/%d")
+                delivery_date_val = row2_col3.date_input("納品日", value=None)  # 初期値を空に設定
+                delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
 
                 # 3行目： 納品者 | 申請者名
                 row3_col1, row3_col2, row3_col3 = st.columns(3)
@@ -110,11 +111,16 @@ def maintenance_admin_screen():
                 for i in range(5):
                     c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
                     p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{i}")
-                    qty = c2.number_input(f"数量 {i+1}", min_value=0, value=0, key=f"q_{i}")
-                    price = c3.number_input(f"単価 {i+1}", min_value=0, value=0, key=f"pr_{i}")
+                    # text_inputにして +- ボタンを除去
+                    qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{i}")
+                    price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{i}")
                     print_flg = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], key=f"flg_{i}")
                     
-                    items_flat.extend([p_code, str(qty), str(price), print_flg])
+                    # 商品コード未入力時はその行のデータを空文字にする
+                    if p_code.strip():
+                        items_flat.extend([p_code, qty, price, print_flg])
+                    else:
+                        items_flat.extend(["", "", "", ""])
 
                 st.write("---")
                 app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください")
@@ -122,37 +128,39 @@ def maintenance_admin_screen():
                 btn_submit = st.form_submit_button("新規申請を送信", type="primary")
 
                 if btn_submit:
-                    # 💡 A列（タイムスタンプ）を先頭(0番目)に配置して全33列のデータを正確に生成
-                    now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-                    full_row = [
-                        now_str,           # A列: タイムスタンプ
-                        applicant,         # B列: 申請者名
-                        customer_code,     # C列: 顧客コード
-                        customer_name,     # D列: 顧客名
-                        store_name,        # E列: 加盟店名
-                        store_code,        # F列: 加盟店コード
-                        delivery_date,     # G列: 納品日
-                        route_code,        # H列: ルートコード
-                        delivery_person    # I列: 納品者
-                    ] + items_flat + [app_comment, "申請中", "", ""]  # 商品20列 + コメント + ステータス等
-
-                    payload = {
-                        "status": "SUBMIT_MAINTENANCE",
-                        "target_sheet_url": TARGET_SHEET_URL,
-                        "full_row": full_row
-                    }
-                    res = post_to_gas(payload)
-                    if res.get("status") == "success":
-                        st.toast("新規申請を送信しました！", icon="🎉")
-                        # 入力状態をクリア
-                        st.session_state["searched_ccode"] = ""
-                        st.session_state["master_cname"] = ""
-                        st.session_state["master_sname"] = ""
-                        st.session_state["master_scode"] = ""
-                        time.sleep(1)
-                        st.rerun()
+                    # ルートコード・納品日の未入力チェック（バリデーション）
+                    if not route_code.strip() or not delivery_date:
+                        st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
                     else:
-                        st.error(f"送信失敗: {res.get('message')}")
+                        now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                        full_row = [
+                            now_str,           # A列: タイムスタンプ
+                            applicant,         # B列: 申請者名
+                            customer_code,     # C列: 顧客コード
+                            customer_name,     # D列: 顧客名
+                            store_name,        # E列: 加盟店名
+                            store_code,        # F列: 加盟店コード
+                            delivery_date,     # G列: 納品日
+                            route_code,        # H列: ルートコード
+                            delivery_person    # I列: 納品者
+                        ] + items_flat + [app_comment, "申請中", "", ""]
+
+                        payload = {
+                            "status": "SUBMIT_MAINTENANCE",
+                            "target_sheet_url": TARGET_SHEET_URL,
+                            "full_row": full_row
+                        }
+                        res = post_to_gas(payload)
+                        if res.get("status") == "success":
+                            st.toast("新規申請を送信しました！", icon="🎉")
+                            st.session_state["searched_ccode"] = ""
+                            st.session_state["master_cname"] = ""
+                            st.session_state["master_sname"] = ""
+                            st.session_state["master_scode"] = ""
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"送信失敗: {res.get('message')}")
 
         st.write("---")
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
@@ -174,7 +182,7 @@ def maintenance_admin_screen():
                                 st.write("**📋 申請基本情報修正**")
                                 
                                 r1_1, r1_2, r1_3 = st.columns(3)
-                                edit_cust_code = r1_1.text_input("顧客コード（入力用）", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}")
+                                edit_cust_code = r1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}")
                                 edit_cust_name = r1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}")
                                 edit_store_code = r1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
 
@@ -193,8 +201,8 @@ def maintenance_admin_screen():
                                 for i in range(5):
                                     base_idx = 9 + (i * 4)
                                     p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
-                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
-                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
                                     flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
 
                                     r1, r2, r3, r4 = st.columns([3, 2, 2, 2])
@@ -204,7 +212,10 @@ def maintenance_admin_screen():
                                     flg_idx = 0 if flg_val in ["有", "要", ""] else 1
                                     flg_in = r4.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=flg_idx, key=f"re_flg_{row_id}_{i}")
 
-                                    edit_items.extend([p_in, q_in, pr_in, flg_in])
+                                    if p_in.strip():
+                                        edit_items.extend([p_in, q_in, pr_in, flg_in])
+                                    else:
+                                        edit_items.extend(["", "", "", ""])
 
                                 st.write("---")
                                 edit_app_comment = st.text_area("申請コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"re_com_{row_id}")
@@ -212,22 +223,25 @@ def maintenance_admin_screen():
                                 btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
 
                                 if btn_resubmit:
-                                    updated_row = [
-                                        str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
-                                        edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
-                                    ] + edit_items + [edit_app_comment, "申請中", "", ""]
+                                    if not edit_route_code.strip() or not edit_deliv_date.strip():
+                                        st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。")
+                                    else:
+                                        updated_row = [
+                                            str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
+                                            edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
+                                        ] + edit_items + [edit_app_comment, "申請中", "", ""]
 
-                                    payload = {
-                                        "status": "RESUBMIT_MAINTENANCE",
-                                        "target_sheet_url": TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": updated_row
-                                    }
-                                    res = post_to_gas(payload)
-                                    if res.get("status") == "success":
-                                        st.toast("再申請が完了しました！")
-                                        time.sleep(1)
-                                        st.rerun()
+                                        payload = {
+                                            "status": "RESUBMIT_MAINTENANCE",
+                                            "target_sheet_url": TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": updated_row
+                                        }
+                                        res = post_to_gas(payload)
+                                        if res.get("status") == "success":
+                                            st.toast("再申請が完了しました！")
+                                            time.sleep(1)
+                                            st.rerun()
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -255,7 +269,7 @@ def maintenance_admin_screen():
                                 st.write("**📋 申請基本情報（修正可能）**")
                                 
                                 m1_1, m1_2, m1_3 = st.columns(3)
-                                edit_ccode = m1_1.text_input("顧客コード（入力用）", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"m_ccode_{row_id}")
+                                edit_ccode = m1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"m_ccode_{row_id}")
                                 edit_cname = m1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"m_cname_{row_id}")
                                 edit_scode = m1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
 
@@ -274,8 +288,8 @@ def maintenance_admin_screen():
                                 for i in range(5):
                                     base_idx = 9 + (i * 4)
                                     p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
-                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
-                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
                                     flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
 
                                     c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
@@ -285,7 +299,10 @@ def maintenance_admin_screen():
                                     flg_idx = 0 if flg_val in ["有", "要", ""] else 1
                                     flg_in = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=flg_idx, key=f"m_flg_{row_id}_{i}")
 
-                                    edit_items.extend([p_in, q_in, pr_in, flg_in])
+                                    if p_in.strip():
+                                        edit_items.extend([p_in, q_in, pr_in, flg_in])
+                                    else:
+                                        edit_items.extend(["", "", "", ""])
 
                                 st.write("---")
                                 edit_app_comment = st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"m_app_com_{row_id}")
@@ -384,8 +401,8 @@ def maintenance_admin_screen():
                             for i in range(5):
                                 base_idx = 9 + (i * 4)
                                 p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
-                                q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
-                                pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
+                                q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
                                 flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
 
                                 c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
