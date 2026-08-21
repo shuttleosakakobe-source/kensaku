@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 from io import StringIO
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbzFqoLxnt4nwS7bSLK-nFrO4qzpTGD9cVTDWOiSvylmglHDCXuDvxG0XHBnE54pZC8O/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzg61d-nNxC4WXWKLMgqSiEuMjE_5BvUvKvRU0DWzDEPgo71MXuNdC3vCdHdIWNTMnM/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
