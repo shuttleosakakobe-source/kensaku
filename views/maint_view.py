@@ -30,6 +30,14 @@ def maintenance_admin_screen():
     if "user_name" not in st.session_state:
         st.session_state["user_name"] = "担当者"
 
+    # マスタ検索結果の保持用セッション状態（自動反映のため）
+    if "master_cname" not in st.session_state:
+        st.session_state["master_cname"] = ""
+    if "master_sname" not in st.session_state:
+        st.session_state["master_sname"] = ""
+    if "master_scode" not in st.session_state:
+        st.session_state["master_scode"] = ""
+
     tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
 
     # ==========================================
@@ -38,30 +46,40 @@ def maintenance_admin_screen():
     with tab1:
         st.subheader("📝 新規申請 / 差戻しデータ修正")
         with st.expander("➕ 新規申請フォームを開く", expanded=False):
-            # 顧客コード自動検索・連動用のセッション状態管理
-            if "lookup_cust_code" not in st.session_state:
-                st.session_state["lookup_cust_code"] = ""
 
-            # フォーム外で顧客コードを入力して自動補完をトリガー可能に
-            cust_code_input = st.text_input("🔍 顧客コード検索（入力してEnterで自動検索）", key="cust_code_search")
-            
-            # 顧客マスタデータ（CSV）から自動参照する処理
-            found_cname = ""
-            found_sname = ""
-            found_scode = ""
-            found_rcode = ""
-            if cust_code_input:
-                try:
-                    df_master = pd.read_csv(CUSTOMER_MASTER_CSV)
-                    # B列（index 1）: 顧客コード で照合
-                    matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
-                    if not matched.empty:
-                        last_row = matched.iloc[-1]
-                        found_sname = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 加盟店名
-                        found_cname = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""  # C列: 顧客名
-                        found_scode = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
-                except Exception:
-                    pass
+            # --- 顧客コード検索機能（入力欄 ＋ 横に検索ボタン） ---
+            col_search_input, col_search_btn = st.columns([4, 1])
+            cust_code_input = col_search_input.text_input("🔍 顧客コード検索", key="cust_code_search")
+            btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary")
+
+            # 検索ボタンが押された場合のみマスタ取得・更新処理を実施
+            if btn_search:
+                if cust_code_input:
+                    try:
+                        # 常に最新を取得するためにヘッダーを追加
+                        df_master = pd.read_csv(
+                            CUSTOMER_MASTER_CSV,
+                            dtype=str,
+                            storage_options={"User-Agent": "Mozilla/5.0"}
+                        )
+                        # B列（index 1）: 顧客コード で照合
+                        matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
+
+                        if not matched.empty:
+                            last_row = matched.iloc[-1]
+                            st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""  # A列: 加盟店名
+                            st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""  # C列: 顧客名
+                            st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""  # E列: 加盟店コード
+                            st.success("顧客情報を取得しました！")
+                        else:
+                            st.warning("該当する顧客データが見つかりませんでした。")
+                            st.session_state["master_sname"] = ""
+                            st.session_state["master_cname"] = ""
+                            st.session_state["master_scode"] = ""
+                    except Exception as e:
+                        st.error(f"マスタ参照エラー: {e}")
+                else:
+                    st.warning("顧客コードを入力してください。")
 
             with st.form("submit_form"):
                 st.write("**📋 申請基本情報**")
@@ -69,13 +87,13 @@ def maintenance_admin_screen():
                 # 1行目： 顧客コード（入力用） | 顧客名（得意先名） | 加盟店コード（店舗コード）
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
                 customer_code = row1_col1.text_input("顧客コード（入力用）", value=cust_code_input)
-                customer_name = row1_col2.text_input("顧客名（得意先名）", value=found_cname)
-                store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=found_scode)
+                customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"])
+                store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"])
 
                 # 2行目： 加盟店名（店舗名） | ルートコード | 納品日
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
-                store_name = row2_col1.text_input("加盟店名（店舗名）", value=found_sname)
-                route_code = row2_col2.text_input("ルートコード", value=found_rcode)
+                store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"])
+                route_code = row2_col2.text_input("ルートコード", value="")
                 delivery_date = row2_col3.date_input("納品日").strftime("%Y/%m/%d")
 
                 # 3行目： 納品者 | 申請者名
@@ -115,6 +133,10 @@ def maintenance_admin_screen():
                     res = post_to_gas(payload)
                     if res.get("status") == "success":
                         st.toast("新規申請を送信しました！", icon="🎉")
+                        # 送信後に状態リセット
+                        st.session_state["master_cname"] = ""
+                        st.session_state["master_sname"] = ""
+                        st.session_state["master_scode"] = ""
                         time.sleep(1)
                         st.rerun()
 
@@ -122,7 +144,7 @@ def maintenance_admin_screen():
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
         try:
             st.cache_data.clear()
-            df = pd.read_csv(TARGET_SHEET_CSV)
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
             if not df.empty and len(df.columns) >= 30:
                 rejected_df = df[df.iloc[:, 30].astype(str).str.strip() == "差戻し"]
                 if rejected_df.empty:
@@ -205,7 +227,7 @@ def maintenance_admin_screen():
         st.subheader("🔍 管理職：申請承認・編集")
         try:
             st.cache_data.clear()
-            df = pd.read_csv(TARGET_SHEET_CSV)
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
             if not df.empty and len(df.columns) >= 30:
                 pending_df = df[df.iloc[:, 30].astype(str).str.strip() == "申請中"]
                 if pending_df.empty:
@@ -308,7 +330,7 @@ def maintenance_admin_screen():
         st.subheader("🚚 業務担当：承認済みデータの転記・処理")
         try:
             st.cache_data.clear()
-            df = pd.read_csv(TARGET_SHEET_CSV)
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
 
             if df.empty or len(df.columns) < 31:
                 st.info("現在、処理可能なデータはありません。")
