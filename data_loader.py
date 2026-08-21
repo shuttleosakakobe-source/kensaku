@@ -1,11 +1,13 @@
 import pandas as pd
 import requests
 
+# 新しいユーザーマスターのURL
+USER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=0"
+
 def load_sheet_data(gid="0"):
-    """GoogleスプレッドシートのデータをCSV経由で取得して二次元配列で返す"""
-    csv_url = f"https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv&gid={gid}"
+    """ユーザーマスターのスプレッドシートからデータを取得"""
     try:
-        df = pd.read_csv(csv_url)
+        df = pd.read_csv(USER_MASTER_CSV)
         if df.empty:
             return None
         headers = df.columns.tolist()
@@ -21,7 +23,7 @@ def load_navi_data_from_url(url_or_gid="0"):
         if str(url_or_gid).startswith("http"):
             csv_url = url_or_gid
         else:
-            csv_url = f"https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv&gid={url_or_gid}"
+            csv_url = f"https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid={url_or_gid}"
         
         df = pd.read_csv(csv_url)
         return df
