@@ -29,21 +29,27 @@ def maintenance_admin_screen():
 
     tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
 
+    # ==========================================
     # TAB 1: 申請・差戻し対応
+    # ==========================================
     with tab1:
         st.subheader("📝 新規申請 / 差戻しデータ修正")
         with st.expander("➕ 新規申請フォームを開く", expanded=False):
             with st.form("submit_form"):
-                col1, col2 = st.columns(2)
+                st.write("**📋 申請基本情報**")
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     applicant = st.text_input("申請者名", value=st.session_state["user_name"])
                     customer_code = st.text_input("得意先コード")
                     customer_name = st.text_input("得意先名")
-                    store_name = st.text_input("店舗名")
                 with col2:
+                    store_name = st.text_input("店舗名")
                     store_code = st.text_input("店舗コード")
                     delivery_date = st.date_input("納品日").strftime("%Y/%m/%d")
+                with col3:
                     route_code = st.text_input("ルートコード")
+                    # I列用：納品者（デフォルトは自分）
+                    delivery_person = st.text_input("納品者", value=st.session_state["user_name"])
 
                 st.write("---")
                 st.write("**📦 申請商品（最大5件）**")
@@ -54,23 +60,31 @@ def maintenance_admin_screen():
                     qty = c2.number_input(f"数量 {i+1}", min_value=0, value=0, key=f"q_{i}")
                     price = c3.number_input(f"単価 {i+1}", min_value=0, value=0, key=f"pr_{i}")
                     print_flg = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], key=f"flg_{i}")
-                    if p_code:
-                        items_flat.extend([p_code, str(qty), str(price), print_flg])
+                    
+                    items_flat.extend([p_code, str(qty), str(price), print_flg])
+
+                st.write("---")
+                # AD列用：申請コメント
+                app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください")
 
                 btn_submit = st.form_submit_button("新規申請を送信", type="primary")
 
                 if btn_submit:
+                    # スプレッドシートの1行分のデータを組み立て
+                    # A: タイムスタンプ(GAS生成), B: 申請者, C: 得意先コード, D: 得意先名, E: 店舗名, F: 店舗コード, G: 納品日, H: ルートコード, I: 納品者
+                    base_data = [
+                        applicant, customer_code, customer_name,
+                        store_name, store_code, delivery_date, route_code, delivery_person
+                    ]
+                    # J~AC: 商品1~5 (20項目)
+                    # AD: 申請コメント
+                    # AE: ステータス(申請中), AF: 空(承認日時), AG: 空(管理職コメント)
+                    full_row = base_data + items_flat + [app_comment, "申請中", "", ""]
+
                     payload = {
                         "status": "SUBMIT_MAINTENANCE",
                         "target_sheet_url": TARGET_SHEET_URL,
-                        "applicant": applicant,
-                        "customer_code": customer_code,
-                        "customer_name": customer_name,
-                        "store_name": store_name,
-                        "store_code": store_code,
-                        "delivery_date": delivery_date,
-                        "route_code": route_code,
-                        "items_flat": items_flat
+                        "full_row": full_row
                     }
                     res = post_to_gas(payload)
                     if res.get("status") == "success":
@@ -83,35 +97,59 @@ def maintenance_admin_screen():
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV)
-            if not df.empty and len(df.columns) >= 29:
-                rejected_df = df[df.iloc[:, 28].astype(str).str.strip() == "差戻し"]
+            if not df.empty and len(df.columns) >= 30:
+                # AE列 (インデックス30) が「差戻し」のものを取得
+                rejected_df = df[df.iloc[:, 30].astype(str).str.strip() == "差戻し"]
                 if rejected_df.empty:
                     st.info("現在、差戻しデータはありません。")
                 else:
                     for idx, row in rejected_df.iloc[::-1].iterrows():
                         row_id = idx + 2
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
-                        comment = str(row.iloc[29]) if pd.notna(row.iloc[29]) else ""
+                        rej_comment = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else ""
                         
-                        with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {comment}"):
+                        with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {rej_comment}"):
                             with st.form(key=f"resubmit_form_{row_id}"):
-                                edit_applicant = st.text_input("申請者", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "")
-                                edit_cust_code = st.text_input("得意先コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "")
-                                edit_cust_name = st.text_input("得意先名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "")
-                                edit_store_name = st.text_input("店舗名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "")
-                                edit_store_code = st.text_input("店舗コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "")
-                                edit_deliv_date = st.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "")
-                                edit_route_code = st.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "")
+                                st.write("**📋 申請基本情報修正**")
+                                c1, c2, c3 = st.columns(3)
+                                edit_applicant = c1.text_input("申請者", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "")
+                                edit_cust_code = c1.text_input("得意先コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "")
+                                edit_cust_name = c2.text_input("得意先名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "")
+                                edit_store_name = c2.text_input("店舗名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "")
+                                edit_store_code = c3.text_input("店舗コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "")
+                                edit_deliv_date = c3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "")
+                                edit_route_code = c1.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "")
+                                edit_deliv_person = c2.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "")
+
+                                st.write("---")
+                                st.write("**📦 申請商品修正**")
+                                edit_items = []
+                                for i in range(5):
+                                    base_idx = 9 + (i * 4)
+                                    p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
+
+                                    r1, r2, r3, r4 = st.columns([3, 2, 2, 2])
+                                    p_in = r1.text_input(f"商品コード {i+1}", value=p_val, key=f"re_p_{row_id}_{i}")
+                                    q_in = r2.text_input(f"数量 {i+1}", value=q_val, key=f"re_q_{row_id}_{i}")
+                                    pr_in = r3.text_input(f"単価 {i+1}", value=pr_val, key=f"re_pr_{row_id}_{i}")
+                                    flg_idx = 0 if flg_val in ["有", "要", ""] else 1
+                                    flg_in = r4.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=flg_idx, key=f"re_flg_{row_id}_{i}")
+
+                                    edit_items.extend([p_in, q_in, pr_in, flg_in])
+
+                                st.write("---")
+                                edit_app_comment = st.text_area("申請コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "")
 
                                 btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
 
                                 if btn_resubmit:
                                     updated_row = [
                                         str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
-                                        edit_store_name, edit_store_code, edit_deliv_date, edit_route_code
-                                    ]
-                                    updated_row.extend([str(x) if pd.notna(x) else "" for x in row.iloc[8:28].values])
-                                    updated_row.extend(["申請中", "", ""])
+                                        edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
+                                    ] + edit_items + [edit_app_comment, "申請中", "", ""]
 
                                     payload = {
                                         "status": "RESUBMIT_MAINTENANCE",
@@ -127,14 +165,16 @@ def maintenance_admin_screen():
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
-    # TAB 2: 管理職承認（入力編集可能・文字くっきり化）
+    # ==========================================
+    # TAB 2: 管理職承認（編集・文字くっきり対応）
+    # ==========================================
     with tab2:
         st.subheader("🔍 管理職：申請承認・編集")
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV)
-            if not df.empty and len(df.columns) >= 29:
-                pending_df = df[df.iloc[:, 28].astype(str).str.strip() == "申請中"]
+            if not df.empty and len(df.columns) >= 30:
+                pending_df = df[df.iloc[:, 30].astype(str).str.strip() == "申請中"]
                 if pending_df.empty:
                     st.info("現在、未承認の申請はありません。")
                 else:
@@ -154,13 +194,14 @@ def maintenance_admin_screen():
                                 edit_sname = b2.text_input("店舗名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
                                 edit_scode = b3.text_input("店舗コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
                                 edit_ddate = b3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"m_ddate_{row_id}")
-                                edit_rcode = st.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"m_rcode_{row_id}")
+                                edit_rcode = b1.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"m_rcode_{row_id}")
+                                edit_dperson = b2.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"m_dperson_{row_id}")
 
                                 st.write("---")
                                 st.write("**📦 申請商品（修正可能）**")
                                 edit_items = []
                                 for i in range(5):
-                                    base_idx = 8 + (i * 4)
+                                    base_idx = 9 + (i * 4)
                                     p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
                                     q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
                                     pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
@@ -171,14 +212,15 @@ def maintenance_admin_screen():
                                     q_in = c2.text_input(f"数量 {i+1}", value=q_val, key=f"m_q_{row_id}_{i}")
                                     pr_in = c3.text_input(f"単価 {i+1}", value=pr_val, key=f"m_pr_{row_id}_{i}")
                                     
-                                    # ドロップダウン初期値設定
                                     flg_idx = 0 if flg_val in ["有", "要", ""] else 1
                                     flg_in = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=flg_idx, key=f"m_flg_{row_id}_{i}")
 
                                     edit_items.extend([p_in, q_in, pr_in, flg_in])
 
                                 st.write("---")
-                                comment = st.text_input("コメント / 差戻し理由", key=f"comment_{row_id}")
+                                edit_app_comment = st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"m_app_com_{row_id}")
+                                mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"mgr_com_{row_id}")
+                                
                                 col_app, col_rej, col_del = st.columns(3)
                                 btn_approve = col_app.form_submit_button("✅ 承認（変更内容を反映）", type="primary", use_container_width=True)
                                 btn_reject = col_rej.form_submit_button("↩️ 差戻し", use_container_width=True)
@@ -188,22 +230,21 @@ def maintenance_admin_screen():
                                 now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
                                 if btn_approve or btn_reject or btn_delete:
-                                    # フォームに入力された修正内容をまとめる
                                     updated_row = [
                                         str(row.iloc[0]), edit_app, edit_ccode, edit_cname,
-                                        edit_sname, edit_scode, edit_ddate, edit_rcode
-                                    ] + edit_items
+                                        edit_sname, edit_scode, edit_ddate, edit_rcode, edit_dperson
+                                    ] + edit_items + [edit_app_comment]
 
                                     status_type = ""
                                     if btn_approve:
                                         status_type = "APPROVE_MAINTENANCE"
-                                        updated_row.extend([mgr_name, now_str, comment])
+                                        updated_row.extend([mgr_name, now_str, mgr_comment])
                                     elif btn_reject:
                                         status_type = "REJECT_MAINTENANCE"
-                                        updated_row.extend(["差戻し", now_str, comment])
+                                        updated_row.extend(["差戻し", now_str, mgr_comment])
                                     elif btn_delete:
                                         status_type = "DELETE_MAINTENANCE"
-                                        updated_row.extend(["削除", now_str, comment])
+                                        updated_row.extend(["削除", now_str, mgr_comment])
 
                                     payload = {
                                         "status": status_type,
@@ -219,19 +260,21 @@ def maintenance_admin_screen():
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
+    # ==========================================
     # TAB 3: 業務担当
+    # ==========================================
     with tab3:
         st.subheader("🚚 業務担当：承認済みデータの転記・処理")
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV)
 
-            if df.empty or len(df.columns) < 29:
+            if df.empty or len(df.columns) < 31:
                 st.info("現在、処理可能なデータはありません。")
             else:
-                ac_series = df.iloc[:, 28].astype(str).str.strip()
+                ac_series = df.iloc[:, 30].astype(str).str.strip()
                 approved_df = df[
-                    (~df.iloc[:, 28].isna()) & 
+                    (~df.iloc[:, 30].isna()) & 
                     (~ac_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
                 ]
 
@@ -245,7 +288,7 @@ def maintenance_admin_screen():
                         timestamp = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
                         cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
-                        mgr_name = str(row.iloc[28]) if pd.notna(row.iloc[28]) else ""
+                        mgr_name = str(row.iloc[30]) if pd.notna(row.iloc[30]) else ""
 
                         expander_label = f"🟢【承認済】{cust_name}（{cust_code}） | 承認者: {mgr_name} | 申請日: {timestamp}"
 
@@ -258,11 +301,12 @@ def maintenance_admin_screen():
                             b2.text_input("店舗名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"op_sname_{row_id}")
                             b3.text_input("店舗コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"op_scode_{row_id}")
                             b3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"op_ddate_{row_id}")
+                            st.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"op_dperson_{row_id}")
 
                             st.write("---")
                             st.write("**📦 申請商品**")
                             for i in range(5):
-                                base_idx = 8 + (i * 4)
+                                base_idx = 9 + (i * 4)
                                 p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
                                 q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "0"
                                 pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "0"
@@ -273,6 +317,8 @@ def maintenance_admin_screen():
                                 c2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"op_q_{row_id}_{i}")
                                 c3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"op_pr_{row_id}_{i}")
                                 c4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"op_flg_{row_id}_{i}")
+
+                            st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", disabled=True, key=f"op_app_com_{row_id}")
 
                             with st.form(key=f"transfer_form_{row_id}"):
                                 op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
