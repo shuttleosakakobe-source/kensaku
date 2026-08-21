@@ -30,7 +30,7 @@ def maintenance_admin_screen():
     if "user_name" not in st.session_state:
         st.session_state["user_name"] = "担当者"
 
-    # マスタ検索結果の保持用セッション状態（初期化）
+    # マスタ検索結果およびフォームリセット用のセッション状態設定
     if "master_cname" not in st.session_state:
         st.session_state["master_cname"] = ""
     if "master_sname" not in st.session_state:
@@ -39,6 +39,8 @@ def maintenance_admin_screen():
         st.session_state["master_scode"] = ""
     if "searched_ccode" not in st.session_state:
         st.session_state["searched_ccode"] = ""
+    if "form_clear_key" not in st.session_state:
+        st.session_state["form_clear_key"] = 0
 
     tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
 
@@ -51,7 +53,11 @@ def maintenance_admin_screen():
 
             # --- 顧客コード検索エリア ---
             col_search_input, col_search_btn = st.columns([4, 1])
-            cust_code_input = col_search_input.text_input("🔍 顧客コード入力", value=st.session_state["searched_ccode"], key="cust_code_search")
+            cust_code_input = col_search_input.text_input(
+                "🔍 顧客コード入力", 
+                value=st.session_state["searched_ccode"], 
+                key=f"cust_code_search_{st.session_state['form_clear_key']}"
+            )
             btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary")
 
             if btn_search:
@@ -97,7 +103,7 @@ def maintenance_admin_screen():
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
                 store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"])
                 route_code = row2_col2.text_input("ルートコード", value="")
-                delivery_date_val = row2_col3.date_input("納品日", value=None)  # 初期値を空に設定
+                delivery_date_val = row2_col3.date_input("納品日", value=None)
                 delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
 
                 # 3行目： 納品者 | 申請者名
@@ -110,25 +116,25 @@ def maintenance_admin_screen():
                 items_flat = []
                 for i in range(5):
                     c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-                    p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{i}")
-                    # text_inputにして +- ボタンを除去
-                    qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{i}")
-                    price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{i}")
-                    print_flg = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], key=f"flg_{i}")
+                    p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{st.session_state['form_clear_key']}_{i}")
+                    qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{st.session_state['form_clear_key']}_{i}")
+                    price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{st.session_state['form_clear_key']}_{i}")
+                    # 選択肢の先頭に空文字 "" を追加して初期選択状態を空白化
+                    print_flg = c4.selectbox(f"伝票出力 {i+1}", ["", "有", "無"], index=0, key=f"flg_{st.session_state['form_clear_key']}_{i}")
                     
-                    # 商品コード未入力時はその行のデータを空文字にする
+                    # 商品コード未入力時はその行のデータをすべて空文字にする
                     if p_code.strip():
                         items_flat.extend([p_code, qty, price, print_flg])
                     else:
                         items_flat.extend(["", "", "", ""])
 
                 st.write("---")
-                app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください")
+                app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください", key=f"app_com_{st.session_state['form_clear_key']}")
 
                 btn_submit = st.form_submit_button("新規申請を送信", type="primary")
 
                 if btn_submit:
-                    # ルートコード・納品日の未入力チェック（バリデーション）
+                    # バリデーションチェック
                     if not route_code.strip() or not delivery_date:
                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
                     else:
@@ -153,10 +159,14 @@ def maintenance_admin_screen():
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
+                            
+                            # クリア処理：マスタ情報とフォーム用キーの更新
                             st.session_state["searched_ccode"] = ""
                             st.session_state["master_cname"] = ""
                             st.session_state["master_sname"] = ""
                             st.session_state["master_scode"] = ""
+                            st.session_state["form_clear_key"] += 1
+                            
                             time.sleep(1)
                             st.rerun()
                         else:
@@ -203,14 +213,16 @@ def maintenance_admin_screen():
                                     p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
                                     q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
                                     pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
-                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
 
                                     r1, r2, r3, r4 = st.columns([3, 2, 2, 2])
                                     p_in = r1.text_input(f"商品コード {i+1}", value=p_val, key=f"re_p_{row_id}_{i}")
                                     q_in = r2.text_input(f"数量 {i+1}", value=q_val, key=f"re_q_{row_id}_{i}")
                                     pr_in = r3.text_input(f"単価 {i+1}", value=pr_val, key=f"re_pr_{row_id}_{i}")
-                                    flg_idx = 0 if flg_val in ["有", "要", ""] else 1
-                                    flg_in = r4.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=flg_idx, key=f"re_flg_{row_id}_{i}")
+                                    
+                                    opts = ["", "有", "無"]
+                                    flg_idx = opts.index(flg_val) if flg_val in opts else 0
+                                    flg_in = r4.selectbox(f"伝票出力 {i+1}", opts, index=flg_idx, key=f"re_flg_{row_id}_{i}")
 
                                     if p_in.strip():
                                         edit_items.extend([p_in, q_in, pr_in, flg_in])
@@ -290,14 +302,16 @@ def maintenance_admin_screen():
                                     p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
                                     q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
                                     pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
-                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
 
                                     c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
                                     p_in = c1.text_input(f"商品コード {i+1}", value=p_val, key=f"m_p_{row_id}_{i}")
                                     q_in = c2.text_input(f"数量 {i+1}", value=q_val, key=f"m_q_{row_id}_{i}")
                                     pr_in = c3.text_input(f"単価 {i+1}", value=pr_val, key=f"m_pr_{row_id}_{i}")
-                                    flg_idx = 0 if flg_val in ["有", "要", ""] else 1
-                                    flg_in = c4.selectbox(f"伝票出力 {i+1}", ["有", "無"], index=flg_idx, key=f"m_flg_{row_id}_{i}")
+                                    
+                                    opts = ["", "有", "無"]
+                                    flg_idx = opts.index(flg_val) if flg_val in opts else 0
+                                    flg_in = c4.selectbox(f"伝票出力 {i+1}", opts, index=flg_idx, key=f"m_flg_{row_id}_{i}")
 
                                     if p_in.strip():
                                         edit_items.extend([p_in, q_in, pr_in, flg_in])
@@ -403,7 +417,7 @@ def maintenance_admin_screen():
                                 p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
                                 q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
                                 pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
-                                flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "有"
+                                flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
 
                                 c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
                                 c1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"op_p_{row_id}_{i}")
