@@ -29,16 +29,23 @@ def maintenance_admin_screen():
         st.session_state["user_name"] = "担当者"
 
     # マスタ検索結果およびフォームリセット用のセッション状態設定
-    if "master_cname" not in st.session_state:
-        st.session_state["master_cname"] = ""
-    if "master_sname" not in st.session_state:
-        st.session_state["master_sname"] = ""
-    if "master_scode" not in st.session_state:
-        st.session_state["master_scode"] = ""
-    if "searched_ccode" not in st.session_state:
-        st.session_state["searched_ccode"] = ""
     if "form_clear_key" not in st.session_state:
         st.session_state["form_clear_key"] = 0
+
+    clear_suffix = f"_{st.session_state['form_clear_key']}"
+
+    # フォーム用の各セッション変数がなければ初期化
+    if f"ccode{clear_suffix}" not in st.session_state:
+        st.session_state[f"ccode{clear_suffix}"] = ""
+    if f"cname{clear_suffix}" not in st.session_state:
+        st.session_state[f"cname{clear_suffix}"] = ""
+    if f"scode{clear_suffix}" not in st.session_state:
+        st.session_state[f"scode{clear_suffix}"] = ""
+    if f"sname{clear_suffix}" not in st.session_state:
+        st.session_state[f"sname{clear_suffix}"] = ""
+
+    if "searched_ccode" not in st.session_state:
+        st.session_state["searched_ccode"] = ""
 
     tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
 
@@ -54,7 +61,7 @@ def maintenance_admin_screen():
             cust_code_input = col_search_input.text_input(
                 "🔍 顧客コード入力", 
                 value=st.session_state["searched_ccode"], 
-                key=f"cust_code_search_{st.session_state['form_clear_key']}"
+                key=f"cust_code_search{clear_suffix}"
             )
             btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary")
 
@@ -70,12 +77,15 @@ def maintenance_admin_screen():
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
+                            # 検索値とフォーム用のセッション状態を直接更新する
                             st.session_state["searched_ccode"] = str(cust_code_input)
-                            st.session_state["master_sname"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
-                            st.session_state["master_cname"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
-                            st.session_state["master_scode"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
+                            st.session_state[f"ccode{clear_suffix}"] = str(cust_code_input)
+                            st.session_state[f"sname{clear_suffix}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
+                            st.session_state[f"cname{clear_suffix}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
+                            st.session_state[f"scode{clear_suffix}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
+                            
                             st.toast("顧客情報を取得しました！", icon="✅")
-                            time.sleep(0.5)
+                            time.sleep(0.3)
                             st.rerun()
                         else:
                             st.warning("該当する顧客データが見つかりませんでした。")
@@ -90,15 +100,13 @@ def maintenance_admin_screen():
             with st.form("submit_form"):
                 st.write("**📋 申請基本情報**")
                 
-                clear_suffix = f"_{st.session_state['form_clear_key']}"
-                
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
-                customer_code = row1_col1.text_input("顧客コード", value=st.session_state["searched_ccode"], key=f"ccode{clear_suffix}")
-                customer_name = row1_col2.text_input("顧客名（得意先名）", value=st.session_state["master_cname"], key=f"cname{clear_suffix}")
-                store_code = row1_col3.text_input("加盟店コード（店舗コード）", value=st.session_state["master_scode"], key=f"scode{clear_suffix}")
+                customer_code = row1_col1.text_input("顧客コード", key=f"ccode{clear_suffix}")
+                customer_name = row1_col2.text_input("顧客名（得意先名）", key=f"cname{clear_suffix}")
+                store_code = row1_col3.text_input("加盟店コード（店舗コード）", key=f"scode{clear_suffix}")
 
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
-                store_name = row2_col1.text_input("加盟店名（店舗名）", value=st.session_state["master_sname"], key=f"sname{clear_suffix}")
+                store_name = row2_col1.text_input("加盟店名（店舗名）", key=f"sname{clear_suffix}")
                 route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
                 delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
                 delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
@@ -147,9 +155,6 @@ def maintenance_admin_screen():
                             st.toast("新規申請を送信しました！", icon="🎉")
                             
                             st.session_state["searched_ccode"] = ""
-                            st.session_state["master_cname"] = ""
-                            st.session_state["master_sname"] = ""
-                            st.session_state["master_scode"] = ""
                             st.session_state["form_clear_key"] += 1
                             
                             time.sleep(1)
