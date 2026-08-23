@@ -5,13 +5,11 @@ import json
 from datetime import datetime
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbyAc_Ayjf5Mw49S_QsQ7APQqu_a019tLLjta-80cmAdEdt0C6lqymW8sIoHZF6qt7ljZw/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbywOKJhXcW3lYXweBEI-2ZiyH8S1Q4DJT3IXni-QVIf_OUswM1RMEXeoO2ZK2csomtd/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
-
-# ご提示いただいた正しいURLをもとにしたCSVエクスポート用URL
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 
@@ -30,13 +28,11 @@ def maintenance_admin_screen():
     if "user_name" not in st.session_state:
         st.session_state["user_name"] = "担当者"
 
-    # マスタ検索結果およびフォームリセット用のセッション状態設定
     if "form_clear_key" not in st.session_state:
         st.session_state["form_clear_key"] = 0
 
     clear_suffix = f"_{st.session_state['form_clear_key']}"
 
-    # フォーム用の各セッション変数がなければ初期化
     if f"ccode{clear_suffix}" not in st.session_state:
         st.session_state[f"ccode{clear_suffix}"] = ""
     if f"cname{clear_suffix}" not in st.session_state:
@@ -58,7 +54,6 @@ def maintenance_admin_screen():
         st.subheader("📝 新規申請 / 差戻しデータ修正")
         with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
-            # --- 顧客コード検索エリア ---
             col_search_input, col_search_btn = st.columns([4, 1])
             cust_code_input = col_search_input.text_input(
                 "🔍 顧客コード入力", 
@@ -80,11 +75,9 @@ def maintenance_admin_screen():
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
-                            # 検索値とフォーム用のセッション状態を直接更新する
                             st.session_state["searched_ccode"] = str(cust_code_input)
-                            st.session_state[f"ccode{clear_suffix}"] = str(cust_code_input) # B列: 顧客コード
+                            st.session_state[f"ccode{clear_suffix}"] = str(cust_code_input)
                             
-                            # 正しい列並びのマッピング
                             # A列(0): 加盟店名（担当者名）
                             st.session_state[f"sname{clear_suffix}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
                             # C列(2): 顧客名
@@ -104,7 +97,6 @@ def maintenance_admin_screen():
 
             st.write("---")
 
-            # --- 申請フォーム ---
             with st.form("submit_form"):
                 st.write("**📋 申請基本情報**")
                 
@@ -154,17 +146,15 @@ def maintenance_admin_screen():
                         ] + items_flat + [app_comment, "申請中", "", ""]
 
                         payload = {
-                            "status": "SUBMIT_MAINTENANCE",
+                            "action": "SUBMIT_MAINTENANCE",
                             "target_sheet_url": TARGET_SHEET_URL,
                             "full_row": full_row
                         }
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
-                            
                             st.session_state["searched_ccode"] = ""
                             st.session_state["form_clear_key"] += 1
-                            
                             time.sleep(1)
                             st.rerun()
                         else:
@@ -242,7 +232,7 @@ def maintenance_admin_screen():
                                         ] + edit_items + [edit_app_comment, "申請中", "", ""]
 
                                         payload = {
-                                            "status": "RESUBMIT_MAINTENANCE",
+                                            "action": "RESUBMIT_MAINTENANCE",
                                             "target_sheet_url": TARGET_SHEET_URL,
                                             "row_index": row_id,
                                             "updated_row": updated_row
@@ -334,19 +324,19 @@ def maintenance_admin_screen():
                                         edit_sname, edit_scode, edit_ddate, edit_rcode, edit_dperson
                                     ] + edit_items + [edit_app_comment]
 
-                                    status_type = ""
+                                    action_type = ""
                                     if btn_approve:
-                                        status_type = "APPROVE_MAINTENANCE"
+                                        action_type = "APPROVE_MAINTENANCE"
                                         updated_row.extend([mgr_name, now_str, mgr_comment])
                                     elif btn_reject:
-                                        status_type = "REJECT_MAINTENANCE"
+                                        action_type = "REJECT_MAINTENANCE"
                                         updated_row.extend(["差戻し", now_str, mgr_comment])
                                     elif btn_delete:
-                                        status_type = "DELETE_MAINTENANCE"
+                                        action_type = "DELETE_MAINTENANCE"
                                         updated_row.extend(["削除", now_str, mgr_comment])
 
                                     payload = {
-                                        "status": status_type,
+                                        "action": action_type,
                                         "target_sheet_url": TARGET_SHEET_URL,
                                         "row_index": row_id,
                                         "updated_row": updated_row
@@ -437,7 +427,7 @@ def maintenance_admin_screen():
                                     transfer_row = base_row + [action_time, op_user, op_memo]
 
                                     payload = {
-                                        "status": "TRANSFER_TO_OPERATOR",
+                                        "action": "TRANSFER_TO_OPERATOR",
                                         "target_sheet_url": TARGET_SHEET_URL,
                                         "dest_sheet_url": DEST_SHEET_URL,
                                         "row_index": row_id,
