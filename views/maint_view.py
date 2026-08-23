@@ -73,15 +73,21 @@ def maintenance_admin_screen():
                             dtype=str,
                             storage_options={"User-Agent": "Mozilla/5.0"}
                         )
+                        # B列（index: 1）が顧客コード
                         matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
                             # 検索値とフォーム用のセッション状態を直接更新する
                             st.session_state["searched_ccode"] = str(cust_code_input)
-                            st.session_state[f"ccode{clear_suffix}"] = str(cust_code_input)
+                            st.session_state[f"ccode{clear_suffix}"] = str(cust_code_input) # B列: 顧客コード
+                            
+                            # 正しい列並びのマッピング
+                            # A列(0): 加盟店名（担当者名）
                             st.session_state[f"sname{clear_suffix}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
+                            # C列(2): 顧客名
                             st.session_state[f"cname{clear_suffix}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
+                            # E列(4): 加盟店コード（納品書印字顧客コード）
                             st.session_state[f"scode{clear_suffix}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
                             
                             st.toast("顧客情報を取得しました！", icon="✅")
