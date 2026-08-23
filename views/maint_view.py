@@ -5,11 +5,13 @@ import json
 from datetime import datetime
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbyogtLlA_dZkWDfM0AOm6K5L5nUsyM4QV1_1V38Xal5tEnw1puxTQ23NY3PVeCGHwIFVQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbyVRKr8MKGrQbNFGzvUbgn24uOnQboav4HuzyhwtdEHlIfqDpHGPcTcX1I_UbaE4Du4QQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
+
+# ご提示いただいた正しいURLをもとにしたCSVエクスポート用URL
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 
