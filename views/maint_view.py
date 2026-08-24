@@ -27,7 +27,7 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
-    # 💡 【CSS修正】disabled入力欄の文字色調整 ＆ フォーム内のダミーボタンを完全に非表示にする
+    # 💡 【CSS調整】disabled入力欄の文字色調整 ＆ 印刷用スタイルの定義（A4サイズ・1ページ5件目安のレイアウト）
     st.markdown("""
         <style>
         input:disabled, textarea:disabled {
@@ -35,9 +35,27 @@ def maintenance_admin_screen():
             color: #31333F !important;
             opacity: 1 !important;
         }
-        /* フォーム内にある「無効化されたボタン」を完全に消す */
         div[data-testid="stForm"] button[disabled] {
             display: none !important;
+        }
+        
+        /* 🖨️ 印刷時のレイアウト最適化（A4サイズで1枚に収める・余白調整） */
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+            }
+            /* Streamlitのサイドバーや不要なUIを非表示にする */
+            header, footer, [data-testid="stSidebar"], .stButton, button {
+                display: none !important;
+            }
+            /* 印刷対象のブロックを綺麗に収める */
+            .print-page {
+                page-break-after: always;
+                height: 100vh;
+                box-sizing: border-box;
+                padding: 10mm;
+            }
         }
         </style>
     """, unsafe_allow_html=True)
@@ -64,11 +82,12 @@ def maintenance_admin_screen():
     if "searched_ccode" not in st.session_state:
         st.session_state["searched_ccode"] = ""
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📝 スタッフ申請・差戻し対応", 
         "🔍 管理職チェック", 
         "🚚 業務担当：シート転記", 
-        "✅ メンテナンスチェック"
+        "✅ メンテナンスチェック",
+        "🖨️ 加盟店別 印刷プレビュー"
     ])
 
     # ==========================================
@@ -559,7 +578,6 @@ def maintenance_admin_screen():
                     mgr_name_val = str(row.iloc[30]) if len(row) > 30 and pd.notna(row.iloc[30]) else "不明"
                     op_user_val = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "不明"
 
-                    # 💡 すでにAJ列・AK列にチェック記録がある場合はそれを取得・表示
                     checked_time_val = str(row.iloc[35]) if len(row) > 35 and pd.notna(row.iloc[35]) else ""
                     checked_user_val = str(row.iloc[36]) if len(row) > 36 and pd.notna(row.iloc[36]) else ""
 
@@ -587,7 +605,6 @@ def maintenance_admin_screen():
                             c8.text_input("承認者", value=mgr_name_val, disabled=True, key=f"chk_mgr_{row_id}")
                             c9.text_input("処理者（業務担当）", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
 
-                            # 💡 すでにチェック済みの場合は情報表示
                             if checked_time_val:
                                 st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
 
@@ -628,10 +645,7 @@ def maintenance_admin_screen():
                                 check_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
                                 checker_name = st.session_state["user_name"]
 
-                                # 既存の行データを整形し、AJ列(インデックス35)、AK列(インデックス36)にデータを埋め込む
                                 clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
-                                
-                                # 配列の長さが37未満の場合は空文字でパディングする（AJ=35, AK=36を確保するため）
                                 while len(clean_base_row) < 37:
                                     clean_base_row.append("")
 
@@ -640,7 +654,7 @@ def maintenance_admin_screen():
 
                                 payload = {
                                     "action": "UPDATE_MAINTENANCE_CHECK",
-                                    "target_sheet_url": DEST_SHEET_URL,  # 転記先（DEST）シートを更新
+                                    "target_sheet_url": DEST_SHEET_URL,
                                     "row_index": row_id,
                                     "updated_row": clean_base_row
                                 }
@@ -648,7 +662,7 @@ def maintenance_admin_screen():
                                 res = post_to_gas(payload)
                                 if res.get("status") == "success":
                                     st.cache_data.clear()
-                                    st.toast(f"行 {row_id} のメンテナンスチェックを完了しました（AJ: タイムスタンプ, AK: チェック者記録）！", icon="✅")
+                                    st.toast(f"行 {row_id} のメンテナンスチェックを完了しました！", icon="✅")
                                     time.sleep(1)
                                     st.rerun()
                                 else:
@@ -664,3 +678,82 @@ def maintenance_admin_screen():
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
+
+    # ==========================================
+    # TAB 5: 加盟店別 印刷プレビュー画面
+    # ==========================================
+    with tab5:
+        st.subheader("🖨️ 加盟店別 印刷プレビュー（A4サイズ / 1ページ5件目安）")
+        st.caption("転記済みデータ（DESTシート）を加盟店ごとにグループ化し、A4用紙1枚にきれいに収まるレイアウトでプレビュー・印刷できます。")
+
+        try:
+            st.cache_data.clear()
+            df_print = pd.read_csv(DEST_SHEET_CSV, dtype=str)
+
+            if df_print.empty:
+                st.info("現在、印刷対象のデータはありません。")
+            else:
+                # 加盟店名（列インデックス4）でグループ化
+                store_col_idx = 4
+                df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
+                stores = df_print["_store_name"].unique()
+
+                selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores)
+
+                if selected_store:
+                    store_df = df_print[df_print["_store_name"] == selected_store]
+                    total_records = len(store_df)
+
+                    st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※A4サイズ1枚あたり最大5件ずつ改ページされます。")
+
+                    # 5件ずつチャンク（分割）してページごとに表示
+                    chunk_size = 5
+                    chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
+
+                    for page_idx, chunk in enumerate(chunks):
+                        st.markdown(f"""
+                            <div class="print-page" style="border: 2px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 30px; background: white; color: black;">
+                                <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
+                                    <h3 style="margin: 0; color: #111;">🏪 加盟店名: {selected_store}</h3>
+                                    <span style="font-size: 14px; font-weight: bold; color: #555;">ページ: {page_idx + 1} / {len(chunks)}</span>
+                                </div>
+                        """, unsafe_allow_html=True)
+
+                        for sub_i, (_, r_row) in enumerate(chunk.iterrows()):
+                            c_name = str(r_row.iloc[3]) if pd.notna(r_row.iloc[3]) else ""
+                            c_code = str(r_row.iloc[2]) if pd.notna(r_row.iloc[2]) else ""
+                            d_date = str(r_row.iloc[6]) if pd.notna(r_row.iloc[6]) else ""
+                            r_code = str(r_row.iloc[7]) if pd.notna(r_row.iloc[7]) else ""
+                            d_person = str(r_row.iloc[8]) if pd.notna(r_row.iloc[8]) else ""
+
+                            st.markdown(f"""
+                                <div style="background: #f9f9f9; border: 1px solid #ddd; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+                                    <div style="font-size: 13px; font-weight: bold; color: #333; margin-bottom: 5px;">
+                                        [{sub_i + 1}] 顧客名: {c_name}（コード: {c_code}） | 納品日: {d_date} | ルート: {r_code} | 納品者: {d_person}
+                                    </div>
+                            """, unsafe_allow_html=True)
+
+                            # 商品明細のコンパクト表示
+                            item_texts = []
+                            for pi in range(5):
+                                b_idx = 9 + (pi * 4)
+                                p_c = str(r_row.iloc[b_idx]) if b_idx < len(r_row) and pd.notna(r_row.iloc[b_idx]) else ""
+                                if p_c.strip():
+                                    p_q = str(r_row.iloc[b_idx+1]) if b_idx+1 < len(r_row) and pd.notna(r_row.iloc[b_idx+1]) else ""
+                                    p_pr = str(r_row.iloc[b_idx+2]) if b_idx+2 < len(r_row) and pd.notna(r_row.iloc[b_idx+2]) else ""
+                                    p_flg = str(r_row.iloc[b_idx+3]) if b_idx+3 < len(r_row) and pd.notna(r_row.iloc[b_idx+3]) else ""
+                                    item_texts.append(f"<b>商品{pi+1}:</b> {p_c} (数量:{p_q}, 単価:{p_pr}, 伝票:{p_flg})")
+
+                            if item_texts:
+                                st.markdown(f"<div style='font-size: 12px; color: #555;'>{' | '.join(item_texts)}</div>", unsafe_allow_html=True)
+                            else:
+                                st.markdown("<div style='font-size: 12px; color: #888;'>商品明細なし</div>", unsafe_allow_html=True)
+
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（余白を「なし」または「標準」にすると綺麗に収まります）。")
+
+        except Exception as e:
+            st.error(f"印刷データの読み込みエラー: {e}")
