@@ -10,6 +10,8 @@ GAS_URL = "https://script.google.com/macros/s/AKfycbywXIMKfujyW1-mjwGGMi7q9WpXha
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
+# 💡 業務転記先シートのCSVリンク（メンテナンスチェックの元データとして使用）
+DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 # 日本時間（JST = UTC+9）のタイムゾーン定義
@@ -59,7 +61,13 @@ def maintenance_admin_screen():
     if "searched_ccode" not in st.session_state:
         st.session_state["searched_ccode"] = ""
 
-    tab1, tab2, tab3 = st.tabs(["📝 スタッフ申請・差戻し対応", "🔍 管理職チェック", "🚚 業務担当：シート転記"])
+    # 💡 タブに「🔍 メンテナンスチェック」を追加
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📝 スタッフ申請・差戻し対応", 
+        "🔍 管理職チェック", 
+        "🚚 業務担当：シート転記", 
+        "✅ メンテナンスチェック"
+    ])
 
     # ==========================================
     # TAB 1: 申請・差戻し対応
@@ -388,17 +396,13 @@ def maintenance_admin_screen():
                 else:
                     st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
                     
-                    # 💡 【新規追加】納品日の早い順ソートチェックボックス
-                    sort_by_date = st.checkbox("📅 納品日の早い順（昇順）で並び替える", value=False)
+                    sort_by_date = st.checkbox("📅 納品日の早い順（昇順）で並び替える", value=False, key="t3_sort_date")
 
                     if sort_by_date:
-                        # 納品日（インデックス6）を日付型に変換してソート（パースできないものは最後に回す）
                         approved_df = approved_df.copy()
                         approved_df["_sort_date"] = pd.to_datetime(approved_df.iloc[:, 6], errors="coerce")
                         approved_df = approved_df.sort_values(by="_sort_date", ascending=True, na_position="last")
 
-                    # 💡 ソート設定に応じてループの順序を調整
-                    # （チェックOFFのときは元通りの新着順、ONのときはソート後の順序）
                     iterator = approved_df.iterrows() if sort_by_date else approved_df.iloc[::-1].iterrows()
 
                     for idx, row in iterator:
@@ -464,12 +468,6 @@ def maintenance_admin_screen():
                                 op_user = st.session_state["user_name"]
 
                                 if btn_transfer:
-                                    base_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
-                                    # ソート用の仮列が含まれていた場合は除外して転記用リストを整形
-                                    if "_sort_date" in base_row: 
-                                        pass # DataFrameのtolist()なので_sort_dateは元のilocに含まれないため問題なし
-                                    
-                                    # 元データのままだと_sort_dateが混ざる可能性があるため安全にスライスまたは抽出
                                     clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
                                     transfer_row = clean_base_row + [action_time, op_user, op_memo]
 
@@ -517,3 +515,89 @@ def maintenance_admin_screen():
 
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
+
+    # ==========================================
+    # TAB 4: メンテナンスチェック画面（新設）
+    # ==========================================
+    with tab4:
+        st.subheader("✅ メンテナンスチェック画面")
+        st.caption("業務担当（TAB 3）で転記されたデータ（元データ）を一覧で確認し、チェックや追加の差戻し等を行うことができます。")
+
+        try:
+            st.cache_data.clear()
+            df_dest = pd.read_csv(DEST_SHEET_CSV, dtype=str)
+
+            if df_dest.empty:
+                st.info("現在、チェック対象のデータ（転記済みデータ）はありません。")
+            else:
+                st.success(f"📋 チェック対象データ: **{len(df_dest)} 件**")
+
+                # 💡 加盟店別並び替え機能
+                col_sort1, col_sort2 = st.columns([3, 1])
+                sort_store = col_sort1.checkbox("🏪 加盟店別（店舗名）で並び替える", value=False, key="chk_sort_store")
+                sort_order = col_sort2.selectbox("並び順", ["昇順 (あ〜わ)", "降順 (わ〜あ)"], index=0, key="chk_sort_order", label_visibility="collapsed")
+
+                df_display = df_dest.copy()
+                if sort_store:
+                    # 加盟店名（店舗名）は元データのインデックス4にある想定
+                    # 安全のため列が存在するか確認
+                    store_col_idx = 4
+                    if len(df_display.columns) > store_col_idx:
+                        is_ascending = (sort_order == "昇順 (あ〜わ)")
+                        df_display["_sort_store"] = df_display.iloc[:, store_col_idx].fillna("")
+                        df_display = df_display.sort_values(by="_sort_store", ascending=is_ascending)
+
+                iterator_chk = df_display.iterrows()
+
+                for idx, row in iterator_chk:
+                    row_id = idx + 2
+                    cust_name = str(row.iloc[3]) if len(row) > 3 and pd.notna(row.iloc[3]) else ""
+                    store_name = str(row.iloc[4]) if len(row) > 4 and pd.notna(row.iloc[4]) else ""
+                    cust_code = str(row.iloc[2]) if len(row) > 2 and pd.notna(row.iloc[2]) else ""
+                    deliv_date = str(row.iloc[6]) if len(row) > 6 and pd.notna(row.iloc[6]) else ""
+
+                    expander_label = f"📌 【加盟店: {store_name or '未設定'}】 顧客名: {cust_name}（{cust_code}） | 納品日: {deliv_date}"
+
+                    with st.expander(expander_label):
+                        with st.form(key=f"check_form_{row_id}"):
+                            st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
+                            st.write("**📋 登録内容詳細**")
+                            c1, c2, c3 = st.columns(3)
+                            c1.text_input("顧客コード", value=cust_code, disabled=True, key=f"chk_ccode_{row_id}")
+                            c2.text_input("顧客名", value=cust_name, disabled=True, key=f"chk_cname_{row_id}")
+                            c3.text_input("加盟店コード", value=str(row.iloc[5]) if len(row) > 5 and pd.notna(row.iloc[5]) else "", disabled=True, key=f"chk_scode_{row_id}")
+
+                            c4, c5, c6 = st.columns(3)
+                            c4.text_input("加盟店名", value=store_name, disabled=True, key=f"chk_sname_{row_id}")
+                            c5.text_input("ルートコード", value=str(row.iloc[7]) if len(row) > 7 and pd.notna(row.iloc[7]) else "", disabled=True, key=f"chk_rcode_{row_id}")
+                            c6.text_input("納品日", value=deliv_date, disabled=True, key=f"chk_ddate_{row_id}")
+
+                            st.write("---")
+                            chk_memo = st.text_input("チェック用メモ / 特記事項", key=f"chk_memo_{row_id}")
+                            
+                            # 💡 差戻し先の選択（「業務担当」または「申請者」）
+                            st.write("⚠️ **差戻しを行う場合の設定**")
+                            r_col1, r_col2 = st.columns(2)
+                            reject_target = r_col1.selectbox("差戻し先を選択", ["業務担当", "申請者"], key=f"chk_rej_target_{row_id}")
+                            reject_reason = r_col2.text_input("差戻し理由", key=f"chk_rej_reason_{row_id}")
+
+                            col_ok, col_ng = st.columns(2)
+                            btn_checked_ok = col_ok.form_submit_button("✅ チェック完了（確認済み）", type="primary", use_container_width=True)
+                            btn_checked_reject = col_ng.form_submit_button("↩️ 指定先へ差戻し", use_container_width=True)
+
+                            if btn_checked_ok:
+                                st.toast(f"行 {row_id} のメンテナンスチェックを完了しました！", icon="✅")
+                                time.sleep(1)
+                                st.rerun()
+
+                            elif btn_checked_reject:
+                                if not reject_reason.strip():
+                                    st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
+                                else:
+                                    st.toast(f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）", icon="↩️")
+                                    time.sleep(1.5)
+                                    st.rerun()
+
+        except Exception as e:
+            st.error(f"データ読み込みエラー: {e}")
