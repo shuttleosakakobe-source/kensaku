@@ -157,7 +157,7 @@ def maintenance_admin_screen():
     ])
 
     # ==========================================
-    # TAB 1: 申請・差戻し対応
+    # TAB 1: 申請・差戻し対応（元のまま）
     # ==========================================
     with tab1:
         st.subheader("📝 新規申請 / 差戻しデータ修正")
@@ -355,7 +355,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 2: 管理職承認
+    # TAB 2: 管理職承認（元のまま）
     # ==========================================
     with tab2:
         st.subheader("🔍 管理職：申請承認・編集")
@@ -461,7 +461,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 3: 業務担当
+    # TAB 3: 業務担当（元のまま）
     # ==========================================
     with tab3:
         st.subheader("🚚 業務担当：承認済みデータの転記・処理")
@@ -604,7 +604,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 4: メンテナンスチェック画面
+    # TAB 4: メンテナンスチェック画面（元のまま）
     # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
@@ -746,7 +746,7 @@ def maintenance_admin_screen():
             st.error(f"データ読み込みエラー: {e}")
 
     # ==========================================
-    # TAB 5: 加盟店別 印刷プレビュー画面（入力画面風フォーマット）
+    # TAB 5: 加盟店別 印刷プレビュー画面（ご要望のHTMLプレビュー版）
     # ==========================================
     with tab5:
         st.subheader("🖨️ 加盟店別 印刷プレビュー（入力画面風フォーマット / A4・1ページ5件目安）")
@@ -775,7 +775,6 @@ def maintenance_admin_screen():
                     chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
 
                     for page_idx, chunk in enumerate(chunks):
-                        # 入力画面風のHTMLコンテナを開始
                         html_output = f"""
                         <div class="print-sheet">
                             <div class="sheet-header">
@@ -787,7 +786,6 @@ def maintenance_admin_screen():
                             </div>
                         """
 
-                        # チャンク内の各レコードをフォーム風レイアウトで構築
                         for sub_i, (_, r_row) in enumerate(chunk.iterrows()):
                             c_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
                             c_name = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
@@ -798,7 +796,6 @@ def maintenance_admin_screen():
                             d_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else ""
                             app_user = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
                             
-                            # 💡 【修正点】処理者名・承認者名の列ズレや不明を解消（列32: 処理者名 / 列30: 承認者名）
                             mgr_user = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
                             op_user = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"]
 
@@ -828,7 +825,6 @@ def maintenance_admin_screen():
                                 <div class="section-title">📦 申請商品明細</div>
                             """
 
-                            # 商品明細（最大5件）
                             has_item_print = False
                             for pi in range(5):
                                 b_idx = 9 + (pi * 4)
