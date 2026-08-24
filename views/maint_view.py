@@ -27,7 +27,7 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
-    # 💡 【CSS追加】disabled入力欄の文字色調整 ＆ Enterキー無効化用ダミーボタンの完全非表示
+    # 💡 【CSS修正】disabled入力欄の文字色調整 ＆ フォーム内のダミーボタンを完全に非表示にする
     st.markdown("""
         <style>
         input:disabled, textarea:disabled {
@@ -35,7 +35,8 @@ def maintenance_admin_screen():
             color: #31333F !important;
             opacity: 1 !important;
         }
-        div[data-testid="stForm"] button[kind="secondary"][disabled] {
+        /* フォーム内にある「無効化されたボタン」を完全に消す */
+        div[data-testid="stForm"] button[disabled] {
             display: none !important;
         }
         </style>
@@ -432,7 +433,7 @@ def maintenance_admin_screen():
                             o3_c1, o3_c2, o3_c3 = st.columns(3)
                             o3_c1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"v_dperson_{row_id}")
                             o3_c2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"v_app_{row_id}")
-                            o3_c3.text_input("", value="", disabled=True, label_visibility="hidden", key=f"v_dummy_{row_id}")
+                            o3_c3.text_input("承認者", value=mgr_name, disabled=True, key=f"v_mgr_{row_id}")
 
                             st.write("---")
                             st.write("**📦 申請商品**")
@@ -553,6 +554,10 @@ def maintenance_admin_screen():
                     store_name = str(row.iloc[4]) if len(row) > 4 and pd.notna(row.iloc[4]) else ""
                     cust_code = str(row.iloc[2]) if len(row) > 2 and pd.notna(row.iloc[2]) else ""
                     deliv_date = str(row.iloc[6]) if len(row) > 6 and pd.notna(row.iloc[6]) else ""
+                    
+                    # 💡 承認者・処理者情報の取得 (列インデックスは保存形式に準拠)
+                    mgr_name_val = str(row.iloc[30]) if len(row) > 30 and pd.notna(row.iloc[30]) else "不明"
+                    op_user_val = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "不明"
 
                     expander_label = f"📌 【加盟店: {store_name or '未設定'}】 顧客名: {cust_name}（{cust_code}） | 納品日: {deliv_date}"
 
@@ -570,6 +575,12 @@ def maintenance_admin_screen():
                             c4.text_input("加盟店名", value=store_name, disabled=True, key=f"chk_sname_{row_id}")
                             c5.text_input("ルートコード", value=str(row.iloc[7]) if len(row) > 7 and pd.notna(row.iloc[7]) else "", disabled=True, key=f"chk_rcode_{row_id}")
                             c6.text_input("納品日", value=deliv_date, disabled=True, key=f"chk_ddate_{row_id}")
+
+                            # 💡 TAB4でも承認者・処理者を表示
+                            c7, c8, c9 = st.columns(3)
+                            c7.text_input("承認者", value=mgr_name_val, disabled=True, key=f"chk_mgr_{row_id}")
+                            c8.text_input("処理者（業務担当）", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
+                            c9.text_input("", value="", disabled=True, label_visibility="hidden", key=f"chk_dummy_{row_id}")
 
                             st.write("---")
                             st.write("**📦 登録商品明細**")
