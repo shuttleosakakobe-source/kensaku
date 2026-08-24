@@ -387,20 +387,33 @@ def maintenance_admin_screen():
                     st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
                 else:
                     st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
+                    
+                    # 💡 【新規追加】納品日の早い順ソートチェックボックス
+                    sort_by_date = st.checkbox("📅 納品日の早い順（昇順）で並び替える", value=False)
 
-                    for idx, row in approved_df.iloc[::-1].iterrows():
+                    if sort_by_date:
+                        # 納品日（インデックス6）を日付型に変換してソート（パースできないものは最後に回す）
+                        approved_df = approved_df.copy()
+                        approved_df["_sort_date"] = pd.to_datetime(approved_df.iloc[:, 6], errors="coerce")
+                        approved_df = approved_df.sort_values(by="_sort_date", ascending=True, na_position="last")
+
+                    # 💡 ソート設定に応じてループの順序を調整
+                    # （チェックOFFのときは元通りの新着順、ONのときはソート後の順序）
+                    iterator = approved_df.iterrows() if sort_by_date else approved_df.iloc[::-1].iterrows()
+
+                    for idx, row in iterator:
                         row_id = idx + 2
                         timestamp = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
                         cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
                         mgr_name = str(row.iloc[30]) if pd.notna(row.iloc[30]) else ""
+                        deliv_date_str = str(row.iloc[6]) if pd.notna(row.iloc[6]) else "未設定"
 
-                        expander_label = f"🟢【承認済】{cust_name}（{cust_code}） | 承認者: {mgr_name} | 申請日: {timestamp}"
+                        expander_label = f"🟢【納品日: {deliv_date_str}】{cust_name}（{cust_code}） | 承認者: {mgr_name}"
 
                         with st.expander(expander_label):
                             st.write("**📋 申請内容**")
                             
-                            # 💡 【修正ポイント】他の入力欄と同じように枠（テキスト入力風）を維持しつつ、disabled=Trueで変更不可にし、CSSで文字をくっきり濃く表示
                             o1_c1, o1_c2, o1_c3 = st.columns(3)
                             o1_c1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"v_ccode_{row_id}")
                             o1_c2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"v_cname_{row_id}")
@@ -452,7 +465,13 @@ def maintenance_admin_screen():
 
                                 if btn_transfer:
                                     base_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
-                                    transfer_row = base_row + [action_time, op_user, op_memo]
+                                    # ソート用の仮列が含まれていた場合は除外して転記用リストを整形
+                                    if "_sort_date" in base_row: 
+                                        pass # DataFrameのtolist()なので_sort_dateは元のilocに含まれないため問題なし
+                                    
+                                    # 元データのままだと_sort_dateが混ざる可能性があるため安全にスライスまたは抽出
+                                    clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
+                                    transfer_row = clean_base_row + [action_time, op_user, op_memo]
 
                                     payload = {
                                         "action": "TRANSFER_TO_OPERATOR",
@@ -476,8 +495,8 @@ def maintenance_admin_screen():
                                     if not op_reject_reason.strip():
                                         st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
                                     else:
-                                        updated_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
-                                        base_data = updated_row[:29]
+                                        clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
+                                        base_data = clean_base_row[:29]
                                         final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
 
                                         payload = {
