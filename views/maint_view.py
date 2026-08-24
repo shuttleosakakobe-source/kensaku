@@ -752,14 +752,14 @@ def maintenance_admin_screen():
     # ==========================================
     with tab5:
         st.subheader("🖨️ 加盟店別 印刷プレビュー（入力画面風フォーマット / A4・1ページ5件目安）")
-        st.caption("転記済みデータ（DESTシート）を加盟店ごとにグループ化し、入力フォームとまったく同じ項目レイアウトでA4サイズに美しく出力できます。")
+        st.caption("転記済みデータ（DESTシート）を加盟店ごとにグループ化し、入力フォームとまったく同じ項目レイアウトでA4サイズに出力できます。")
 
         try:
             st.cache_data.clear()
             df_print = pd.read_csv(DEST_SHEET_CSV, dtype=str)
 
             if df_print.empty:
-                st.info("現在、印刷対象のデータはありません。")
+                st.info("The target print data is currently empty.")
             else:
                 store_col_idx = 4
                 df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
@@ -772,6 +772,24 @@ def maintenance_admin_screen():
                     total_records = len(store_df)
 
                     st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※A4サイズ1枚あたり最大5件ずつ改ページされます。")
+
+                    # 🖨️ PDF保存・印刷用のダイアログを起動するボタン付きHTMLコンポーネント
+                    pdf_action_html = """
+                    <div style="margin-bottom: 15px; text-align: right;">
+                        <button onclick="window.print();" style="
+                            background-color: #ff4b4b;
+                            color: white;
+                            border: none;
+                            padding: 10px 20px;
+                            font-size: 14px;
+                            font-weight: bold;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        ">📥 この内容をPDF出力 / 印刷する</button>
+                    </div>
+                    """
+                    components.html(pdf_action_html, height=60, scrolling=False)
 
                     chunk_size = 5
                     chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
@@ -859,10 +877,7 @@ def maintenance_admin_screen():
 
                         html_output += "</div>"
                         
-                        # 💡 修正点：components.html を用いてMarkdownによるコードブロック誤認を防ぐ
                         components.html(html_output, height=450, scrolling=True)
-
-                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください。")
 
         except Exception as e:
             st.error(f"印刷データの読み込みエラー: {e}")
