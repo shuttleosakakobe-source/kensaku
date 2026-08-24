@@ -4,6 +4,7 @@ import requests
 import json
 from datetime import datetime, timezone, timedelta
 import time
+import streamlit.components.v1 as components
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbzyy8ChMVzF7l344mc5H6hNsqrLUQj2wT3fnm8wm4FdBeRfJWKxhoUWIGaT3SAhirp7/exec"
 
@@ -66,6 +67,7 @@ def maintenance_admin_screen():
             margin-bottom: 25px;
             background: #ffffff;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            font-family: sans-serif;
         }
         .sheet-header {
             display: flex;
@@ -775,7 +777,6 @@ def maintenance_admin_screen():
                     chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
 
                     for page_idx, chunk in enumerate(chunks):
-                        # 入力画面風のHTMLコンテナを開始
                         html_output = f"""
                         <div class="print-sheet">
                             <div class="sheet-header">
@@ -787,7 +788,6 @@ def maintenance_admin_screen():
                             </div>
                         """
 
-                        # チャンク内の各レコードをフォーム風レイアウトで構築
                         for sub_i, (_, r_row) in enumerate(chunk.iterrows()):
                             c_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
                             c_name = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
@@ -798,10 +798,8 @@ def maintenance_admin_screen():
                             d_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else ""
                             app_user = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
                             
-                            # 💡 【修正点】処理者名・承認者名の列ズレや不明を解消（列32: 処理者名 / 列30: 承認者名）
                             mgr_user = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
                             op_user = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"]
-
                             app_comment = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし"
 
                             html_output += f"""
@@ -814,7 +812,7 @@ def maintenance_admin_screen():
                                 </div>
                                 <div class="info-grid" style="margin-bottom: 8px;">
                                     <div class="info-item"><span class="label">加盟店名（店舗名）</span><span class="value">{s_name}</span></div>
-                                    <div class="info-grid"><span class="label">ルートコード</span><span class="value">{r_code}</span></div>
+                                    <div class="info-item"><span class="label">ルートコード</span><span class="value">{r_code}</span></div>
                                     <div class="info-item"><span class="label">納品日</span><span class="value">{d_date}</span></div>
                                 </div>
                                 <div class="info-grid">
@@ -828,7 +826,6 @@ def maintenance_admin_screen():
                                 <div class="section-title">📦 申請商品明細</div>
                             """
 
-                            # 商品明細（最大5件）
                             has_item_print = False
                             for pi in range(5):
                                 b_idx = 9 + (pi * 4)
@@ -861,9 +858,11 @@ def maintenance_admin_screen():
                             """
 
                         html_output += "</div>"
-                        st.markdown(html_output)
+                        
+                        # 💡 修正点：components.html を用いてMarkdownによるコードブロック誤認を防ぐ
+                        components.html(html_output, height=450, scrolling=True)
 
-                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（余白を「なし」または「標準」にすると綺麗に収まります）。")
+                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください。")
 
         except Exception as e:
             st.error(f"印刷データの読み込みエラー: {e}")
