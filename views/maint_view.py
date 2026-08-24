@@ -5,7 +5,7 @@ import time
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-import requests
+import requests as st
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbwLUMtoHyxx8kX0PpwxeNqnH-uVF1kVGFi3WVo8f6URehPcpexohXlltFPfwYe5dkjiGw/exec"
 
