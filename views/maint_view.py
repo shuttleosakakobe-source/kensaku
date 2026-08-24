@@ -27,7 +27,7 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
-    # 💡 【CSS調整】disabled入力欄の文字色調整 ＆ 印刷用スタイルの定義（A4サイズ・1ページ5件目安のレイアウト）
+    # 💡 【CSS調整】入力画面風の印刷レイアウト ＆ 印刷時のスタイル定義
     st.markdown("""
         <style>
         input:disabled, textarea:disabled {
@@ -39,23 +39,89 @@ def maintenance_admin_screen():
             display: none !important;
         }
         
-        /* 🖨️ 印刷時のレイアウト最適化（A4サイズで1枚に収める・余白調整） */
+        /* 🖨️ 印刷/PDF出力時のレイアウト最適化（A4サイズ・1ページ完結） */
         @media print {
             body {
                 background: white !important;
                 color: black !important;
             }
-            /* Streamlitのサイドバーや不要なUIを非表示にする */
-            header, footer, [data-testid="stSidebar"], .stButton, button {
+            header, footer, [data-testid="stSidebar"], .stButton, button, .no-print {
                 display: none !important;
             }
-            /* 印刷対象のブロックを綺麗に収める */
-            .print-page {
+            .print-sheet {
                 page-break-after: always;
-                height: 100vh;
-                box-sizing: border-box;
-                padding: 10mm;
+                border: 2px solid #333 !important;
+                padding: 15px !important;
+                margin-bottom: 20px !important;
+                background: white !important;
+                box-shadow: none !important;
             }
+        }
+        
+        /* 画面上での帳票カード風スタイル */
+        .print-sheet {
+            border: 1px solid #d6d6d6;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .sheet-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #31333F;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .sheet-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #31333F;
+            margin: 0;
+        }
+        .section-box {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+        .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 8px;
+            border-bottom: 1px dashed #ced4da;
+            padding-bottom: 4px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            font-size: 12px;
+        }
+        .info-item span.label {
+            color: #6c757d;
+            display: block;
+            font-size: 10px;
+        }
+        .info-item span.value {
+            color: #212529;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .item-row {
+            display: grid;
+            grid-template-columns: 3fr 2fr 2fr 2fr;
+            gap: 8px;
+            background: #fff;
+            padding: 6px 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            font-size: 12px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -63,7 +129,7 @@ def maintenance_admin_screen():
     st.header("📦 メンテナンス申請・承認・業務処理システム")
 
     if "user_name" not in st.session_state:
-        st.session_state["user_name"] = "担当者"
+        st.session_state["user_name"] = "眞田 隆司"
 
     if "form_clear_key" not in st.session_state:
         st.session_state["form_clear_key"] = 0
@@ -542,7 +608,7 @@ def maintenance_admin_screen():
     # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
-        st.caption("業務担当（TAB 3）で転記されたデータ（元データ）を一覧で確認し、チェックや追加の差戻し等を行うことができます。")
+        st.caption("業務担当（TAB 3）で転記されたデータを一覧で確認し、チェックや追加の差戻し等を行うことができます。")
 
         try:
             st.cache_data.clear()
@@ -603,7 +669,7 @@ def maintenance_admin_screen():
                             c7, c8, c9 = st.columns(3)
                             c7.text_input("納品者", value=delivery_person_val, disabled=True, key=f"chk_dperson_{row_id}")
                             c8.text_input("承認者", value=mgr_name_val, disabled=True, key=f"chk_mgr_{row_id}")
-                            c9.text_input("処理者（業務担当）", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
+                            c9.text_input("処理者", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
 
                             if checked_time_val:
                                 st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
@@ -680,11 +746,11 @@ def maintenance_admin_screen():
             st.error(f"データ読み込みエラー: {e}")
 
     # ==========================================
-    # TAB 5: 加盟店別 印刷プレビュー画面
+    # TAB 5: 加盟店別 印刷プレビュー画面（入力画面風フォーマット）
     # ==========================================
     with tab5:
-        st.subheader("🖨️ 加盟店別 印刷プレビュー（A4サイズ / 1ページ5件目安）")
-        st.caption("転記済みデータ（DESTシート）を加盟店ごとにグループ化し、A4用紙1枚にきれいに収まるレイアウトでプレビュー・印刷できます。")
+        st.subheader("🖨️ 加盟店別 印刷プレビュー（入力画面風フォーマット / A4・1ページ5件目安）")
+        st.caption("転記済みデータ（DESTシート）を加盟店ごとにグループ化し、入力フォームとまったく同じ項目レイアウトでA4サイズに美しく出力できます。")
 
         try:
             st.cache_data.clear()
@@ -693,12 +759,11 @@ def maintenance_admin_screen():
             if df_print.empty:
                 st.info("現在、印刷対象のデータはありません。")
             else:
-                # 加盟店名（列インデックス4）でグループ化
                 store_col_idx = 4
                 df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
                 stores = df_print["_store_name"].unique()
 
-                selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores)
+                selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select")
 
                 if selected_store:
                     store_df = df_print[df_print["_store_name"] == selected_store]
@@ -706,54 +771,104 @@ def maintenance_admin_screen():
 
                     st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※A4サイズ1枚あたり最大5件ずつ改ページされます。")
 
-                    # 5件ずつチャンク（分割）してページごとに表示
                     chunk_size = 5
                     chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
 
                     for page_idx, chunk in enumerate(chunks):
-                        st.markdown(f"""
-                            <div class="print-page" style="border: 2px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 30px; background: white; color: black;">
-                                <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
-                                    <h3 style="margin: 0; color: #111;">🏪 加盟店名: {selected_store}</h3>
-                                    <span style="font-size: 14px; font-weight: bold; color: #555;">ページ: {page_idx + 1} / {len(chunks)}</span>
+                        # 入力画面風のHTMLコンテナを開始
+                        html_output = f"""
+                        <div class="print-sheet">
+                            <div class="sheet-header">
+                                <h3 class="sheet-title">商品発注メンテナンス</h3>
+                                <div>
+                                    <span style="font-size: 13px; font-weight: bold; margin-right: 15px;">加盟店名: {selected_store}</span>
+                                    <span style="font-size: 12px; color: #555;">ページ: {page_idx + 1} / {len(chunks)}</span>
                                 </div>
-                        """, unsafe_allow_html=True)
+                            </div>
+                        """
 
+                        # チャンク内の各レコードをフォーム風レイアウトで構築
                         for sub_i, (_, r_row) in enumerate(chunk.iterrows()):
-                            c_name = str(r_row.iloc[3]) if pd.notna(r_row.iloc[3]) else ""
-                            c_code = str(r_row.iloc[2]) if pd.notna(r_row.iloc[2]) else ""
-                            d_date = str(r_row.iloc[6]) if pd.notna(r_row.iloc[6]) else ""
-                            r_code = str(r_row.iloc[7]) if pd.notna(r_row.iloc[7]) else ""
-                            d_person = str(r_row.iloc[8]) if pd.notna(r_row.iloc[8]) else ""
+                            c_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
+                            c_name = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
+                            s_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else ""
+                            s_name = str(r_row.iloc[4]) if len(r_row) > 4 and pd.notna(r_row.iloc[4]) else ""
+                            r_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else ""
+                            d_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else ""
+                            d_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else ""
+                            app_user = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
+                            
+                            # 💡 【修正点】処理者名・承認者名の列ズレや不明を解消（列32: 処理者名 / 列30: 承認者名）
+                            mgr_user = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
+                            op_user = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"]
 
-                            st.markdown(f"""
-                                <div style="background: #f9f9f9; border: 1px solid #ddd; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                                    <div style="font-size: 13px; font-weight: bold; color: #333; margin-bottom: 5px;">
-                                        [{sub_i + 1}] 顧客名: {c_name}（コード: {c_code}） | 納品日: {d_date} | ルート: {r_code} | 納品者: {d_person}
-                                    </div>
-                            """, unsafe_allow_html=True)
+                            app_comment = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし"
 
-                            # 商品明細のコンパクト表示
-                            item_texts = []
+                            html_output += f"""
+                            <div class="section-box">
+                                <div class="section-title">📋 申請基本情報 [{sub_i + 1}]</div>
+                                <div class="info-grid" style="margin-bottom: 8px;">
+                                    <div class="info-item"><span class="label">顧客コード</span><span class="value">{c_code}</span></div>
+                                    <div class="info-item"><span class="label">顧客名（得意先名）</span><span class="value">{c_name}</span></div>
+                                    <div class="info-item"><span class="label">加盟店コード</span><span class="value">{s_code}</span></div>
+                                </div>
+                                <div class="info-grid" style="margin-bottom: 8px;">
+                                    <div class="info-item"><span class="label">加盟店名（店舗名）</span><span class="value">{s_name}</span></div>
+                                    <div class="info-grid"><span class="label">ルートコード</span><span class="value">{r_code}</span></div>
+                                    <div class="info-item"><span class="label">納品日</span><span class="value">{d_date}</span></div>
+                                </div>
+                                <div class="info-grid">
+                                    <div class="info-item"><span class="label">納品者</span><span class="value">{d_person}</span></div>
+                                    <div class="info-item"><span class="label">申請者名</span><span class="value">{app_user}</span></div>
+                                    <div class="info-item"><span class="label">処理者</span><span class="value">{op_user}</span></div>
+                                </div>
+                            </div>
+                            
+                            <div class="section-box">
+                                <div class="section-title">📦 申請商品明細</div>
+                            """
+
+                            # 商品明細（最大5件）
+                            has_item_print = False
                             for pi in range(5):
                                 b_idx = 9 + (pi * 4)
                                 p_c = str(r_row.iloc[b_idx]) if b_idx < len(r_row) and pd.notna(r_row.iloc[b_idx]) else ""
                                 if p_c.strip():
+                                    has_item_print = True
                                     p_q = str(r_row.iloc[b_idx+1]) if b_idx+1 < len(r_row) and pd.notna(r_row.iloc[b_idx+1]) else ""
                                     p_pr = str(r_row.iloc[b_idx+2]) if b_idx+2 < len(r_row) and pd.notna(r_row.iloc[b_idx+2]) else ""
                                     p_flg = str(r_row.iloc[b_idx+3]) if b_idx+3 < len(r_row) and pd.notna(r_row.iloc[b_idx+3]) else ""
-                                    item_texts.append(f"<b>商品{pi+1}:</b> {p_c} (数量:{p_q}, 単価:{p_pr}, 伝票:{p_flg})")
+                                    
+                                    html_output += f"""
+                                    <div class="item-row">
+                                        <div><b>商品コード{pi+1}:</b> {p_c}</div>
+                                        <div><b>数量:</b> {p_q}</div>
+                                        <div><b>単価:</b> {p_pr}</div>
+                                        <div><b>伝票出力:</b> {p_flg}</div>
+                                    </div>
+                                    """
+                            
+                            if not has_item_print:
+                                html_output += "<div style='font-size: 11px; color: #888; padding: 4px;'>商品明細なし</div>"
 
-                            if item_texts:
-                                st.markdown(f"<div style='font-size: 12px; color: #555;'>{' | '.join(item_texts)}</div>", unsafe_allow_html=True)
-                            else:
-                                st.markdown("<div style='font-size: 12px; color: #888;'>商品明細なし</div>", unsafe_allow_html=True)
+                            html_output += f"""
+                            </div>
+                            <div class="section-box" style="margin-bottom: 20px;">
+                                <div class="section-title">💬 申請コメント / 特記事項</div>
+                                <div style="font-size: 12px; color: #333;">{app_comment}</div>
+                            </div>
+                            <hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
+                            """
 
-                            st.markdown("</div>", unsafe_allow_html=True)
-
-                        st.markdown("</div>", unsafe_allow_html=True)
+                        html_output += "</div>"
+                        st.markdown(html_output, unsafe_allow_html=True)
 
                     st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（余白を「なし」または「標準」にすると綺麗に収まります）。")
 
         except Exception as e:
             st.error(f"印刷データの読み込みエラー: {e}")
+
+# アプリ実行
+if __name__ == "__main__":
+    st.set_page_config(page_title="メンテナンス申請管理システム", layout="wide")
+    maintenance_admin_screen()
