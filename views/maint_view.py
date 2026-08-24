@@ -861,7 +861,7 @@ def maintenance_admin_screen():
                             """
 
                         html_output += "</div>"
-                        st.markdown(html_output, unsafe_allow_html=True)
+                        st.markdown(html_output)
 
                     st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（余白を「なし」または「標準」にすると綺麗に収まります）。")
 
