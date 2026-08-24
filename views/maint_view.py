@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import time
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbywXIMKfujyW1-mjwGGMi7q9WpXha5HpXWmjRxoPd34d4bgPJ-DvVLzMUGa6xwBntXh/exec"
@@ -11,6 +11,9 @@ TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgH
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
+
+# 💡 日本時間（JST = UTC+9）のタイムゾーン定義
+JST = timezone(timedelta(hours=+9), 'JST')
 
 
 def post_to_gas(payload):
@@ -70,19 +73,14 @@ def maintenance_admin_screen():
                             dtype=str,
                             storage_options={"User-Agent": "Mozilla/5.0"}
                         )
-                        # B列（index: 1）が顧客コード
                         matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
                             st.session_state["searched_ccode"] = str(cust_code_input)
                             st.session_state[f"ccode{clear_suffix}"] = str(cust_code_input)
-                            
-                            # A列(0): 加盟店名（担当者名）
                             st.session_state[f"sname{clear_suffix}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
-                            # C列(2): 顧客名
                             st.session_state[f"cname{clear_suffix}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
-                            # E列(4): 加盟店コード（納品書印字顧客コード）
                             st.session_state[f"scode{clear_suffix}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
                             
                             st.toast("顧客情報を取得しました！", icon="✅")
@@ -139,7 +137,9 @@ def maintenance_admin_screen():
                     if not route_code.strip() or not delivery_date:
                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
                     else:
-                        now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                        # 💡 確実に日本時間（JST）で現在時刻を作成
+                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                        
                         full_row = [
                             now_str, applicant, customer_code, customer_name,
                             store_name, store_code, delivery_date, route_code, delivery_person
@@ -316,7 +316,8 @@ def maintenance_admin_screen():
                                 btn_delete = col_del.form_submit_button("🗑️ 削除", use_container_width=True)
 
                                 mgr_name = st.session_state["user_name"]
-                                now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                                # 💡 管理アクションの時刻も日本時間（JST）で固定
+                                now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
                                 if btn_approve or btn_reject or btn_delete:
                                     updated_row = [
@@ -420,7 +421,8 @@ def maintenance_admin_screen():
                                 btn_transfer = st.form_submit_button("📋 別シート（業務管理用）へ出力・転記", type="primary", use_container_width=True)
 
                                 if btn_transfer:
-                                    action_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                                    # 💡 業務転記時のアクション時刻も日本時間（JST）で固定
+                                    action_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
                                     op_user = st.session_state["user_name"]
 
                                     base_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
