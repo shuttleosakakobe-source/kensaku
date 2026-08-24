@@ -96,7 +96,6 @@ def maintenance_admin_screen():
             st.write("---")
 
             with st.form("submit_form"):
-                # 💡 Enterキー誤爆防止用ダミーボタン
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                 st.write("**📋 申請基本情報**")
@@ -179,7 +178,6 @@ def maintenance_admin_screen():
                         
                         with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {rej_comment}"):
                             with st.form(key=f"resubmit_form_{row_id}"):
-                                # 💡 Enterキー誤爆防止用ダミーボタン
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 申請基本情報修正**")
@@ -271,7 +269,6 @@ def maintenance_admin_screen():
 
                         with st.expander(f"⏳ 【承認待ち】{cust_name}（{cust_code}） | 行: {row_id}"):
                             with st.form(key=f"mgr_edit_form_{row_id}"):
-                                # 💡 Enterキー誤爆防止用ダミーボタン
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 申請基本情報（修正可能）**")
@@ -392,48 +389,56 @@ def maintenance_admin_screen():
                         with st.expander(expander_label):
                             st.write("**📋 申請内容**")
                             
-                            o1_1, o1_2, o1_3 = st.columns(3)
-                            o1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"op_ccode_{row_id}")
-                            o1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"op_cname_{row_id}")
-                            o1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"op_scode_{row_id}")
+                            o1_c1, o1_c2, o1_c3 = st.columns(3)
+                            o1_c1.markdown(f"**顧客コード**\n\n {str(row.iloc[2]) if pd.notna(row.iloc[2]) else '-'}")
+                            o1_c2.markdown(f"**顧客名（得意先名）**\n\n {str(row.iloc[3]) if pd.notna(row.iloc[3]) else '-'}")
+                            o1_c3.markdown(f"**加盟店コード**\n\n {str(row.iloc[5]) if pd.notna(row.iloc[5]) else '-'}")
 
-                            o2_1, o2_2, o2_3 = st.columns(3)
-                            o2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"op_sname_{row_id}")
-                            o2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"op_rcode_{row_id}")
-                            o2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"op_ddate_{row_id}")
+                            o2_c1, o2_c2, o2_c3 = st.columns(3)
+                            o2_c1.markdown(f"**加盟店名（店舗名）**\n\n {str(row.iloc[4]) if pd.notna(row.iloc[4]) else '-'}")
+                            o2_c2.markdown(f"**ルートコード**\n\n {str(row.iloc[7]) if pd.notna(row.iloc[7]) else '-'}")
+                            o2_c3.markdown(f"**納品日**\n\n {str(row.iloc[6]) if pd.notna(row.iloc[6]) else '-'}")
 
-                            o3_1, o3_2, o3_3 = st.columns(3)
-                            o3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"op_dperson_{row_id}")
-                            o3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"op_app_{row_id}")
+                            o3_c1, o3_c2, o3_c3 = st.columns(3)
+                            o3_c1.markdown(f"**納品者**\n\n {str(row.iloc[8]) if pd.notna(row.iloc[8]) else '-'}")
+                            o3_c2.markdown(f"**申請者名**\n\n {str(row.iloc[1]) if pd.notna(row.iloc[1]) else '-'}")
+                            o3_c3.markdown("")
 
                             st.write("---")
                             st.write("**📦 申請商品**")
                             for i in range(5):
                                 base_idx = 9 + (i * 4)
                                 p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
-                                q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
-                                pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
-                                flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
+                                if p_val.strip():
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "-"
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "-"
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "-"
+                                    
+                                    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+                                    c1.markdown(f"商品コード {i+1}: **{p_val}**")
+                                    c2.markdown(f"数量: **{q_val}**")
+                                    c3.markdown(f"単価: **{pr_val}**")
+                                    c4.markdown(f"伝票出力: **{flg_val}**")
 
-                                c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-                                c1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"op_p_{row_id}_{i}")
-                                c2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"op_q_{row_id}_{i}")
-                                c3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"op_pr_{row_id}_{i}")
-                                c4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"op_flg_{row_id}_{i}")
+                            app_com_val = str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else ""
+                            if app_com_val.strip():
+                                st.markdown(f"**申請者コメント:** {app_com_val}")
 
-                            st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", disabled=True, key=f"op_app_com_{row_id}")
-
+                            st.write("---")
                             with st.form(key=f"transfer_form_{row_id}"):
-                                # 💡 Enterキー誤爆防止用ダミーボタン
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
-                                btn_transfer = st.form_submit_button("📋 別シート（業務管理用）へ出力・転記", type="primary", use_container_width=True)
+                                op_reject_reason = st.text_input("⚠️ 差戻し理由（※業務側で不備がある場合のみ入力）", key=f"op_rej_reason_{row_id}")
+                                
+                                col_trans, col_rej = st.columns(2)
+                                btn_transfer = col_trans.form_submit_button("📋 別シートへ出力・転記", type="primary", use_container_width=True)
+                                btn_op_reject = col_rej.form_submit_button("↩️ 申請者へ差戻し", use_container_width=True)
+
+                                action_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                op_user = st.session_state["user_name"]
 
                                 if btn_transfer:
-                                    action_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
-                                    op_user = st.session_state["user_name"]
-
                                     base_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
                                     transfer_row = base_row + [action_time, op_user, op_memo]
 
@@ -454,6 +459,46 @@ def maintenance_admin_screen():
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
                                             st.rerun()
+
+                                elif btn_op_reject:
+                                    if not op_reject_reason.strip():
+                                        st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
+                                    else:
+                                        # 管理職承認列（列30=index30）を「差戻し」にし、備考列（列32=index32など）に理由をセットする構造に合わせます
+                                        # rowのリストを元に更新行を作成
+                                        updated_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
+                                        
+                                        payload = {
+                                            "action": "REJECT_MAINTENANCE",
+                                            "target_sheet_url": TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": updated_row # GAS側でステータスやコメントを書き換える処理に対応
+                                        }
+                                        
+                                        # 念のため、GAS側へ「業務側からの差戻し」であることを伝えるか、既存の REJECT_MAINTENANCE アクションを活用します
+                                        # REJECT_MAINTENANCE は末尾に ["差戻し", 日時, コメント] を上書きする仕組みになっています。
+                                        # 既存のREJECT_MAINTENANCEの構造に合わせてデータを構築し直します。
+                                        
+                                        # ユーザーデータ部分を取り出し（商品まで）
+                                        base_data = updated_row[:29] # タイムゾン・申請者〜商品群まで
+                                        mgr_app_name = f"{op_user}(業務担当)"
+                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
+
+                                        payload = {
+                                            "action": "REJECT_MAINTENANCE",
+                                            "target_sheet_url": TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": final_reject_row
+                                        }
+
+                                        res = post_to_gas(payload)
+                                        if res.get("status") == "success":
+                                            st.cache_data.clear()
+                                            st.toast("申請を差し戻しました。", icon="↩️")
+                                            time.sleep(1)
+                                            st.rerun()
+                                        else:
+                                            st.error(f"差戻し失敗: {res.get('message')}")
 
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
