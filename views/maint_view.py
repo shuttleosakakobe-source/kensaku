@@ -10,7 +10,6 @@ GAS_URL = "https://script.google.com/macros/s/AKfycbywXIMKfujyW1-mjwGGMi7q9WpXha
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
-# 💡 業務転記先シートのCSVリンク（メンテナンスチェックの元データとして使用）
 DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
@@ -28,13 +27,16 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
-    # 💡 【CSS追加】disabled（無効化）された入力欄の文字を濃くする設定
+    # 💡 【CSS追加】disabled入力欄の文字色調整 ＆ Enterキー無効化用ダミーボタンの完全非表示
     st.markdown("""
         <style>
         input:disabled, textarea:disabled {
             -webkit-text-fill-color: #31333F !important;
             color: #31333F !important;
             opacity: 1 !important;
+        }
+        div[data-testid="stForm"] button[kind="secondary"][disabled] {
+            display: none !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -61,7 +63,6 @@ def maintenance_admin_screen():
     if "searched_ccode" not in st.session_state:
         st.session_state["searched_ccode"] = ""
 
-    # 💡 タブに「🔍 メンテナンスチェック」を追加
     tab1, tab2, tab3, tab4 = st.tabs([
         "📝 スタッフ申請・差戻し対応", 
         "🔍 管理職チェック", 
@@ -517,7 +518,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 4: メンテナンスチェック画面（新設）
+    # TAB 4: メンテナンスチェック画面
     # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
@@ -532,15 +533,12 @@ def maintenance_admin_screen():
             else:
                 st.success(f"📋 チェック対象データ: **{len(df_dest)} 件**")
 
-                # 💡 加盟店別並び替え機能
                 col_sort1, col_sort2 = st.columns([3, 1])
                 sort_store = col_sort1.checkbox("🏪 加盟店別（店舗名）で並び替える", value=False, key="chk_sort_store")
                 sort_order = col_sort2.selectbox("並び順", ["昇順 (あ〜わ)", "降順 (わ〜あ)"], index=0, key="chk_sort_order", label_visibility="collapsed")
 
                 df_display = df_dest.copy()
                 if sort_store:
-                    # 加盟店名（店舗名）は元データのインデックス4にある想定
-                    # 安全のため列が存在するか確認
                     store_col_idx = 4
                     if len(df_display.columns) > store_col_idx:
                         is_ascending = (sort_order == "昇順 (あ〜わ)")
@@ -574,9 +572,29 @@ def maintenance_admin_screen():
                             c6.text_input("納品日", value=deliv_date, disabled=True, key=f"chk_ddate_{row_id}")
 
                             st.write("---")
+                            st.write("**📦 登録商品明細**")
+                            has_item = False
+                            for i in range(5):
+                                base_idx = 9 + (i * 4)
+                                p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+                                if p_val.strip():
+                                    has_item = True
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
+                                    
+                                    ic1, ic2, ic3, ic4 = st.columns([3, 2, 2, 2])
+                                    ic1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"chk_p_{row_id}_{i}")
+                                    ic2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"chk_q_{row_id}_{i}")
+                                    ic3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"chk_pr_{row_id}_{i}")
+                                    ic4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"chk_flg_{row_id}_{i}")
+                            
+                            if not has_item:
+                                st.info("登録されている商品明細はありません。")
+
+                            st.write("---")
                             chk_memo = st.text_input("チェック用メモ / 特記事項", key=f"chk_memo_{row_id}")
                             
-                            # 💡 差戻し先の選択（「業務担当」または「申請者」）
                             st.write("⚠️ **差戻しを行う場合の設定**")
                             r_col1, r_col2 = st.columns(2)
                             reject_target = r_col1.selectbox("差戻し先を選択", ["業務担当", "申請者"], key=f"chk_rej_target_{row_id}")
