@@ -4,10 +4,7 @@ import requests
 import json
 from datetime import datetime, timezone, timedelta
 
-# ==========================================
-# 設定・定数
-# ==========================================
-GAS_URL = "https://script.google.com/macros/s/AKfycbzrjyHZ8Gmu-AZbHMH1TF1yVlNMWVo1BepW_2hscsnJzMOxTZWiSREvOWE4AuApipo5Ag/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbwLUMtoHyxx8kX0PpwxeNqnH-uVF1kVGFi3WVo8f6URehPcpexohXlltFPfwYe5dkjiGw/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -28,7 +25,7 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
-    st.set_page_config(page_title="メンテナンス申請・承認管理システム", layout="wide")
+    st.set_page_config(page_title="メンテナンス申請管理システム", layout="wide")
     st.header("📦 メンテナンス申請・承認・業務処理システム")
 
     if "user_name" not in st.session_state:
@@ -39,7 +36,6 @@ def maintenance_admin_screen():
 
     clear_suffix = f"_{st.session_state['form_clear_key']}"
 
-    # タブ構成
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📝 スタッフ申請・差戻し対応", 
         "🔍 管理職チェック", 
@@ -48,24 +44,13 @@ def maintenance_admin_screen():
         "🖨️ フォーマット転記・PDF出力"
     ])
 
-    # ==========================================
-    # TAB 1: スタッフ申請・差戻し対応
-    # ==========================================
     with tab1:
         st.subheader("📝 新規メンテナンス申請 / 差戻しデータの修正・再申請")
-        
-        try:
-            df_cust = pd.read_csv(CUSTOMER_MASTER_CSV, dtype=str)
-        except Exception as e:
-            df_cust = pd.DataFrame()
-            st.warning(f"顧客マスターの読み込みに失敗しました: {e}")
-
         try:
             df_main = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
         except Exception:
             df_main = pd.DataFrame()
 
-        # 差戻しデータの確認（申請者本人向け、AC列=29列目が「差戻し」の行）
         rejected_df = pd.DataFrame()
         if not df_main.empty and len(df_main.columns) >= 29:
             rejected_df = df_main[df_main.iloc[:, 28].fillna("").str.strip() == "差戻し"]
@@ -76,11 +61,11 @@ def maintenance_admin_screen():
 
         if not rejected_df.empty:
             st.markdown("---")
-            st.warning(f"⚠️ 差戻しされているデータが **{len(rejected_df)} 件** あります。修正して再申請してください。")
+            st.warning(f"⚠️ 差戻しされているデータが **{len(rejected_df)} 件** あります。")
             selected_reject_idx = st.selectbox(
                 "修正する差戻しデータを選択", 
                 options=rejected_df.index,
-                format_func=lambda idx: f"行 {idx+1} | 加盟店: {rejected_df.loc[idx, df_main.columns[4]] if len(df_main.columns)>4 else ''} | 理由: {rejected_df.loc[idx, df_main.columns[30]] if len(df_main.columns)>30 else ''}",
+                format_func=lambda idx: f"行 {idx+1} | 加盟店: {rejected_df.loc[idx, df_main.columns[4]] if len(df_main.columns)>4 else ''}",
                 key=f"sel_reject{clear_suffix}"
             )
             if selected_reject_idx is not None:
@@ -105,7 +90,7 @@ def maintenance_admin_screen():
             edit_mode = True
             default_vals = st.session_state["edit_defaults"]
             target_row_index = st.session_state["edit_row_index"]
-            st.info(f"ℹ️ 行番号 {target_row_index} の差戻しデータを編集中です。")
+            st.info(f"ℹ️ 行番号 {target_row_index} のデータを編集中です。")
             if st.button("新規申請モードに戻る", key=f"cancel_edit{clear_suffix}"):
                 del st.session_state["edit_defaults"]
                 del st.session_state["edit_row_index"]
@@ -151,7 +136,6 @@ def maintenance_admin_screen():
                     "route_code": route_code,
                     "items_flat": items_flat
                 }
-
                 if edit_mode and target_row_index:
                     payload["status"] = "RESUBMIT_MAINTENANCE"
                     payload["row_index"] = target_row_index
@@ -170,9 +154,6 @@ def maintenance_admin_screen():
                     else:
                         st.error(f"送信エラー: {res.get('message')}")
 
-    # ==========================================
-    # TAB 2: 管理職チェック
-    # ==========================================
     with tab2:
         st.subheader("🔍 管理職チェック・承認 / 差戻し / 削除")
         try:
@@ -185,59 +166,39 @@ def maintenance_admin_screen():
         else:
             st.dataframe(df_mgr, use_container_width=True)
             st.markdown("---")
-            
-            row_idx_input = st.number_input("処理する行番号を選択（1始まりの行番号）", min_value=1, max_value=len(df_mgr)+1, value=1, step=1)
+            row_idx_input = st.number_input("処理する行番号を選択", min_value=1, max_value=len(df_mgr)+1, value=1, step=1)
             manager_name = st.text_input("承認者（管理職名）", value=st.session_state["user_name"])
             comment_input = st.text_input("コメント（差戻し理由など）", value="")
 
             c1, c2, c3 = st.columns(3)
             with c1:
                 if st.button("✅ 承認する", type="primary"):
-                    payload = {
-                        "status": "APPROVE_MAINTENANCE",
-                        "target_sheet_url": TARGET_SHEET_URL,
-                        "row_index": int(row_idx_input),
-                        "manager_name": manager_name,
-                        "comment": comment_input
-                    }
-                    res = post_to_gas(payload)
+                    res = post_to_gas({
+                        "status": "APPROVE_MAINTENANCE", "target_sheet_url": TARGET_SHEET_URL,
+                        "row_index": int(row_idx_input), "manager_name": manager_name, "comment": comment_input
+                    })
                     if res.get("status") == "success":
-                        st.success("承認処理が完了しました。")
+                        st.success("承認完了")
                         st.rerun()
-                    else:
-                        st.error(f"エラー: {res.get('message')}")
             with c2:
                 if st.button("↩️ 差戻しする"):
-                    payload = {
-                        "status": "REJECT_MAINTENANCE",
-                        "target_sheet_url": TARGET_SHEET_URL,
-                        "row_index": int(row_idx_input),
-                        "comment": comment_input
-                    }
-                    res = post_to_gas(payload)
+                    res = post_to_gas({
+                        "status": "REJECT_MAINTENANCE", "target_sheet_url": TARGET_SHEET_URL,
+                        "row_index": int(row_idx_input), "comment": comment_input
+                    })
                     if res.get("status") == "success":
-                        st.warning("差戻し処理が完了しました。")
+                        st.warning("差戻し完了")
                         st.rerun()
-                    else:
-                        st.error(f"エラー: {res.get('message')}")
             with c3:
                 if st.button("🗑️ 削除する"):
-                    payload = {
-                        "status": "DELETE_MAINTENANCE",
-                        "target_sheet_url": TARGET_SHEET_URL,
-                        "row_index": int(row_idx_input),
-                        "comment": comment_input
-                    }
-                    res = post_to_gas(payload)
+                    res = post_to_gas({
+                        "status": "DELETE_MAINTENANCE", "target_sheet_url": TARGET_SHEET_URL,
+                        "row_index": int(row_idx_input), "comment": comment_input
+                    })
                     if res.get("status") == "success":
-                        st.error("削除処理が完了しました。")
+                        st.error("削除完了")
                         st.rerun()
-                    else:
-                        st.error(f"エラー: {res.get('message')}")
 
-    # ==========================================
-    # TAB 3: 業務担当：シート転記
-    # ==========================================
     with tab3:
         st.subheader("🚚 業務担当：承認済みデータの別シート転記")
         try:
@@ -255,45 +216,29 @@ def maintenance_admin_screen():
 
             if st.button("📥 指定行を業務専用シートへ転記する", type="primary"):
                 target_row_data = df_op.iloc[op_row_idx - 1].fillna("").tolist()
-                action_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
-
-                payload = {
-                    "status": "TRANSFER_TO_OPERATOR",
-                    "target_sheet_url": TARGET_SHEET_URL,
-                    "dest_sheet_url": DEST_SHEET_URL,
-                    "row_index": int(op_row_idx),
-                    "transfer_row": target_row_data,
-                    "action_time": action_time,
-                    "op_user": op_user
-                }
-                res = post_to_gas(payload)
+                res = post_to_gas({
+                    "status": "TRANSFER_TO_OPERATOR", "target_sheet_url": TARGET_SHEET_URL,
+                    "dest_sheet_url": DEST_SHEET_URL, "row_index": int(op_row_idx),
+                    "transfer_row": target_row_data, "action_time": datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "op_user": op_user
+                })
                 if res.get("status") == "success":
-                    st.success("別スプレッドシートへの転記とステータス更新が完了しました！")
+                    st.success("転記完了！")
                     st.rerun()
-                else:
-                    st.error(f"転記エラー: {res.get('message')}")
 
-    # ==========================================
-    # TAB 4: メンテナンスチェック
-    # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
         try:
             df_check = pd.read_csv(DEST_SHEET_CSV, dtype=str)
         except Exception:
             df_check = pd.DataFrame()
-
         if df_check.empty:
             st.info("チェック対象データがありません。")
         else:
             st.dataframe(df_check, use_container_width=True)
 
-    # ==========================================
-    # TAB 5: フォーマット転記・PDF出力
-    # ==========================================
     with tab5:
         st.subheader("🖨️ 専用スプレッドシートフォーマット出力・PDF印刷")
-        st.caption("選択した加盟店のデータを指定フォーマット（最大3件/ページ）に自動転記し、スプレッドシートを開いてPDF出力・印刷を行います。")
+        st.caption("選択した加盟店のデータを指定フォーマット（最大3件/ページ）に自動転記し、スプレッドシートを開いてPDF出力を行います。")
 
         try:
             st.cache_data.clear()
@@ -346,21 +291,19 @@ def maintenance_admin_screen():
                             }
                             records_payload.append(rec_dict)
 
-                        payload = {
+                        res = post_to_gas({
                             "status": "EXPORT_PRINT_FORMAT",
                             "dest_sheet_url": DEST_SHEET_URL,
                             "records": records_payload
-                        }
+                        })
 
-                        with st.spinner("スプレッドシートのフォーマットへ転記中..."):
-                            res = post_to_gas(payload)
-                            if res.get("status") == "success":
-                                sheet_url = res.get("sheet_url")
-                                st.success("🎉 フォーマットへの転記が完了しました！")
-                                st.markdown(f"👉 **[印刷用スプレッドシート（指定フォーマット）を開く]({sheet_url})**")
-                                st.info("リンク先のスプレッドシートを開き、Googleスプレッドシートの印刷機能（Ctrl+P / ⌘+P）からPDFとして保存・印刷を行ってください。")
-                            else:
-                                st.error(f"転記失敗: {res.get('message')}")
+                        if res.get("status") == "success":
+                            sheet_url = res.get("sheet_url")
+                            st.success("🎉 指定フォーマットへの転記が完了しました！")
+                            st.markdown(f"👉 **[印刷用スプレッドシート（指定フォーマット）を開く]({sheet_url})**")
+                            st.info("スプレッドシートを開き、印刷プレビュー（Ctrl+P / ⌘+P）からPDFとして保存してください。")
+                        else:
+                            st.error(f"転記失敗: {res.get('message')}")
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
