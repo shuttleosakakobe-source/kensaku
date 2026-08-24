@@ -430,7 +430,6 @@ def maintenance_admin_screen():
                             o2_c2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"v_rcode_{row_id}")
                             o2_c3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"v_ddate_{row_id}")
 
-                            # 💡 TAB3でも納品者を含めて綺麗に3カラム配置
                             o3_c1, o3_c2, o3_c3 = st.columns(3)
                             o3_c1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"v_dperson_{row_id}")
                             o3_c2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"v_app_{row_id}")
@@ -556,12 +555,17 @@ def maintenance_admin_screen():
                     cust_code = str(row.iloc[2]) if len(row) > 2 and pd.notna(row.iloc[2]) else ""
                     deliv_date = str(row.iloc[6]) if len(row) > 6 and pd.notna(row.iloc[6]) else ""
                     
-                    # 💡 各種担当者情報の取得 (納品者・承認者・処理者)
                     delivery_person_val = str(row.iloc[8]) if len(row) > 8 and pd.notna(row.iloc[8]) else ""
                     mgr_name_val = str(row.iloc[30]) if len(row) > 30 and pd.notna(row.iloc[30]) else "不明"
                     op_user_val = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "不明"
 
+                    # 💡 すでにAJ列・AK列にチェック記録がある場合はそれを取得・表示
+                    checked_time_val = str(row.iloc[35]) if len(row) > 35 and pd.notna(row.iloc[35]) else ""
+                    checked_user_val = str(row.iloc[36]) if len(row) > 36 and pd.notna(row.iloc[36]) else ""
+
                     expander_label = f"📌 【加盟店: {store_name or '未設定'}】 顧客名: {cust_name}（{cust_code}） | 納品日: {deliv_date}"
+                    if checked_time_val:
+                        expander_label += f" ✅【チェック済み】"
 
                     with st.expander(expander_label):
                         with st.form(key=f"check_form_{row_id}"):
@@ -578,11 +582,14 @@ def maintenance_admin_screen():
                             c5.text_input("ルートコード", value=str(row.iloc[7]) if len(row) > 7 and pd.notna(row.iloc[7]) else "", disabled=True, key=f"chk_rcode_{row_id}")
                             c6.text_input("納品日", value=deliv_date, disabled=True, key=f"chk_ddate_{row_id}")
 
-                            # 💡 TAB4でも「納品者」「承認者」「処理者」をきれいに並べて表示
                             c7, c8, c9 = st.columns(3)
                             c7.text_input("納品者", value=delivery_person_val, disabled=True, key=f"chk_dperson_{row_id}")
                             c8.text_input("承認者", value=mgr_name_val, disabled=True, key=f"chk_mgr_{row_id}")
                             c9.text_input("処理者（業務担当）", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
+
+                            # 💡 すでにチェック済みの場合は情報表示
+                            if checked_time_val:
+                                st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
 
                             st.write("---")
                             st.write("**📦 登録商品明細**")
@@ -618,9 +625,34 @@ def maintenance_admin_screen():
                             btn_checked_reject = col_ng.form_submit_button("↩️ 指定先へ差戻し", use_container_width=True)
 
                             if btn_checked_ok:
-                                st.toast(f"行 {row_id} のメンテナンスチェックを完了しました！", icon="✅")
-                                time.sleep(1)
-                                st.rerun()
+                                check_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                checker_name = st.session_state["user_name"]
+
+                                # 既存の行データを整形し、AJ列(インデックス35)、AK列(インデックス36)にデータを埋め込む
+                                clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
+                                
+                                # 配列の長さが37未満の場合は空文字でパディングする（AJ=35, AK=36を確保するため）
+                                while len(clean_base_row) < 37:
+                                    clean_base_row.append("")
+
+                                clean_base_row[35] = check_time
+                                clean_base_row[36] = checker_name
+
+                                payload = {
+                                    "action": "UPDATE_MAINTENANCE_CHECK",
+                                    "target_sheet_url": DEST_SHEET_URL,  # 転記先（DEST）シートを更新
+                                    "row_index": row_id,
+                                    "updated_row": clean_base_row
+                                }
+
+                                res = post_to_gas(payload)
+                                if res.get("status") == "success":
+                                    st.cache_data.clear()
+                                    st.toast(f"行 {row_id} のメンテナンスチェックを完了しました（AJ: タイムスタンプ, AK: チェック者記録）！", icon="✅")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"更新失敗: {res.get('message')}")
 
                             elif btn_checked_reject:
                                 if not reject_reason.strip():
