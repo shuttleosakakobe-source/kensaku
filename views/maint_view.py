@@ -309,6 +309,9 @@ def maintenance_admin_screen():
                     st.info("現在、未承認の申請はありません。")
                 else:
                     st.warning(f"承認待ちデータ: **{len(pending_df)} 件**")
+                    st.dataframe(pending_df, use_container_width=True)
+            else:
+                st.info("データが読み込めないか、形式が異なります。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -317,12 +320,30 @@ def maintenance_admin_screen():
     # ==========================================
     with tab3:
         st.subheader("🚚 業務担当：承認済みデータの転記・処理")
+        try:
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
+            if not df.empty:
+                st.info("承認済みデータの確認・業務処理を行います。")
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("データがありません。")
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
 
     # ==========================================
     # TAB 4: メンテナンスチェック画面
     # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
+        try:
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
+            if not df.empty:
+                st.info("メンテナンスの進捗状況を確認・チェックします。")
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("データがありません。")
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
 
     # ==========================================
     # TAB 5: 加盟店別 印刷プレビュー画面 ＋ gspread自動転写・PDFダウンロード連携
@@ -339,7 +360,12 @@ def maintenance_admin_screen():
                 st.info("現在、印刷対象のデータはありません。")
             else:
                 store_col_idx = 4
-                df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
+                
+                if len(df_print.columns) > store_col_idx:
+                    df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
+                else:
+                    df_print["_store_name"] = "未設定の加盟店"
+
                 stores = df_print["_store_name"].unique()
 
                 selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select_v2")
