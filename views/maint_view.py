@@ -26,6 +26,17 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
+    # 💡 【CSS追加】disabled（無効化）された入力欄の文字を濃くする設定
+    st.markdown("""
+        <style>
+        input:disabled, textarea:disabled {
+            -webkit-text-fill-color: #31333F !important;
+            color: #31333F !important;
+            opacity: 1 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     st.header("📦 メンテナンス申請・承認・業務処理システム")
 
     if "user_name" not in st.session_state:
@@ -389,20 +400,21 @@ def maintenance_admin_screen():
                         with st.expander(expander_label):
                             st.write("**📋 申請内容**")
                             
+                            # 💡 【修正ポイント】他の入力欄と同じように枠（テキスト入力風）を維持しつつ、disabled=Trueで変更不可にし、CSSで文字をくっきり濃く表示
                             o1_c1, o1_c2, o1_c3 = st.columns(3)
-                            o1_c1.markdown(f"**顧客コード**\n\n {str(row.iloc[2]) if pd.notna(row.iloc[2]) else '-'}")
-                            o1_c2.markdown(f"**顧客名（得意先名）**\n\n {str(row.iloc[3]) if pd.notna(row.iloc[3]) else '-'}")
-                            o1_c3.markdown(f"**加盟店コード**\n\n {str(row.iloc[5]) if pd.notna(row.iloc[5]) else '-'}")
+                            o1_c1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"v_ccode_{row_id}")
+                            o1_c2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"v_cname_{row_id}")
+                            o1_c3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"v_scode_{row_id}")
 
                             o2_c1, o2_c2, o2_c3 = st.columns(3)
-                            o2_c1.markdown(f"**加盟店名（店舗名）**\n\n {str(row.iloc[4]) if pd.notna(row.iloc[4]) else '-'}")
-                            o2_c2.markdown(f"**ルートコード**\n\n {str(row.iloc[7]) if pd.notna(row.iloc[7]) else '-'}")
-                            o2_c3.markdown(f"**納品日**\n\n {str(row.iloc[6]) if pd.notna(row.iloc[6]) else '-'}")
+                            o2_c1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"v_sname_{row_id}")
+                            o2_c2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"v_rcode_{row_id}")
+                            o2_c3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"v_ddate_{row_id}")
 
                             o3_c1, o3_c2, o3_c3 = st.columns(3)
-                            o3_c1.markdown(f"**納品者**\n\n {str(row.iloc[8]) if pd.notna(row.iloc[8]) else '-'}")
-                            o3_c2.markdown(f"**申請者名**\n\n {str(row.iloc[1]) if pd.notna(row.iloc[1]) else '-'}")
-                            o3_c3.markdown("")
+                            o3_c1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"v_dperson_{row_id}")
+                            o3_c2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"v_app_{row_id}")
+                            o3_c3.text_input("", value="", disabled=True, label_visibility="hidden", key=f"v_dummy_{row_id}")
 
                             st.write("---")
                             st.write("**📦 申請商品**")
@@ -410,19 +422,19 @@ def maintenance_admin_screen():
                                 base_idx = 9 + (i * 4)
                                 p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
                                 if p_val.strip():
-                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else "-"
-                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else "-"
-                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else "-"
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
                                     
                                     c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-                                    c1.markdown(f"商品コード {i+1}: **{p_val}**")
-                                    c2.markdown(f"数量: **{q_val}**")
-                                    c3.markdown(f"単価: **{pr_val}**")
-                                    c4.markdown(f"伝票出力: **{flg_val}**")
+                                    c1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"v_p_{row_id}_{i}")
+                                    c2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"v_q_{row_id}_{i}")
+                                    c3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"v_pr_{row_id}_{i}")
+                                    c4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"v_flg_{row_id}_{i}")
 
                             app_com_val = str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else ""
                             if app_com_val.strip():
-                                st.markdown(f"**申請者コメント:** {app_com_val}")
+                                st.text_area("申請者コメント", value=app_com_val, disabled=True, key=f"v_com_{row_id}")
 
                             st.write("---")
                             with st.form(key=f"transfer_form_{row_id}"):
@@ -464,24 +476,8 @@ def maintenance_admin_screen():
                                     if not op_reject_reason.strip():
                                         st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
                                     else:
-                                        # 管理職承認列（列30=index30）を「差戻し」にし、備考列（列32=index32など）に理由をセットする構造に合わせます
-                                        # rowのリストを元に更新行を作成
                                         updated_row = ["" if pd.isna(x) else str(x) for x in row.values.tolist()]
-                                        
-                                        payload = {
-                                            "action": "REJECT_MAINTENANCE",
-                                            "target_sheet_url": TARGET_SHEET_URL,
-                                            "row_index": row_id,
-                                            "updated_row": updated_row # GAS側でステータスやコメントを書き換える処理に対応
-                                        }
-                                        
-                                        # 念のため、GAS側へ「業務側からの差戻し」であることを伝えるか、既存の REJECT_MAINTENANCE アクションを活用します
-                                        # REJECT_MAINTENANCE は末尾に ["差戻し", 日時, コメント] を上書きする仕組みになっています。
-                                        # 既存のREJECT_MAINTENANCEの構造に合わせてデータを構築し直します。
-                                        
-                                        # ユーザーデータ部分を取り出し（商品まで）
-                                        base_data = updated_row[:29] # タイムゾン・申請者〜商品群まで
-                                        mgr_app_name = f"{op_user}(業務担当)"
+                                        base_data = updated_row[:29]
                                         final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
 
                                         payload = {
