@@ -5,14 +5,14 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbywXIMKfujyW1-mjwGGMi7q9WpXha5HpXWmjRxoPd34d4bgPJ-DvVLzMUGa6xwBntXh/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbyVRKr8MKGrQbNFGzvUbgn24uOnQboav4HuzyhwtdEHlIfqDpHGPcTcX1I_UbaE4Du4QQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
 DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
-# 💡 日本時間（JST = UTC+9）のタイムゾーン定義
+# 日本時間（JST = UTC+9）のタイムゾーン定義
 JST = timezone(timedelta(hours=+9), 'JST')
 
 
@@ -96,6 +96,9 @@ def maintenance_admin_screen():
             st.write("---")
 
             with st.form("submit_form"):
+                # 💡 Enterキー誤爆防止用ダミーボタン
+                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
                 st.write("**📋 申請基本情報**")
                 
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
@@ -137,7 +140,6 @@ def maintenance_admin_screen():
                     if not route_code.strip() or not delivery_date:
                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
                     else:
-                        # 💡 確実に日本時間（JST）で現在時刻を作成
                         now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
                         
                         full_row = [
@@ -177,6 +179,9 @@ def maintenance_admin_screen():
                         
                         with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {rej_comment}"):
                             with st.form(key=f"resubmit_form_{row_id}"):
+                                # 💡 Enterキー誤爆防止用ダミーボタン
+                                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
                                 st.write("**📋 申請基本情報修正**")
                                 
                                 r1_1, r1_2, r1_3 = st.columns(3)
@@ -266,6 +271,9 @@ def maintenance_admin_screen():
 
                         with st.expander(f"⏳ 【承認待ち】{cust_name}（{cust_code}） | 行: {row_id}"):
                             with st.form(key=f"mgr_edit_form_{row_id}"):
+                                # 💡 Enterキー誤爆防止用ダミーボタン
+                                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
                                 st.write("**📋 申請基本情報（修正可能）**")
                                 
                                 m1_1, m1_2, m1_3 = st.columns(3)
@@ -316,7 +324,6 @@ def maintenance_admin_screen():
                                 btn_delete = col_del.form_submit_button("🗑️ 削除", use_container_width=True)
 
                                 mgr_name = st.session_state["user_name"]
-                                # 💡 管理アクションの時刻も日本時間（JST）で固定
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
                                 if btn_approve or btn_reject or btn_delete:
@@ -417,11 +424,13 @@ def maintenance_admin_screen():
                             st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", disabled=True, key=f"op_app_com_{row_id}")
 
                             with st.form(key=f"transfer_form_{row_id}"):
+                                # 💡 Enterキー誤爆防止用ダミーボタン
+                                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
                                 op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
                                 btn_transfer = st.form_submit_button("📋 別シート（業務管理用）へ出力・転記", type="primary", use_container_width=True)
 
                                 if btn_transfer:
-                                    # 💡 業務転記時のアクション時刻も日本時間（JST）で固定
                                     action_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
                                     op_user = st.session_state["user_name"]
 
