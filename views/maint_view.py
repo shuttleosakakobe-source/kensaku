@@ -9,8 +9,8 @@ GAS_URL = "https://script.google.com/macros/s/AKfycbwLUMtoHyxx8kX0PpwxeNqnH-uVF1
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
-DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
-DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv"
+DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=457221393#gid=457221393"
+DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv&gid=457221393"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 # 日本時間（JST = UTC+9）のタイムゾーン定義
@@ -27,7 +27,7 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
-    # 💡 【CSS調整】入力画面風の印刷レイアウト ＆ 印刷時のスタイル定義
+    # 💡 【CSS調整】指定レイアウトに合わせた帳票・印刷用スタイル定義
     st.markdown("""
         <style>
         input:disabled, textarea:disabled {
@@ -39,7 +39,7 @@ def maintenance_admin_screen():
             display: none !important;
         }
         
-        /* 🖨️ 印刷/PDF出力時のレイアウト最適化（A4サイズ・1ページ完結） */
+        /* 🖨️ 印刷/PDF出力時のレイアウト最適化（A4サイズ・3件1ページ） */
         @media print {
             body {
                 background: white !important;
@@ -50,78 +50,68 @@ def maintenance_admin_screen():
             }
             .print-sheet {
                 page-break-after: always;
-                border: 2px solid #333 !important;
-                padding: 15px !important;
-                margin-bottom: 20px !important;
+                border: none !important;
+                padding: 0px !important;
+                margin: 0px !important;
                 background: white !important;
                 box-shadow: none !important;
             }
         }
         
-        /* 画面上での帳票カード風スタイル */
+        /* 画面上での帳票プレビュー枠 */
         .print-sheet {
             border: 1px solid #d6d6d6;
-            padding: 20px;
+            padding: 25px;
             border-radius: 8px;
             margin-bottom: 25px;
             background: #ffffff;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            font-family: monospace, sans-serif;
         }
-        .sheet-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #31333F;
-            padding-bottom: 10px;
+        .sheet-block {
+            border: 1px solid #aaa;
+            padding: 10px;
             margin-bottom: 15px;
-        }
-        .sheet-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #31333F;
-            margin: 0;
-        }
-        .section-box {
-            background-color: #f8f9fa;
-            border: 1px solid #e9ecef;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 12px;
-        }
-        .section-title {
-            font-size: 13px;
-            font-weight: bold;
-            color: #495057;
-            margin-bottom: 8px;
-            border-bottom: 1px dashed #ced4da;
-            padding-bottom: 4px;
-        }
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            font-size: 12px;
-        }
-        .info-item span.label {
-            color: #6c757d;
-            display: block;
-            font-size: 10px;
-        }
-        .info-item span.value {
-            color: #212529;
-            font-weight: 500;
-            font-size: 13px;
-        }
-        .item-row {
-            display: grid;
-            grid-template-columns: 3fr 2fr 2fr 2fr;
-            gap: 8px;
-            background: #fff;
-            padding: 6px 10px;
-            border: 1px solid #dee2e6;
+            background: #fafafa;
             border-radius: 4px;
-            margin-bottom: 5px;
-            font-size: 12px;
+        }
+        .block-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 3px;
+        }
+        .grid-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+        .grid-cell {
+            background: #fff;
+            border: 1px solid #ccc;
+            padding: 4px 6px;
+            border-radius: 3px;
+        }
+        .grid-cell span.lbl {
+            font-size: 9px;
+            color: #666;
+            display: block;
+        }
+        .grid-cell span.val {
+            font-weight: bold;
+            color: #111;
+        }
+        .memo-cell {
+            background: #fff;
+            border: 1px solid #ccc;
+            padding: 6px;
+            font-size: 11px;
+            margin-top: 4px;
+            border-radius: 3px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -157,7 +147,7 @@ def maintenance_admin_screen():
     ])
 
     # ==========================================
-    # TAB 1: 申請・差戻し対応（元のまま）
+    # TAB 1: 申請・差戻し対応
     # ==========================================
     with tab1:
         st.subheader("📝 新規申請 / 差戻しデータ修正")
@@ -355,7 +345,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 2: 管理職承認（元のまま）
+    # TAB 2: 管理職承認
     # ==========================================
     with tab2:
         st.subheader("🔍 管理職：申請承認・編集")
@@ -461,7 +451,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 3: 業務担当（元のまま）
+    # TAB 3: 業務担当
     # ==========================================
     with tab3:
         st.subheader("🚚 業務担当：承認済みデータの転記・処理")
@@ -604,7 +594,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 4: メンテナンスチェック画面（元のまま）
+    # TAB 4: メンテナンスチェック画面
     # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
@@ -746,11 +736,11 @@ def maintenance_admin_screen():
             st.error(f"データ読み込みエラー: {e}")
 
     # ==========================================
-    # TAB 5: 加盟店別 印刷プレビュー画面（ご要望のHTMLプレビュー版）
+    # TAB 5: 加盟店別 印刷プレビュー画面（ご指定のセル・3件印刷仕様）
     # ==========================================
     with tab5:
-        st.subheader("🖨️ 加盟店別 印刷プレビュー（入力画面風フォーマット / A4・1ページ5件目安）")
-        st.caption("転記済みデータ（DESTシート）を加盟店ごとにグループ化し、入力フォームとまったく同じ項目レイアウトでA4サイズに美しく出力できます。")
+        st.subheader("🖨️ 加盟店別 印刷プレビュー（指定セル構成・1ページ最大3件）")
+        st.caption("スプレッドシート指定のセル配置（A4〜A16、A19〜A31、A34〜A46）に準拠したレイアウトで印刷・PDF出力を行います。")
 
         try:
             st.cache_data.clear()
@@ -763,103 +753,135 @@ def maintenance_admin_screen():
                 df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
                 stores = df_print["_store_name"].unique()
 
-                selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select")
+                selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select_v2")
 
                 if selected_store:
                     store_df = df_print[df_print["_store_name"] == selected_store]
                     total_records = len(store_df)
 
-                    st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※A4サイズ1枚あたり最大5件ずつ改ページされます。")
+                    st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※1ページに最大3件まで配置されます。")
 
-                    chunk_size = 5
+                    chunk_size = 3
                     chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
 
                     for page_idx, chunk in enumerate(chunks):
+                        # C1セル用（加盟店 ＋ スペース ＋ 様）
+                        c1_val = f"{selected_store} 様"
+
                         html_output = f"""
                         <div class="print-sheet">
-                            <div class="sheet-header">
-                                <h3 class="sheet-title">商品発注メンテナンス</h3>
-                                <div>
-                                    <span style="font-size: 13px; font-weight: bold; margin-right: 15px;">加盟店名: {selected_store}</span>
-                                    <span style="font-size: 12px; color: #555;">ページ: {page_idx + 1} / {len(chunks)}</span>
-                                </div>
+                            <div style="font-size: 14px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; margin-bottom: 10px; display: flex; justify-content: space-between;">
+                                <span>[C1] 当て先: {c1_val}</span>
+                                <span style="font-size: 12px; color: #555;">ページ: {page_idx + 1} / {len(chunks)} (最大3件)</span>
                             </div>
                         """
 
                         for sub_i, (_, r_row) in enumerate(chunk.iterrows()):
-                            c_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
-                            c_name = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
-                            s_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else ""
-                            s_name = str(r_row.iloc[4]) if len(r_row) > 4 and pd.notna(r_row.iloc[4]) else ""
-                            r_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else ""
-                            d_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else ""
-                            d_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else ""
-                            app_user = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
+                            # 項目の抽出
+                            store_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else "" # A4: 加盟店コード
+                            raw_cname = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
+                            cust_name = f"{raw_cname} 様" if raw_cname.strip() else "" # B4: 顧客名 + 様
                             
-                            mgr_user = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
-                            op_user = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"]
-
-                            app_comment = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし"
-
-                            html_output += f"""
-                            <div class="section-box">
-                                <div class="section-title">📋 申請基本情報 [{sub_i + 1}]</div>
-                                <div class="info-grid" style="margin-bottom: 8px;">
-                                    <div class="info-item"><span class="label">顧客コード</span><span class="value">{c_code}</span></div>
-                                    <div class="info-item"><span class="label">顧客名（得意先名）</span><span class="value">{c_name}</span></div>
-                                    <div class="info-item"><span class="label">加盟店コード</span><span class="value">{s_code}</span></div>
-                                </div>
-                                <div class="info-grid" style="margin-bottom: 8px;">
-                                    <div class="info-item"><span class="label">加盟店名（店舗名）</span><span class="value">{s_name}</span></div>
-                                    <div class="info-grid"><span class="label">ルートコード</span><span class="value">{r_code}</span></div>
-                                    <div class="info-item"><span class="label">納品日</span><span class="value">{d_date}</span></div>
-                                </div>
-                                <div class="info-grid">
-                                    <div class="info-item"><span class="label">納品者</span><span class="value">{d_person}</span></div>
-                                    <div class="info-item"><span class="label">申請者名</span><span class="value">{app_user}</span></div>
-                                    <div class="info-item"><span class="label">処理者</span><span class="value">{op_user}</span></div>
-                                </div>
-                            </div>
+                            manager = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認" # D4: 責任者
+                            operator = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"] # E4: 処理者
                             
-                            <div class="section-box">
-                                <div class="section-title">📦 申請商品明細</div>
-                            """
+                            cust_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else "" # E6: 顧客コード
+                            applicant = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else "" # E8: 申請者
+                            delivery_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else "" # E10: 納品者
+                            delivery_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else "" # E12: 納品日
+                            route_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else "" # E14: ルートコード
+                            
+                            special_note = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし" # A16: 特記事項
 
-                            has_item_print = False
+                            # 商品明細（最大5件だが、指定レイアウトに沿って各行に割り当て）
+                            items_data = []
                             for pi in range(5):
                                 b_idx = 9 + (pi * 4)
-                                p_c = str(r_row.iloc[b_idx]) if b_idx < len(r_row) and pd.notna(r_row.iloc[b_idx]) else ""
-                                if p_c.strip():
-                                    has_item_print = True
-                                    p_q = str(r_row.iloc[b_idx+1]) if b_idx+1 < len(r_row) and pd.notna(r_row.iloc[b_idx+1]) else ""
-                                    p_pr = str(r_row.iloc[b_idx+2]) if b_idx+2 < len(r_row) and pd.notna(r_row.iloc[b_idx+2]) else ""
+                                p_code = str(r_row.iloc[b_idx]) if b_idx < len(r_row) and pd.notna(r_row.iloc[b_idx]) else ""
+                                if p_code.strip():
+                                    p_qty = str(r_row.iloc[b_idx+1]) if b_idx+1 < len(r_row) and pd.notna(r_row.iloc[b_idx+1]) else ""
+                                    p_price = str(r_row.iloc[b_idx+2]) if b_idx+2 < len(r_row) and pd.notna(r_row.iloc[b_idx+2]) else ""
                                     p_flg = str(r_row.iloc[b_idx+3]) if b_idx+3 < len(r_row) and pd.notna(r_row.iloc[b_idx+3]) else ""
-                                    
-                                    html_output += f"""
-                                    <div class="item-row">
-                                        <div><b>商品コード{pi+1}:</b> {p_c}</div>
-                                        <div><b>数量:</b> {p_q}</div>
-                                        <div><b>単価:</b> {p_pr}</div>
-                                        <div><b>伝票出力:</b> {p_flg}</div>
-                                    </div>
-                                    """
-                            
-                            if not has_item_print:
-                                html_output += "<div style='font-size: 11px; color: #888; padding: 4px;'>商品明細なし</div>"
+                                    items_data.append((p_code, p_qty, p_price, p_flg))
+                                else:
+                                    items_data.append(("", "", "", ""))
+
+                            # 商品行の取り出し（1個目〜5個目）
+                            it1 = items_data[0] if len(items_data) > 0 else ("", "", "", "") # A6〜D6
+                            it2 = items_data[1] if len(items_data) > 1 else ("", "", "", "") # A8〜D8
+                            it3 = items_data[2] if len(items_data) > 2 else ("", "", "", "") # A10〜D10
+                            it4 = items_data[3] if len(items_data) > 3 else ("", "", "", "") # A12〜D12
+                            it5 = items_data[4] if len(items_data) > 4 else ("", "", "", "") # A14〜D14
 
                             html_output += f"""
+                            <div class="sheet-block">
+                                <div class="block-title">📋 登録データ [{sub_i + 1}件目]</div>
+                                
+                                <!-- ヘッダー情報 (A4, B4, D4, E4 相当) -->
+                                <div class="grid-row">
+                                    <div class="grid-cell"><span class="lbl">[A4] 加盟店コード</span><span class="val">{store_code}</span></div>
+                                    <div class="grid-cell" style="grid-column: span 2;"><span class="lbl">[B4] 顧客名</span><span class="val">{cust_name}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[D4] 責任者</span><span class="val">{manager}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[E4] 処理者</span><span class="val">{operator}</span></div>
+                                </div>
+
+                                <!-- 1行目: 商品1 (A6~D6) & 顧客コード (E6) -->
+                                <div class="grid-row">
+                                    <div class="grid-cell"><span class="lbl">[A6] 商品記号1</span><span class="val">{it1[0]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[B6] 発注数</span><span class="val">{it1[1]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[C6] 単価</span><span class="val">{it1[2]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[D6] 伝票出力</span><span class="val">{it1[3]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[E6] 顧客コード</span><span class="val">{cust_code}</span></div>
+                                </div>
+
+                                <!-- 2行目: 商品2 (A8~D8) & 申請者 (E8) -->
+                                <div class="grid-row">
+                                    <div class="grid-cell"><span class="lbl">[A8] 商品記号2</span><span class="val">{it2[0]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[B8] 発注数</span><span class="val">{it2[1]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[C8] 単価</span><span class="val">{it2[2]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[D8] 伝票出力</span><span class="val">{it2[3]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[E8] 申請者</span><span class="val">{applicant}</span></div>
+                                </div>
+
+                                <!-- 3行目: 商品3 (A10~D10) & 納品者 (E10) -->
+                                <div class="grid-row">
+                                    <div class="grid-cell"><span class="lbl">[A10] 商品記号3</span><span class="val">{it3[0]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[B10] 発注数</span><span class="val">{it3[1]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[C10] 単価</span><span class="val">{it3[2]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[D10] 伝票出力</span><span class="val">{it3[3]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[E10] 納品者</span><span class="val">{delivery_person}</span></div>
+                                </div>
+
+                                <!-- 4行目: 商品4 (A12~D12) & 納品日 (E12) -->
+                                <div class="grid-row">
+                                    <div class="grid-cell"><span class="lbl">[A12] 商品記号4</span><span class="val">{it4[0]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[B12] 発注数</span><span class="val">{it4[1]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[C12] 単価</span><span class="val">{it4[2]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[D12] 伝票出力</span><span class="val">{it4[3]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[E12] 納品日</span><span class="val">{delivery_date}</span></div>
+                                </div>
+
+                                <!-- 5行目: 商品5 (A14~D14) & ルートコード (E14) -->
+                                <div class="grid-row">
+                                    <div class="grid-cell"><span class="lbl">[A14] 商品記号5</span><span class="val">{it5[0]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[B14] 発注数</span><span class="val">{it5[1]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[C14] 単価</span><span class="val">{it5[2]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[D14] 伝票出力</span><span class="val">{it5[3]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[E14] ルートコード</span><span class="val">{route_code}</span></div>
+                                </div>
+
+                                <!-- 特記事項 (A16) -->
+                                <div class="memo-cell">
+                                    <span class="lbl">[A16] 特記事項</span>
+                                    <div>{special_note}</div>
+                                </div>
                             </div>
-                            <div class="section-box" style="margin-bottom: 20px;">
-                                <div class="section-title">💬 申請コメント / 特記事項</div>
-                                <div style="font-size: 12px; color: #333;">{app_comment}</div>
-                            </div>
-                            <hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
                             """
 
                         html_output += "</div>"
                         st.markdown(html_output, unsafe_allow_html=True)
 
-                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（余白を「なし」または「標準」にすると綺麗に収まります）。")
+                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（最大3件ごとに綺麗に改ページされます）。")
 
         except Exception as e:
             st.error(f"印刷データの読み込みエラー: {e}")
