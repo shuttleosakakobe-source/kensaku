@@ -1,3 +1,4 @@
+import streamlit as st
 from datetime import datetime, timezone, timedelta
 import io
 import json
@@ -5,7 +6,7 @@ import time
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-import requests as st
+import requests
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbwLUMtoHyxx8kX0PpwxeNqnH-uVF1kVGFi3WVo8f6URehPcpexohXlltFPfwYe5dkjiGw/exec"
 
@@ -66,7 +67,6 @@ def transfer_and_export_pdf_for_store(selected_store_name, store_df):
         'values': [[f"{selected_store_name}様 "]]
     })
 
-    # 加盟店に該当するデータを順次マッピング（最大3件等、必要に応じた配置ルール）
     for idx, (_, row) in enumerate(store_df.iterrows()):
         val = lambda i: str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
 
@@ -75,15 +75,12 @@ def transfer_and_export_pdf_for_store(selected_store_name, store_df):
         sekininsha = val(30)    # 責任者 (管理職名)
         shyorisha = val(32)     # 処理者
         
-        # 1件目の配置 (A4:E4)
         if idx == 0:
             updates.append({
                 'range': 'A4:E4',
                 'values': [[store_code, f"{customer_name}様 ", "", sekininsha, shyorisha]]
             })
-        # 必要に応じて2件目以降のオフセット行（例: 19行目、37行目など）のバッチ更新をここに追加できます
-
-        break # サンプルとして1件目を例に反映
+        break
 
     if updates:
         dest_sheet.batch_update(updates)
@@ -353,7 +350,6 @@ def maintenance_admin_screen():
 
                     st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）")
 
-                    # 📥 gspread連携の自動転写＆PDFダウンロードボタン
                     if st.button(f"📥 「{selected_store}」のデータをシートに転写してPDFダウンロード", type="primary", key="btn_gspread_pdf_export"):
                         with st.spinner("スプレッドシートへ転写し、PDFを生成中..."):
                             pdf_bytes = transfer_and_export_pdf_for_store(selected_store, store_df)
@@ -471,9 +467,4 @@ def maintenance_admin_screen():
                         st.markdown(html_output, unsafe_allow_html=True)
 
         except Exception as e:
-                    st.error(f"印刷データの読み込みエラー: {e}")
-
-
-if __name__ == "__main__":
-    st.set_page_config(page_title="メンテナンス申請管理システム", layout="wide")
-    maintenance_admin_screen()
+            st.error(f"印刷データの読み込みエラー: {e}")
