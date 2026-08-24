@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbywXIMKfujyW1-mjwGGMi7q9WpXha5HpXWmjRxoPd34d4bgPJ-DvVLzMUGa6xwBntXh/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbyVRKr8MKGrQbNFGzvUbgn24uOnQboav4HuzyhwtdEHlIfqDpHGPcTcX1I_UbaE4Du4QQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -430,6 +430,7 @@ def maintenance_admin_screen():
                             o2_c2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"v_rcode_{row_id}")
                             o2_c3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"v_ddate_{row_id}")
 
+                            # 💡 TAB3でも納品者を含めて綺麗に3カラム配置
                             o3_c1, o3_c2, o3_c3 = st.columns(3)
                             o3_c1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"v_dperson_{row_id}")
                             o3_c2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"v_app_{row_id}")
@@ -555,7 +556,8 @@ def maintenance_admin_screen():
                     cust_code = str(row.iloc[2]) if len(row) > 2 and pd.notna(row.iloc[2]) else ""
                     deliv_date = str(row.iloc[6]) if len(row) > 6 and pd.notna(row.iloc[6]) else ""
                     
-                    # 💡 承認者・処理者情報の取得 (列インデックスは保存形式に準拠)
+                    # 💡 各種担当者情報の取得 (納品者・承認者・処理者)
+                    delivery_person_val = str(row.iloc[8]) if len(row) > 8 and pd.notna(row.iloc[8]) else ""
                     mgr_name_val = str(row.iloc[30]) if len(row) > 30 and pd.notna(row.iloc[30]) else "不明"
                     op_user_val = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "不明"
 
@@ -576,11 +578,11 @@ def maintenance_admin_screen():
                             c5.text_input("ルートコード", value=str(row.iloc[7]) if len(row) > 7 and pd.notna(row.iloc[7]) else "", disabled=True, key=f"chk_rcode_{row_id}")
                             c6.text_input("納品日", value=deliv_date, disabled=True, key=f"chk_ddate_{row_id}")
 
-                            # 💡 TAB4でも承認者・処理者を表示
+                            # 💡 TAB4でも「納品者」「承認者」「処理者」をきれいに並べて表示
                             c7, c8, c9 = st.columns(3)
-                            c7.text_input("承認者", value=mgr_name_val, disabled=True, key=f"chk_mgr_{row_id}")
-                            c8.text_input("処理者（業務担当）", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
-                            c9.text_input("", value="", disabled=True, label_visibility="hidden", key=f"chk_dummy_{row_id}")
+                            c7.text_input("納品者", value=delivery_person_val, disabled=True, key=f"chk_dperson_{row_id}")
+                            c8.text_input("承認者", value=mgr_name_val, disabled=True, key=f"chk_mgr_{row_id}")
+                            c9.text_input("処理者（業務担当）", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
 
                             st.write("---")
                             st.write("**📦 登録商品明細**")
