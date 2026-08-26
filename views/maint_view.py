@@ -732,7 +732,7 @@ def maintenance_admin_screen():
                                     time.sleep(1.5)
                                     st.rerun()
 
-        except Exception as, e:
+        except Exception as e:  # 修正箇所: カンマを削除しました
             st.error(f"データ読み込みエラー: {e}")
 
     # ==========================================
