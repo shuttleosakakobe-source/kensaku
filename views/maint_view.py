@@ -646,7 +646,16 @@ def maintenance_admin_screen():
             if df_dest.empty:
                 st.info("現在、チェック対象のデータ（転記済みデータ）はありません。")
             else:
-                st.success(f"📋 チェック対象データ: **{len(df_dest)} 件**")
+                show_checked = st.checkbox("✅ チェック済みのデータも表示する", value=False, key="chk_show_checked")
+
+                if not show_checked and len(df_dest.columns) > CHECK_TIME_COL_IDX:
+                    unchecked_mask = df_dest.iloc[:, CHECK_TIME_COL_IDX].fillna("").astype(str).str.strip() == ""
+                    df_dest = df_dest[unchecked_mask]
+
+                if df_dest.empty:
+                    st.info("チェック待ちのデータはありません（すべてチェック済みです）。上のチェックボックスでチェック済みも表示できます。")
+                else:
+                    st.success(f"📋 チェック対象データ: **{len(df_dest)} 件**")
 
                 col_sort1, col_sort2 = st.columns([3, 1])
                 sort_store = col_sort1.checkbox("🏪 加盟店別（店舗名）で並び替える", value=False, key="chk_sort_store")
