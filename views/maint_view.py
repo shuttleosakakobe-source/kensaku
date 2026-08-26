@@ -190,7 +190,7 @@ def maintenance_admin_screen():
     # TAB 1: 申請・差戻し対応
     # ==========================================
     with tab1:
-        st.subheader("📝 新規申請 / 差戻しデータ修正")
+        st.subheader("📝 メンテナンス / 差戻し修正")
         with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
             col_search_input, col_search_btn = st.columns([4, 1])
@@ -234,15 +234,15 @@ def maintenance_admin_screen():
             with st.form("submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                st.write("**📋 申請基本情報**")
+                st.write("**📋 入力情報**")
                 
                 row1_col1, row1_col2, row1_col3 = st.columns(3)
                 customer_code = row1_col1.text_input("顧客コード", key=f"ccode{clear_suffix}")
-                customer_name = row1_col2.text_input("顧客名（得意先名）", key=f"cname{clear_suffix}")
-                store_code = row1_col3.text_input("加盟店コード（店舗コード）", key=f"scode{clear_suffix}")
+                customer_name = row1_col2.text_input("顧客名", key=f"cname{clear_suffix}")
+                store_code = row1_col3.text_input("加盟店コード", key=f"scode{clear_suffix}")
 
                 row2_col1, row2_col2, row2_col3 = st.columns(3)
-                store_name = row2_col1.text_input("加盟店名（店舗名）", key=f"sname{clear_suffix}")
+                store_name = row2_col1.text_input("加盟店名", key=f"sname{clear_suffix}")
                 route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
                 delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
                 delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
@@ -252,7 +252,7 @@ def maintenance_admin_screen():
                 applicant = row3_col2.text_input("申請者名", value=st.session_state["user_name"], key=f"app{clear_suffix}")
 
                 st.write("---")
-                st.write("**📦 申請商品（最大5件）**")
+                st.write("**📦 発注商品（最大5件）**")
                 items_flat = []
                 for i in range(5):
                     c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
@@ -316,15 +316,15 @@ def maintenance_admin_screen():
                             with st.form(key=f"resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                                st.write("**📋 申請基本情報修正**")
+                                st.write("**📋 入力情報修正**")
                                 
                                 r1_1, r1_2, r1_3 = st.columns(3)
                                 edit_cust_code = r1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}")
-                                edit_cust_name = r1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
 
                                 r2_1, r2_2, r2_3 = st.columns(3)
-                                edit_store_name = r2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}")
+                                edit_store_name = r2_1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}")
                                 edit_route_code = r2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"re_rcode_{row_id}")
                                 edit_deliv_date = r2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"re_ddate_{row_id}")
 
@@ -333,7 +333,7 @@ def maintenance_admin_screen():
                                 edit_applicant = r3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"re_app_{row_id}")
 
                                 st.write("---")
-                                st.write("**📦 申請商品修正**")
+                                st.write("**📦 発注商品修正**")
                                 edit_items = []
                                 for i in range(5):
                                     base_idx = 9 + (i * 4)
@@ -388,7 +388,7 @@ def maintenance_admin_screen():
     # TAB 2: 管理職承認
     # ==========================================
     with tab2:
-        st.subheader("🔍 管理職：申請承認・編集")
+        st.subheader("🔍 管理職チェック")
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
@@ -407,15 +407,15 @@ def maintenance_admin_screen():
                             with st.form(key=f"mgr_edit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                                st.write("**📋 申請基本情報（修正可能）**")
+                                st.write("**📋 入力情報（修正可能）**")
                                 
                                 m1_1, m1_2, m1_3 = st.columns(3)
                                 edit_ccode = m1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"m_ccode_{row_id}")
-                                edit_cname = m1_2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"m_cname_{row_id}")
-                                edit_scode = m1_3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
+                                edit_cname = m1_2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"m_cname_{row_id}")
+                                edit_scode = m1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
 
                                 m2_1, m2_2, m2_3 = st.columns(3)
-                                edit_sname = m2_1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
+                                edit_sname = m2_1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
                                 edit_rcode = m2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"m_rcode_{row_id}")
                                 edit_ddate = m2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"m_ddate_{row_id}")
 
@@ -424,7 +424,7 @@ def maintenance_admin_screen():
                                 edit_app = m3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"m_app_{row_id}")
 
                                 st.write("---")
-                                st.write("**📦 申請商品（修正可能）**")
+                                st.write("**📦 発注商品（修正可能）**")
                                 edit_items = []
                                 for i in range(5):
                                     base_idx = 9 + (i * 4)
@@ -494,7 +494,7 @@ def maintenance_admin_screen():
     # TAB 3: 業務担当
     # ==========================================
     with tab3:
-        st.subheader("🚚 業務担当：承認済みデータの転記・処理")
+        st.subheader("🚚 業務担当メンテナンス処理")
         try:
             st.cache_data.clear()
             df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
@@ -537,11 +537,11 @@ def maintenance_admin_screen():
                             
                             o1_c1, o1_c2, o1_c3 = st.columns(3)
                             o1_c1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"v_ccode_{row_id}")
-                            o1_c2.text_input("顧客名（得意先名）", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"v_cname_{row_id}")
-                            o1_c3.text_input("加盟店コード（店舗コード）", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"v_scode_{row_id}")
+                            o1_c2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"v_cname_{row_id}")
+                            o1_c3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"v_scode_{row_id}")
 
                             o2_c1, o2_c2, o2_c3 = st.columns(3)
-                            o2_c1.text_input("加盟店名（店舗名）", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"v_sname_{row_id}")
+                            o2_c1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"v_sname_{row_id}")
                             o2_c2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"v_rcode_{row_id}")
                             o2_c3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"v_ddate_{row_id}")
 
@@ -551,7 +551,7 @@ def maintenance_admin_screen():
                             o3_c3.text_input("承認者", value=mgr_name, disabled=True, key=f"v_mgr_{row_id}")
 
                             st.write("---")
-                            st.write("**📦 申請商品**")
+                            st.write("**📦 発注商品**")
                             for i in range(5):
                                 base_idx = 9 + (i * 4)
                                 p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
@@ -638,7 +638,6 @@ def maintenance_admin_screen():
     # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
-        st.caption("業務担当（TAB 3）で転記されたデータを一覧で確認し、チェックや追加の差戻し等を行うことができます。")
 
         try:
             st.cache_data.clear()
@@ -792,7 +791,6 @@ def maintenance_admin_screen():
     # ==========================================
     with tab5:
         st.subheader("🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）")
-        st.caption("TAB4でチェック完了したデータを加盟店ごとに選び、印刷フォーマット用スプレッドシート（C1、A4〜E16／A19〜E31／A34〜E46・3件1ページ）に反映してから印刷できます。")
 
         try:
             st.cache_data.clear()
