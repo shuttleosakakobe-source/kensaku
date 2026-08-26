@@ -19,6 +19,7 @@ PRINT_SHEET_GID = "457221393"
 PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={PRINT_SHEET_GID}#gid={PRINT_SHEET_GID}"
 
 # DEST_SHEET（実データ）側の管理列（0始まりのインデックス）
+OP_USER_COL_IDX = 34      # AI列：処理者（TAB3で転記した担当者）
 CHECK_TIME_COL_IDX = 35   # AJ列：チェック日時
 CHECK_USER_COL_IDX = 36   # AK列：チェック者
 PRINT_TIME_COL_IDX = 37   # AL列：印刷日時（TAB5で反映が完了したらここに日時が入る）
@@ -680,7 +681,7 @@ def maintenance_admin_screen():
                     
                     delivery_person_val = str(row.iloc[8]) if len(row) > 8 and pd.notna(row.iloc[8]) else ""
                     mgr_name_val = str(row.iloc[30]) if len(row) > 30 and pd.notna(row.iloc[30]) else "不明"
-                    op_user_val = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "不明"
+                    op_user_val = str(row.iloc[OP_USER_COL_IDX]) if len(row) > OP_USER_COL_IDX and pd.notna(row.iloc[OP_USER_COL_IDX]) else "不明"
 
                     checked_time_val = str(row.iloc[CHECK_TIME_COL_IDX]) if len(row) > CHECK_TIME_COL_IDX and pd.notna(row.iloc[CHECK_TIME_COL_IDX]) else ""
                     checked_user_val = str(row.iloc[CHECK_USER_COL_IDX]) if len(row) > CHECK_USER_COL_IDX and pd.notna(row.iloc[CHECK_USER_COL_IDX]) else ""
@@ -834,7 +835,7 @@ def maintenance_admin_screen():
                             cust_name = f"{raw_cname} 様" if raw_cname.strip() else ""
 
                             manager = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
-                            operator = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"]
+                            operator = str(r_row.iloc[OP_USER_COL_IDX]) if len(r_row) > OP_USER_COL_IDX and pd.notna(r_row.iloc[OP_USER_COL_IDX]) else st.session_state["user_name"]
 
                             cust_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
                             applicant = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
