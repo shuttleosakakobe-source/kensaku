@@ -14,7 +14,38 @@ DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 # TAB5用：加盟店別 印刷フォーマットのスプレッドシート（DEST_SHEET_URLとは別シート／gidが違う点に注意）
-PRINT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=457221393#gid=457221393"
+PRINT_SHEET_ID = "1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI"
+PRINT_SHEET_GID = "457221393"
+PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={PRINT_SHEET_GID}#gid={PRINT_SHEET_GID}"
+
+
+def build_print_pdf_url(row_end=46, col_end=5):
+    """印刷フォーマットシートのA1〜(row_end, col_end)の範囲をPDFとして書き出すURLを作る
+    （row_end/col_endは0始まりの終端。col_end=5はA〜E列を含む）"""
+    params = {
+        "format": "pdf",
+        "gid": PRINT_SHEET_GID,
+        "size": "A4",
+        "portrait": "true",
+        "fitw": "true",
+        "top_margin": "0.4",
+        "bottom_margin": "0.4",
+        "left_margin": "0.4",
+        "right_margin": "0.4",
+        "sheetnames": "false",
+        "printtitle": "false",
+        "pagenumbers": "false",
+        "gridlines": "false",
+        "fzr": "false",
+        "horizontal_alignment": "CENTER",
+        "vertical_alignment": "TOP",
+        "r1": "0",
+        "c1": "0",
+        "r2": str(row_end),
+        "c2": str(col_end),
+    }
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    return f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/export?{query}"
 
 # 日本時間（JST = UTC+9）のタイムゾーン定義
 JST = timezone(timedelta(hours=+9), 'JST')
@@ -854,7 +885,7 @@ def maintenance_admin_screen():
                                     st.caption(f"顧客コード: {rec['cust_code']} ｜ 申請者: {rec['applicant']} ｜ 納品者: {rec['delivery_person']} ｜ 納品日: {rec['delivery_date']} ｜ ルートコード: {rec['route_code']}")
                                     st.caption(f"特記事項: {rec['special_note']}")
 
-                            if st.button("📥 このページを印刷用スプレッドシートに反映する", key=f"print_sync_btn_{page_idx}", type="primary"):
+                            if st.button("📥 反映してPDFを作成する", key=f"print_sync_btn_{page_idx}", type="primary"):
                                 payload = {
                                     "action": "SYNC_PRINT_STORE_DATA",
                                     "print_sheet_url": PRINT_SHEET_URL,
@@ -863,14 +894,37 @@ def maintenance_admin_screen():
                                 }
                                 with st.spinner("印刷用スプレッドシートへ反映しています..."):
                                     res = post_to_gas(payload)
-                                    if res.get("status") == "success":
-                                        st.toast("🎉 印刷用スプレッドシートへの反映が完了しました！", icon="✅")
-                                    else:
-                                        st.error(f"反映に失敗しました: {res.get('message')}")
+
+                                if res.get("status") == "success":
+                                    st.toast("🎉 反映が完了しました。PDFを作成しています…", icon="✅")
+                                    try:
+                                        with st.spinner("PDFを作成しています..."):
+                                            pdf_res = requests.get(build_print_pdf_url(), timeout=30)
+                                        content_type = pdf_res.headers.get("Content-Type", "")
+                                        if pdf_res.status_code == 200 and "pdf" in content_type.lower():
+                                            st.success("✅ PDFが作成できました。下のボタンからダウンロードしてください。")
+                                            st.download_button(
+                                                "📄 PDFをダウンロード",
+                                                data=pdf_res.content,
+                                                file_name=f"{selected_store}_p{page_idx + 1}.pdf",
+                                                mime="application/pdf",
+                                                key=f"pdf_dl_{page_idx}",
+                                            )
+                                        else:
+                                            st.warning(
+                                                "スプレッドシートへの反映は完了しましたが、アプリ上でのPDF取得に失敗しました"
+                                                "（共有設定などが原因の可能性があります）。"
+                                                f"[印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                            )
+                                    except Exception as pdf_err:
+                                        st.warning(
+                                            f"スプレッドシートへの反映は完了しましたが、PDF取得中にエラーが発生しました: {pdf_err}　"
+                                            f"[印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                        )
+                                else:
+                                    st.error(f"反映に失敗しました: {res.get('message')}")
 
                             st.write("---")
-
-                        st.info(f"💡 反映後は [印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) からシートを開き、`Ctrl + P` / `Cmd + P` またはスプレッドシートの印刷機能でPDF化・印刷してください。")
 
         except Exception as e:
             st.error(f"印刷データの読み込みエラー: {e}")
