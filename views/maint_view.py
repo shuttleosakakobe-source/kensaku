@@ -4,8 +4,6 @@ import requests
 import json
 from datetime import datetime, timezone, timedelta
 import time
-import gspread
-from google.oauth2.service_account import Credentials
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbwLUMtoHyxx8kX0PpwxeNqnH-uVF1kVGFi3WVo8f6URehPcpexohXlltFPfwYe5dkjiGw/exec"
 
@@ -15,79 +13,8 @@ DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb
 DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv&gid=457221393"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
-# 1. 認証スコープの設定
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
-
 # 日本時間（JST = UTC+9）のタイムゾーン定義
 JST = timezone(timedelta(hours=+9), 'JST')
-
-
-def get_gspread_client():
-    creds_dict = st.secrets["gcp_service_account"]
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    return gspread.authorize(creds)
-
-
-def transfer_and_export_pdf_for_store(selected_store_name, store_df):
-    """指定された加盟店のデータを転写・配置し、PDFデータを取得する関数"""
-    spreadsheet_id = "1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI"
-    src_gid = "0"
-    dest_gid = "457221393"
-
-    try:
-        client = get_gspread_client()
-        ss = client.open_by_key(spreadsheet_id)
-    except Exception as e:
-        st.error(f"スプレッドシートへの接続に失敗しました: {e}")
-        return None
-
-    src_sheet = None
-    dest_sheet = None
-    for sheet in ss.worksheets():
-        if str(sheet.id) == src_gid:
-            src_sheet = sheet
-        elif str(sheet.id) == dest_gid:
-            dest_sheet = sheet
-
-    if not src_sheet or not dest_sheet:
-        st.error("指定されたシート（gid）が見つかりませんでした。")
-        return None
-
-    # 転写先シートをクリア
-    dest_sheet.clear()
-
-    updates = []
-    # C1セル：加盟店名 ＋ "様"
-    updates.append({'range': 'C1', 'values': [[f"{selected_store_name}様 "]]})
-
-    for idx, (_, row) in enumerate(store_df.iterrows()):
-        val = lambda i: str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
-        store_code = val(5)     # 加盟店コード
-        customer_name = val(3)  # 顧客名
-        sekininsha = val(30)    # 責任者 (管理職名)
-        shyorisha = val(32)     # 処理者
-
-        if idx == 0:
-            updates.append({'range': 'A4:E4', 'values': [[store_code, f"{customer_name}様 ", "", sekininsha, shyorisha]]})
-            break
-
-    if updates:
-        dest_sheet.batch_update(updates)
-
-    # PDFのエクスポート処理
-    export_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=pdf&gid={dest_gid}&size=A4&portrait=true&fitw=true"
-    access_token = client.auth.token
-    headers = {"Authorization": f"Bearer {access_token}"}
-    
-    response = requests.get(export_url, headers=headers)
-    if response.status_code == 200:
-        return response.content
-    else:
-        st.error(f"PDFのエクスポートに失敗しました。(ステータスコード: {response.status_code})")
-        return None
 
 
 def post_to_gas(payload):
@@ -100,6 +27,7 @@ def post_to_gas(payload):
 
 
 def maintenance_admin_screen():
+    # 💡 【CSS調整】指定レイアウトに合わせた帳票・印刷用スタイル定義
     st.markdown("""
         <style>
         input:disabled, textarea:disabled {
@@ -111,6 +39,7 @@ def maintenance_admin_screen():
             display: none !important;
         }
         
+        /* 🖨️ 印刷/PDF出力時のレイアウト最適化（A4サイズ・3件1ページ） */
         @media print {
             body {
                 background: white !important;
@@ -129,6 +58,7 @@ def maintenance_admin_screen():
             }
         }
         
+        /* 画面上での帳票プレビュー枠 */
         .print-sheet {
             border: 1px solid #d6d6d6;
             padding: 25px;
@@ -802,15 +732,15 @@ def maintenance_admin_screen():
                                     time.sleep(1.5)
                                     st.rerun()
 
-        except Exception as e:
+        except Exception as, e:
             st.error(f"データ読み込みエラー: {e}")
 
     # ==========================================
-    # TAB 5: 加盟店別 印刷プレビュー画面 ＋ gspread自動転写・PDFダウンロード連携
+    # TAB 5: 加盟店別 印刷プレビュー画面（ご指定のセル・3件印刷仕様 ＆ スプレッドシート同期）
     # ==========================================
     with tab5:
-        st.subheader("🖨️ 加盟店別 印刷プレビュー & PDF発行")
-        st.caption("加盟店を選択してボタンを押すと、データを自動転写してGoogleスプレッドシートから直接PDFを生成・ダウンロードできます。")
+        st.subheader("🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）")
+        st.caption("選択した加盟店のデータをスプレッドシート（指定セル配置：A4〜A16、A19〜A31、A34〜A46）に一度反映・同期させた上で、PDF化および印刷プレビューを行います。")
 
         try:
             st.cache_data.clear()
@@ -820,11 +750,7 @@ def maintenance_admin_screen():
                 st.info("現在、印刷対象のデータはありません。")
             else:
                 store_col_idx = 4
-                if len(df_print.columns) > store_col_idx:
-                    df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
-                else:
-                    df_print["_store_name"] = "未設定の加盟店"
-
+                df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
                 stores = df_print["_store_name"].unique()
 
                 selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select_v2")
@@ -833,23 +759,24 @@ def maintenance_admin_screen():
                     store_df = df_print[df_print["_store_name"] == selected_store]
                     total_records = len(store_df)
 
-                    st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）")
+                    st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※1ページに最大3件まで配置されます。")
 
-                    if st.button(f"📥 「{selected_store}」のデータをシートに転写してPDFダウンロード", type="primary", key="btn_gspread_pdf_export"):
-                        with st.spinner("スプレッドシートへ転写し、PDFを生成中..."):
-                            pdf_bytes = transfer_and_export_pdf_for_store(selected_store, store_df)
-                            if pdf_bytes:
-                                st.download_button(
-                                    label=f"⬇️ {selected_store}_印刷用出力.pdf をダウンロード",
-                                    data=pdf_bytes,
-                                    file_name=f"{selected_store}_print_output.pdf",
-                                    mime="application/pdf",
-                                    key="download_pdf_final_file"
-                                )
-                                st.success("PDFの準備が完了しました！上のボタンからダウンロードしてください。")
+                    # 💡 スプレッドシート側への一括または選択店舗の反映を行うボタン
+                    if st.button("📥 選択した加盟店データをスプレッドシートに反映（貼り付け）する", type="primary"):
+                        payload = {
+                            "action": "SYNC_PRINT_STORE_DATA",
+                            "dest_sheet_url": DEST_SHEET_URL,
+                            "store_name": selected_store,
+                            "rows_data": store_df.values.tolist()
+                        }
+                        with st.spinner("スプレッドシートへデータを貼り付けています..."):
+                            res = post_to_gas(payload)
+                            if res.get("status") == "success":
+                                st.toast("🎉 スプレッドシートへの貼り付けが完了しました！", icon="✅")
+                            else:
+                                st.warning(f"サーバーからの通知: {res.get('message', '同期処理を実行しました')}")
 
                     st.write("---")
-                    st.write("👁️ **画面プレビュー確認**")
 
                     chunk_size = 3
                     chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
@@ -861,25 +788,25 @@ def maintenance_admin_screen():
                         <div class="print-sheet">
                             <div style="font-size: 14px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; margin-bottom: 10px; display: flex; justify-content: space-between;">
                                 <span>[C1] 当て先: {c1_val}</span>
-                                <span style="font-size: 12px; color: #555;">ページ: {page_idx + 1} / {len(chunks)}</span>
+                                <span style="font-size: 12px; color: #555;">ページ: {page_idx + 1} / {len(chunks)} (最大3件)</span>
                             </div>
                         """
 
                         for sub_i, (_, r_row) in enumerate(chunk.iterrows()):
-                            store_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else ""
+                            store_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else "" 
                             raw_cname = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
-                            cust_name = f"{raw_cname} 様" if raw_cname.strip() else ""
+                            cust_name = f"{raw_cname} 様" if raw_cname.strip() else "" 
                             
-                            manager = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
-                            operator = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"]
+                            manager = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認" 
+                            operator = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"] 
                             
-                            cust_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
-                            applicant = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
-                            delivery_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else ""
-                            delivery_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else ""
-                            route_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else ""
+                            cust_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else "" 
+                            applicant = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else "" 
+                            delivery_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else "" 
+                            delivery_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else "" 
+                            route_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else "" 
                             
-                            special_note = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし"
+                            special_note = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし" 
 
                             items_data = []
                             for pi in range(5):
@@ -893,11 +820,11 @@ def maintenance_admin_screen():
                                 else:
                                     items_data.append(("", "", "", ""))
 
-                            it1 = items_data[0]
-                            it2 = items_data[1]
-                            it3 = items_data[2]
-                            it4 = items_data[3]
-                            it5 = items_data[4]
+                            it1 = items_data[0] if len(items_data) > 0 else ("", "", "", "")
+                            it2 = items_data[1] if len(items_data) > 1 else ("", "", "", "")
+                            it3 = items_data[2] if len(items_data) > 2 else ("", "", "", "")
+                            it4 = items_data[3] if len(items_data) > 3 else ("", "", "", "")
+                            it5 = items_data[4] if len(items_data) > 4 else ("", "", "", "")
 
                             html_output += f"""
                             <div class="sheet-block">
@@ -936,7 +863,7 @@ def maintenance_admin_screen():
 
                                 <div class="grid-row">
                                     <div class="grid-cell"><span class="lbl">[A12] 商品記号4</span><span class="val">{it4[0]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[B12] 発注数</span><span class="val">{it4[1]}</span></div>
+                                    <div class="grid-cell"><span class="lbl">[B12] 発注数</span><span class="val">{it1[1]}</span></div>
                                     <div class="grid-cell"><span class="lbl">[C12] 単価</span><span class="val">{it4[2]}</span></div>
                                     <div class="grid-cell"><span class="lbl">[D12] 伝票出力</span><span class="val">{it4[3]}</span></div>
                                     <div class="grid-cell"><span class="lbl">[E12] 納品日</span><span class="val">{delivery_date}</span></div>
@@ -960,9 +887,10 @@ def maintenance_admin_screen():
                         html_output += "</div>"
                         st.markdown(html_output, unsafe_allow_html=True)
 
+                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（最大3件ごとに綺麗に改ページされます）。")
+
         except Exception as e:
             st.error(f"印刷データの読み込みエラー: {e}")
-
 
 # アプリ実行
 if __name__ == "__main__":
