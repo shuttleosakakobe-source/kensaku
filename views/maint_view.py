@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbwLUMtoHyxx8kX0PpwxeNqnH-uVF1kVGFi3WVo8f6URehPcpexohXlltFPfwYe5dkjiGw/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -594,7 +594,7 @@ def maintenance_admin_screen():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 4: メンテナンスチェック画面
+    # TAB 4: メンテナンスチェック画面（書き換え・修正済み部分）
     # ==========================================
     with tab4:
         st.subheader("✅ メンテナンスチェック画面")
@@ -732,11 +732,11 @@ def maintenance_admin_screen():
                                     time.sleep(1.5)
                                     st.rerun()
 
-        except Exception as e:  # 修正箇所: カンマを削除しました
+        except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
 
     # ==========================================
-    # TAB 5: 加盟店別 印刷プレビュー画面（ご指定のセル・3件印刷仕様 ＆ スプレッドシート同期）
+    # TAB 5: 加盟店別 印刷プレビュー画面
     # ==========================================
     with tab5:
         st.subheader("🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）")
@@ -761,7 +761,6 @@ def maintenance_admin_screen():
 
                     st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※1ページに最大3件まで配置されます。")
 
-                    # 💡 スプレッドシート側への一括または選択店舗の反映を行うボタン
                     if st.button("📥 選択した加盟店データをスプレッドシートに反映（貼り付け）する", type="primary"):
                         payload = {
                             "action": "SYNC_PRINT_STORE_DATA",
