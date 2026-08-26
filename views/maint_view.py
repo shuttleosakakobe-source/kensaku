@@ -13,6 +13,9 @@ DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb
 DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv&gid=0"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
+# TAB5用：加盟店別 印刷フォーマットのスプレッドシート（DEST_SHEET_URLとは別シート／gidが違う点に注意）
+PRINT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=457221393#gid=457221393"
+
 # 日本時間（JST = UTC+9）のタイムゾーン定義
 JST = timezone(timedelta(hours=+9), 'JST')
 
@@ -740,7 +743,7 @@ def maintenance_admin_screen():
     # ==========================================
     with tab5:
         st.subheader("🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）")
-        st.caption("選択した加盟店のデータをスプレッドシート（指定セル配置：A4〜A16、A19〜A31、A34〜A46）に一度反映・同期させた上で、PDF化および印刷プレビューを行います。")
+        st.caption("TAB4でチェック完了したデータを加盟店ごとに選び、印刷フォーマット用スプレッドシート（C1、A4〜E16／A19〜E31／A34〜E46・3件1ページ）に反映してから印刷できます。")
 
         try:
             st.cache_data.clear()
@@ -749,144 +752,125 @@ def maintenance_admin_screen():
             if df_print.empty:
                 st.info("現在、印刷対象のデータはありません。")
             else:
-                store_col_idx = 4
-                df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
-                stores = df_print["_store_name"].unique()
+                # TAB4で「✅ チェック完了」になったデータ（36列目にチェック日時が入っている行）だけを対象にする
+                if len(df_print.columns) > 35:
+                    checked_mask = df_print.iloc[:, 35].fillna("").astype(str).str.strip() != ""
+                    df_print = df_print[checked_mask]
 
-                selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select_v2")
+                if df_print.empty:
+                    st.info("チェック完了済みのデータがまだありません。TAB4でチェックを完了すると、ここに表示されます。")
+                else:
+                    store_col_idx = 4
+                    df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
+                    stores = sorted(df_print["_store_name"].unique())
 
-                if selected_store:
-                    store_df = df_print[df_print["_store_name"] == selected_store]
-                    total_records = len(store_df)
+                    selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select_v2")
 
-                    st.info(f"🏪 加盟店: **{selected_store}** （対象データ件数: {total_records} 件）※1ページに最大3件まで配置されます。")
+                    if selected_store:
+                        store_df = df_print[df_print["_store_name"] == selected_store].reset_index(drop=True)
+                        total_records = len(store_df)
 
-                    if st.button("📥 選択した加盟店データをスプレッドシートに反映（貼り付け）する", type="primary"):
-                        payload = {
-                            "action": "SYNC_PRINT_STORE_DATA",
-                            "dest_sheet_url": DEST_SHEET_URL,
-                            "store_name": selected_store,
-                            "rows_data": store_df.values.tolist()
-                        }
-                        with st.spinner("スプレッドシートへデータを貼り付けています..."):
-                            res = post_to_gas(payload)
-                            if res.get("status") == "success":
-                                st.toast("🎉 スプレッドシートへの貼り付けが完了しました！", icon="✅")
-                            else:
-                                st.warning(f"サーバーからの通知: {res.get('message', '同期処理を実行しました')}")
+                        st.info(f"🏪 加盟店: **{selected_store}** （チェック完了済みデータ: {total_records} 件）※1ページに最大3件まで配置されます。")
 
-                    st.write("---")
-
-                    chunk_size = 3
-                    chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
-
-                    for page_idx, chunk in enumerate(chunks):
-                        c1_val = f"{selected_store} 様"
-
-                        html_output = f"""
-                        <div class="print-sheet">
-                            <div style="font-size: 14px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; margin-bottom: 10px; display: flex; justify-content: space-between;">
-                                <span>[C1] 当て先: {c1_val}</span>
-                                <span style="font-size: 12px; color: #555;">ページ: {page_idx + 1} / {len(chunks)} (最大3件)</span>
-                            </div>
-                        """
-
-                        for sub_i, (_, r_row) in enumerate(chunk.iterrows()):
-                            store_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else "" 
+                        def build_record(r_row):
+                            """行データを、印刷フォーマットのラベルに沿って取り出す"""
+                            store_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else ""
                             raw_cname = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
-                            cust_name = f"{raw_cname} 様" if raw_cname.strip() else "" 
-                            
-                            manager = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認" 
-                            operator = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"] 
-                            
-                            cust_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else "" 
-                            applicant = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else "" 
-                            delivery_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else "" 
-                            delivery_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else "" 
-                            route_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else "" 
-                            
-                            special_note = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし" 
+                            cust_name = f"{raw_cname} 様" if raw_cname.strip() else ""
 
-                            items_data = []
+                            manager = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
+                            operator = str(r_row.iloc[32]) if len(r_row) > 32 and pd.notna(r_row.iloc[32]) else st.session_state["user_name"]
+
+                            cust_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
+                            applicant = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
+                            delivery_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else ""
+                            delivery_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else ""
+                            route_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else ""
+
+                            special_note = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし"
+
+                            items = []
                             for pi in range(5):
                                 b_idx = 9 + (pi * 4)
                                 p_code = str(r_row.iloc[b_idx]) if b_idx < len(r_row) and pd.notna(r_row.iloc[b_idx]) else ""
-                                if p_code.strip():
-                                    p_qty = str(r_row.iloc[b_idx+1]) if b_idx+1 < len(r_row) and pd.notna(r_row.iloc[b_idx+1]) else ""
-                                    p_price = str(r_row.iloc[b_idx+2]) if b_idx+2 < len(r_row) and pd.notna(r_row.iloc[b_idx+2]) else ""
-                                    p_flg = str(r_row.iloc[b_idx+3]) if b_idx+3 < len(r_row) and pd.notna(r_row.iloc[b_idx+3]) else ""
-                                    items_data.append((p_code, p_qty, p_price, p_flg))
-                                else:
-                                    items_data.append(("", "", "", ""))
+                                p_qty = str(r_row.iloc[b_idx + 1]) if b_idx + 1 < len(r_row) and pd.notna(r_row.iloc[b_idx + 1]) else ""
+                                p_price = str(r_row.iloc[b_idx + 2]) if b_idx + 2 < len(r_row) and pd.notna(r_row.iloc[b_idx + 2]) else ""
+                                p_flg = str(r_row.iloc[b_idx + 3]) if b_idx + 3 < len(r_row) and pd.notna(r_row.iloc[b_idx + 3]) else ""
+                                items.append((p_code, p_qty, p_price, p_flg))
 
-                            it1 = items_data[0] if len(items_data) > 0 else ("", "", "", "")
-                            it2 = items_data[1] if len(items_data) > 1 else ("", "", "", "")
-                            it3 = items_data[2] if len(items_data) > 2 else ("", "", "", "")
-                            it4 = items_data[3] if len(items_data) > 3 else ("", "", "", "")
-                            it5 = items_data[4] if len(items_data) > 4 else ("", "", "", "")
+                            return {
+                                "store_code": store_code, "cust_name": cust_name,
+                                "manager": manager, "operator": operator,
+                                "cust_code": cust_code, "applicant": applicant,
+                                "delivery_person": delivery_person, "delivery_date": delivery_date,
+                                "route_code": route_code, "special_note": special_note,
+                                "items": items,
+                            }
 
-                            html_output += f"""
-                            <div class="sheet-block">
-                                <div class="block-title">📋 登録データ [{sub_i + 1}件目]</div>
-                                
-                                <div class="grid-row">
-                                    <div class="grid-cell"><span class="lbl">[A4] 加盟店コード</span><span class="val">{store_code}</span></div>
-                                    <div class="grid-cell" style="grid-column: span 2;"><span class="lbl">[B4] 顧客名</span><span class="val">{cust_name}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[D4] 責任者</span><span class="val">{manager}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[E4] 処理者</span><span class="val">{operator}</span></div>
-                                </div>
+                        def cells_for_record(rec, base_row):
+                            """1件分のデータを、base_row（4／19／34）起点のセル座標に変換する
+                            （A{base}=加盟店コード, B{base}=顧客名, D{base}=責任者, E{base}=処理者、
+                            以降2行おきに商品明細5件、A{base+12}=特記事項）"""
+                            cells = {
+                                f"A{base_row}": rec["store_code"] if rec else "",
+                                f"B{base_row}": rec["cust_name"] if rec else "",
+                                f"D{base_row}": rec["manager"] if rec else "",
+                                f"E{base_row}": rec["operator"] if rec else "",
+                            }
+                            item_rows = [base_row + 2, base_row + 4, base_row + 6, base_row + 8, base_row + 10]
+                            extra_e_keys = ["cust_code", "applicant", "delivery_person", "delivery_date", "route_code"]
+                            for i_row, row_no in enumerate(item_rows):
+                                p_code, p_qty, p_price, p_flg = rec["items"][i_row] if rec else ("", "", "", "")
+                                cells[f"A{row_no}"] = p_code
+                                cells[f"B{row_no}"] = p_qty
+                                cells[f"C{row_no}"] = p_price
+                                cells[f"D{row_no}"] = p_flg
+                                cells[f"E{row_no}"] = rec[extra_e_keys[i_row]] if rec else ""
+                            cells[f"A{base_row + 12}"] = rec["special_note"] if rec else ""
+                            return cells
 
-                                <div class="grid-row">
-                                    <div class="grid-cell"><span class="lbl">[A6] 商品記号1</span><span class="val">{it1[0]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[B6] 発注数</span><span class="val">{it1[1]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[C6] 単価</span><span class="val">{it1[2]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[D6] 伝票出力</span><span class="val">{it1[3]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[E6] 顧客コード</span><span class="val">{cust_code}</span></div>
-                                </div>
+                        chunk_size = 3
+                        chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
 
-                                <div class="grid-row">
-                                    <div class="grid-cell"><span class="lbl">[A8] 商品記号2</span><span class="val">{it2[0]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[B8] 発注数</span><span class="val">{it2[1]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[C8] 単価</span><span class="val">{it2[2]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[D8] 伝票出力</span><span class="val">{it2[3]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[E8] 申請者</span><span class="val">{applicant}</span></div>
-                                </div>
+                        for page_idx, chunk in enumerate(chunks):
+                            st.markdown(f"#### 📄 ページ {page_idx + 1} / {len(chunks)}")
 
-                                <div class="grid-row">
-                                    <div class="grid-cell"><span class="lbl">[A10] 商品記号3</span><span class="val">{it3[0]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[B10] 発注数</span><span class="val">{it3[1]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[C10] 単価</span><span class="val">{it3[2]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[D10] 伝票出力</span><span class="val">{it3[3]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[E10] 納品者</span><span class="val">{delivery_person}</span></div>
-                                </div>
+                            # C1＝加盟店名＋「 様」、A4〜A16／A19〜A31／A34〜A46＝1〜3件目（base_row = 4, 19, 34）
+                            cell_updates = {"C1": f"{selected_store} 様"}
+                            preview_records = []
 
-                                <div class="grid-row">
-                                    <div class="grid-cell"><span class="lbl">[A12] 商品記号4</span><span class="val">{it4[0]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[B12] 発注数</span><span class="val">{it1[1]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[C12] 単価</span><span class="val">{it4[2]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[D12] 伝票出力</span><span class="val">{it4[3]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[E12] 納品日</span><span class="val">{delivery_date}</span></div>
-                                </div>
+                            for slot in range(3):
+                                base_row = 4 + slot * 15
+                                rec = build_record(chunk.iloc[slot]) if slot < len(chunk) else None
+                                if rec:
+                                    preview_records.append(rec)
+                                cell_updates.update(cells_for_record(rec, base_row))
 
-                                <div class="grid-row">
-                                    <div class="grid-cell"><span class="lbl">[A14] 商品記号5</span><span class="val">{it5[0]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[B14] 発注数</span><span class="val">{it5[1]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[C14] 単価</span><span class="val">{it5[2]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[D14] 伝票出力</span><span class="val">{it5[3]}</span></div>
-                                    <div class="grid-cell"><span class="lbl">[E14] ルートコード</span><span class="val">{route_code}</span></div>
-                                </div>
+                            with st.expander(f"プレビューを見る（{len(preview_records)} 件）"):
+                                for r_i, rec in enumerate(preview_records):
+                                    st.write(f"**[{r_i + 1}件目] 加盟店コード: {rec['store_code']} ／ 顧客名: {rec['cust_name']} ／ 責任者: {rec['manager']} ／ 処理者: {rec['operator']}**")
+                                    items_df = pd.DataFrame(rec["items"], columns=["商品記号", "発注数", "単価", "伝票出力"])
+                                    st.dataframe(items_df, use_container_width=True, hide_index=True)
+                                    st.caption(f"顧客コード: {rec['cust_code']} ｜ 申請者: {rec['applicant']} ｜ 納品者: {rec['delivery_person']} ｜ 納品日: {rec['delivery_date']} ｜ ルートコード: {rec['route_code']}")
+                                    st.caption(f"特記事項: {rec['special_note']}")
 
-                                <div class="memo-cell">
-                                    <span class="lbl">[A16] 特記事項</span>
-                                    <div>{special_note}</div>
-                                </div>
-                            </div>
-                            """
+                            if st.button("📥 このページを印刷用スプレッドシートに反映する", key=f"print_sync_btn_{page_idx}", type="primary"):
+                                payload = {
+                                    "action": "SYNC_PRINT_STORE_DATA",
+                                    "print_sheet_url": PRINT_SHEET_URL,
+                                    "store_name": selected_store,
+                                    "cell_updates": cell_updates,
+                                }
+                                with st.spinner("印刷用スプレッドシートへ反映しています..."):
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        st.toast("🎉 印刷用スプレッドシートへの反映が完了しました！", icon="✅")
+                                    else:
+                                        st.error(f"反映に失敗しました: {res.get('message')}")
 
-                        html_output += "</div>"
-                        st.markdown(html_output, unsafe_allow_html=True)
+                            st.write("---")
 
-                    st.info("💡 ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を呼び出し、プリンターまたはPDF保存を選択して印刷してください（最大3件ごとに綺麗に改ページされます）。")
+                        st.info(f"💡 反映後は [印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) からシートを開き、`Ctrl + P` / `Cmd + P` またはスプレッドシートの印刷機能でPDF化・印刷してください。")
 
         except Exception as e:
             st.error(f"印刷データの読み込みエラー: {e}")
