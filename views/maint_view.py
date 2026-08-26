@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycby96bGfYnLWulgFCMO5vIcUSm9WQHHhRG9zZg0_ojg3fY6khhcvHI_ss_mS2EyjguB0MA/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzhpcrSPFdKS2La4WvSB9GaG-9amAL0CZby34yZovnGMi0Fqq-pcy-ftPvkO_BzYqJuaQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -54,7 +54,7 @@ JST = timezone(timedelta(hours=+9), 'JST')
 def post_to_gas(payload):
     headers = {"Content-Type": "application/json"}
     try:
-        response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers, timeout=10)
+        response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers, timeout=30)
         return response.json()
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -838,27 +838,24 @@ def maintenance_admin_screen():
                                 "items": items,
                             }
 
-                        def cells_for_record(rec, base_row):
-                            """1件分のデータを、base_row（4／19／34）起点のセル座標に変換する
-                            （A{base}=加盟店コード, B{base}=顧客名, D{base}=責任者, E{base}=処理者、
-                            以降2行おきに商品明細5件、A{base+12}=特記事項）"""
-                            cells = {
-                                f"A{base_row}": rec["store_code"] if rec else "",
-                                f"B{base_row}": rec["cust_name"] if rec else "",
-                                f"D{base_row}": rec["manager"] if rec else "",
-                                f"E{base_row}": rec["operator"] if rec else "",
-                            }
-                            item_rows = [base_row + 2, base_row + 4, base_row + 6, base_row + 8, base_row + 10]
-                            extra_e_keys = ["cust_code", "applicant", "delivery_person", "delivery_date", "route_code"]
-                            for i_row, row_no in enumerate(item_rows):
-                                p_code, p_qty, p_price, p_flg = rec["items"][i_row] if rec else ("", "", "", "")
-                                cells[f"A{row_no}"] = p_code
-                                cells[f"B{row_no}"] = p_qty
-                                cells[f"C{row_no}"] = p_price
-                                cells[f"D{row_no}"] = p_flg
-                                cells[f"E{row_no}"] = rec[extra_e_keys[i_row]] if rec else ""
-                            cells[f"A{base_row + 12}"] = rec["special_note"] if rec else ""
-                            return cells
+                        def matrix_for_record(rec):
+                            """1件分のデータを、base_row行目を起点にした13行×5列（A〜E）の行列に変換する。
+                            1行目=A/B/D/E(加盟店コード/顧客名/責任者/処理者)、2行おきに商品明細5件、
+                            最終行=特記事項。空欄になる行（間の行）は全て空文字にする。
+                            ※GASへは1件あたり1回のsetValuesでまとめて送るための行列（cell単位で送ると
+                            リクエスト回数が増えてタイムアウトするため）"""
+                            blank = ["", "", "", "", ""]
+                            if not rec:
+                                return [blank[:] for _ in range(13)]
+
+                            extra_e = [rec["cust_code"], rec["applicant"], rec["delivery_person"], rec["delivery_date"], rec["route_code"]]
+                            matrix = [blank[:] for _ in range(13)]
+                            matrix[0] = [rec["store_code"], rec["cust_name"], "", rec["manager"], rec["operator"]]
+                            for i_item, item_row in enumerate([2, 4, 6, 8, 10]):
+                                p_code, p_qty, p_price, p_flg = rec["items"][i_item]
+                                matrix[item_row] = [p_code, p_qty, p_price, p_flg, extra_e[i_item]]
+                            matrix[12] = [rec["special_note"], "", "", "", ""]
+                            return matrix
 
                         chunk_size = 3
                         chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
@@ -867,7 +864,8 @@ def maintenance_admin_screen():
                             st.markdown(f"#### 📄 ページ {page_idx + 1} / {len(chunks)}")
 
                             # C1＝加盟店名＋「 様」、A4〜A16／A19〜A31／A34〜A46＝1〜3件目（base_row = 4, 19, 34）
-                            cell_updates = {"C1": f"{selected_store} 様"}
+                            c1_value = f"{selected_store} 様"
+                            blocks = []
                             preview_records = []
 
                             for slot in range(3):
@@ -875,7 +873,7 @@ def maintenance_admin_screen():
                                 rec = build_record(chunk.iloc[slot]) if slot < len(chunk) else None
                                 if rec:
                                     preview_records.append(rec)
-                                cell_updates.update(cells_for_record(rec, base_row))
+                                blocks.append({"start_row": base_row, "matrix": matrix_for_record(rec)})
 
                             with st.expander(f"プレビューを見る（{len(preview_records)} 件）"):
                                 for r_i, rec in enumerate(preview_records):
@@ -890,7 +888,8 @@ def maintenance_admin_screen():
                                     "action": "SYNC_PRINT_STORE_DATA",
                                     "print_sheet_url": PRINT_SHEET_URL,
                                     "store_name": selected_store,
-                                    "cell_updates": cell_updates,
+                                    "c1_value": c1_value,
+                                    "blocks": blocks,
                                 }
                                 with st.spinner("印刷用スプレッドシートへ反映しています..."):
                                     res = post_to_gas(payload)
