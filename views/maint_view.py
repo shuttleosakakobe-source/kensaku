@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbzhpcrSPFdKS2La4WvSB9GaG-9amAL0CZby34yZovnGMi0Fqq-pcy-ftPvkO_BzYqJuaQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbw-C1-l5LW2mA4YzWonHrzZCy8GLhWPv15WVwhyOsQIETU0i_z_OZZVkRM2Na1L6Z8e8A/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -17,6 +17,11 @@ CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCK
 PRINT_SHEET_ID = "1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI"
 PRINT_SHEET_GID = "457221393"
 PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={PRINT_SHEET_GID}#gid={PRINT_SHEET_GID}"
+
+# DEST_SHEET（実データ）側の管理列（0始まりのインデックス）
+CHECK_TIME_COL_IDX = 35   # AJ列：チェック日時
+CHECK_USER_COL_IDX = 36   # AK列：チェック者
+PRINT_TIME_COL_IDX = 37   # AL列：印刷日時（TAB5で反映が完了したらここに日時が入る）
 
 
 def build_print_pdf_url(row_end=46, col_end=5):
@@ -668,8 +673,8 @@ def maintenance_admin_screen():
                     mgr_name_val = str(row.iloc[30]) if len(row) > 30 and pd.notna(row.iloc[30]) else "不明"
                     op_user_val = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "不明"
 
-                    checked_time_val = str(row.iloc[35]) if len(row) > 35 and pd.notna(row.iloc[35]) else ""
-                    checked_user_val = str(row.iloc[36]) if len(row) > 36 and pd.notna(row.iloc[36]) else ""
+                    checked_time_val = str(row.iloc[CHECK_TIME_COL_IDX]) if len(row) > CHECK_TIME_COL_IDX and pd.notna(row.iloc[CHECK_TIME_COL_IDX]) else ""
+                    checked_user_val = str(row.iloc[CHECK_USER_COL_IDX]) if len(row) > CHECK_USER_COL_IDX and pd.notna(row.iloc[CHECK_USER_COL_IDX]) else ""
 
                     expander_label = f"📌 【加盟店: {store_name or '未設定'}】 顧客名: {cust_name}（{cust_code}） | 納品日: {deliv_date}"
                     if checked_time_val:
@@ -736,11 +741,14 @@ def maintenance_admin_screen():
                                 checker_name = st.session_state["user_name"]
 
                                 clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
-                                while len(clean_base_row) < 37:
+                                while len(clean_base_row) < CHECK_USER_COL_IDX + 1:
                                     clean_base_row.append("")
 
-                                clean_base_row[35] = check_time
-                                clean_base_row[36] = checker_name
+                                clean_base_row[CHECK_TIME_COL_IDX] = check_time
+                                clean_base_row[CHECK_USER_COL_IDX] = checker_name
+                                # ※ PRINT_TIME_COL_IDX（AL列）はここでは触らない。
+                                #   clean_base_row はAK列までしか埋めていないため、GASへのupdated_rowも
+                                #   AK列までしか含まれず、既存のAL列（印刷日時）は上書きされず保持される。
 
                                 payload = {
                                     "action": "UPDATE_MAINTENANCE_CHECK",
@@ -783,13 +791,18 @@ def maintenance_admin_screen():
             if df_print.empty:
                 st.info("現在、印刷対象のデータはありません。")
             else:
-                # TAB4で「✅ チェック完了」になったデータ（36列目にチェック日時が入っている行）だけを対象にする
-                if len(df_print.columns) > 35:
-                    checked_mask = df_print.iloc[:, 35].fillna("").astype(str).str.strip() != ""
+                # TAB4で「✅ チェック完了」になったデータ（AJ列にチェック日時が入っている行）だけを対象にする
+                if len(df_print.columns) > CHECK_TIME_COL_IDX:
+                    checked_mask = df_print.iloc[:, CHECK_TIME_COL_IDX].fillna("").astype(str).str.strip() != ""
                     df_print = df_print[checked_mask]
 
+                # すでに印刷済み（AL列に印刷日時が入っている行）は印刷画面に出さない
+                if len(df_print.columns) > PRINT_TIME_COL_IDX:
+                    not_printed_mask = df_print.iloc[:, PRINT_TIME_COL_IDX].fillna("").astype(str).str.strip() == ""
+                    df_print = df_print[not_printed_mask]
+
                 if df_print.empty:
-                    st.info("チェック完了済みのデータがまだありません。TAB4でチェックを完了すると、ここに表示されます。")
+                    st.info("印刷対象のデータがありません（TAB4でチェック未完了、またはすでに印刷済みです）。")
                 else:
                     store_col_idx = 4
                     df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
@@ -798,10 +811,12 @@ def maintenance_admin_screen():
                     selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select_v2")
 
                     if selected_store:
-                        store_df = df_print[df_print["_store_name"] == selected_store].reset_index(drop=True)
+                        # ※ 行番号（row_id = 元のインデックス + 2）をMARK_PRINTEDで使うため、
+                        #   ここでは reset_index しない（他のTABと同じ row_id の考え方）
+                        store_df = df_print[df_print["_store_name"] == selected_store]
                         total_records = len(store_df)
 
-                        st.info(f"🏪 加盟店: **{selected_store}** （チェック完了済みデータ: {total_records} 件）※1ページに最大3件まで配置されます。")
+                        st.info(f"🏪 加盟店: **{selected_store}** （未印刷のチェック完了済みデータ: {total_records} 件）※1ページに最大3件まで配置されます。")
 
                         def build_record(r_row):
                             """行データを、印刷フォーマットのラベルに沿って取り出す"""
@@ -867,6 +882,7 @@ def maintenance_admin_screen():
                             c1_value = f"{selected_store} 様"
                             blocks = []
                             preview_records = []
+                            page_row_ids = [int(idx) + 2 for idx in chunk.index]  # 印刷済みマーク用の実際の行番号
 
                             for slot in range(3):
                                 base_row = 4 + slot * 15
@@ -895,10 +911,25 @@ def maintenance_admin_screen():
                                     res = post_to_gas(payload)
 
                                 if res.get("status") == "success":
+                                    # 印刷済みマーク（AL列＝印刷日時）を付けて、以後この印刷画面に出てこないようにする
+                                    print_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                    mark_payload = {
+                                        "action": "MARK_PRINTED",
+                                        "target_sheet_url": DEST_SHEET_URL,
+                                        "row_indices": page_row_ids,
+                                        "print_time": print_time,
+                                    }
+                                    mark_res = post_to_gas(mark_payload)
+                                    if mark_res.get("status") != "success":
+                                        st.warning(f"印刷済みマークの更新に失敗しました（反映自体は完了しています）: {mark_res.get('message')}")
+
                                     st.toast("🎉 反映が完了しました。PDFを作成しています…", icon="✅")
                                     try:
+                                        # このページの実件数分（1件なら1〜16行目、2件なら1〜31行目…）だけをPDF化する。
+                                        # 空のブロックまで印刷されないよう、件数に応じて末尾行を切り詰める。
+                                        pdf_row_end = 1 + len(chunk) * 15
                                         with st.spinner("PDFを作成しています..."):
-                                            pdf_res = requests.get(build_print_pdf_url(), timeout=30)
+                                            pdf_res = requests.get(build_print_pdf_url(row_end=pdf_row_end), timeout=30)
                                         content_type = pdf_res.headers.get("Content-Type", "")
                                         if pdf_res.status_code == 200 and "pdf" in content_type.lower():
                                             st.success("✅ PDFが作成できました。下のボタンからダウンロードしてください。")
