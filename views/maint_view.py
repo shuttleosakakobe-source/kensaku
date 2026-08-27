@@ -28,23 +28,26 @@ CONTRACT_DATA_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr
 
 # ルート変更：列インデックス（0始まり）
 # A タイムスタンプ, B 担当者(申請者), C 顧客コード, D 顧客名, E 加盟店, F 加盟店コード,
-# G 変更前ルート, H 変更前担当者, I 変更後ルート, J 変更後担当者, K 次回訪問日, L コメント,
-# M 理由, N 連絡担当者, O サイン(ステータス/承認者名), P 日時(承認日時), Q コメント(承認コメント/差戻し理由),
-# R 処理日, S 処理者, T チェック日, U チェック者, V 印刷済
+# G 変更前ルート, H 変更前担当者コード, I 変更前担当者, J 変更後ルート, K 変更後担当者コード, L 変更後担当者,
+# M 次回訪問日, N コメント, O 理由, P 連絡担当者, Q サイン(ステータス/承認者名), R 日時(承認日時), S コメント(承認コメント/差戻し理由),
+# T 処理日, U 処理者, V チェック日, W チェック者, X 印刷済
 ROUTE_COL = {
     "timestamp": 0, "applicant": 1, "cust_code": 2, "cust_name": 3,
-    "store_name": 4, "store_code": 5, "route_before": 6, "op_before": 7,
-    "route_after": 8, "op_after": 9, "next_visit": 10, "comment": 11,
-    "reason": 12, "contact_person": 13,
-    "status_sign": 14, "approval_time": 15, "approval_comment": 16,
-    "process_time": 17, "process_user": 18,
-    "check_time": 19, "check_user": 20,
-    "print_time": 21,
+    "store_name": 4, "store_code": 5,
+    "route_before": 6, "op_before_code": 7, "op_before_name": 8,
+    "route_after": 9, "op_after_code": 10, "op_after_name": 11,
+    "next_visit": 12, "comment": 13,
+    "reason": 14, "contact_person": 15,
+    "status_sign": 16, "approval_time": 17, "approval_comment": 18,
+    "process_time": 19, "process_user": 20,
+    "check_time": 21, "check_user": 22,
+    "print_time": 23,
 }
 
-# ご契約データシートの列（0始まり）：顧客コード(A)=0、担当者コード(E)=4、曜日(G)=6、契約週M/N/O/P=12/13/14/15
+# ご契約データシートの列（0始まり）：顧客コード(A)=0、担当者コード(E)=4、担当者名(F)=5、曜日(G)=6、契約週M/N/O/P=12/13/14/15
 CONTRACT_COL_CUST_CODE = 0
 CONTRACT_COL_STAFF_CODE = 4
+CONTRACT_COL_STAFF_NAME = 5
 CONTRACT_COL_WEEKDAY = 6
 CONTRACT_WEEK_COLS = [12, 13, 14, 15]  # M, N, O, P → 週1, 週2, 週3, 週4
 
@@ -101,34 +104,46 @@ def post_to_gas(payload):
         return {"status": "error", "message": str(e)}
 
 
-def get_route_lookup(cust_code):
-    """ご契約データから、指定した顧客コードの「変更前ルート」「変更前担当者」を算出する。
-    M/N/O/P列（週1〜週4）のうち0以外が入っている週について、
-    週番号＋G列(曜日種別・そのまま) + E列(担当者コード・3桁ゼロ埋め) でルートコードを作る。
-    ご契約データは商品ごとに複数行あるため、同じ顧客コードの行を全て見て、
-    ルートコード・担当者コードとも重複を除いて返す。"""
-    if not cust_code or not str(cust_code).strip():
-        return [], []
+def _load_contract_df():
+    """ご契約データシートをキャッシュせず毎回読み込む（軽量な参照専用ヘルパー）"""
     try:
         df_contract = pd.read_csv(CONTRACT_DATA_CSV, dtype=str, storage_options={"User-Agent": "Mozilla/5.0"})
     except Exception:
-        return [], []
+        return None
     if df_contract.empty:
-        return [], []
+        return None
+    return df_contract
+
+
+def get_route_lookup(cust_code):
+    """ご契約データから、指定した顧客コードの「変更前ルート」「変更前担当者コード」「変更前担当者（氏名）」を算出する。
+    M/N/O/P列（週1〜週4）のうち0以外が入っている週について、
+    週番号＋G列(曜日種別・そのまま) + E列(担当者コード・3桁ゼロ埋め) でルートコードを作る。
+    担当者名はE列(担当者コード)に対応するF列(担当者名)から取得する。
+    ご契約データは商品ごとに複数行あるため、同じ顧客コードの行を全て見て、
+    ルートコード・担当者コード・担当者名とも重複を除いて返す。"""
+    if not cust_code or not str(cust_code).strip():
+        return [], [], []
+    df_contract = _load_contract_df()
+    if df_contract is None:
+        return [], [], []
 
     matched = df_contract[
         df_contract.iloc[:, CONTRACT_COL_CUST_CODE].astype(str).str.strip() == str(cust_code).strip()
     ]
     if matched.empty:
-        return [], []
+        return [], [], []
 
     route_codes = []
     staff_codes = []
+    staff_names = []
     for _, c_row in matched.iterrows():
         weekday = str(c_row.iloc[CONTRACT_COL_WEEKDAY]).strip() if pd.notna(c_row.iloc[CONTRACT_COL_WEEKDAY]) else ""
         staff_code = str(c_row.iloc[CONTRACT_COL_STAFF_CODE]).strip() if pd.notna(c_row.iloc[CONTRACT_COL_STAFF_CODE]) else ""
+        staff_name = str(c_row.iloc[CONTRACT_COL_STAFF_NAME]).strip() if len(c_row) > CONTRACT_COL_STAFF_NAME and pd.notna(c_row.iloc[CONTRACT_COL_STAFF_NAME]) else ""
         if staff_code and staff_code not in staff_codes:
             staff_codes.append(staff_code)
+            staff_names.append(staff_name)
         for week_num, col_idx in enumerate(CONTRACT_WEEK_COLS, start=1):
             if col_idx >= len(c_row):
                 continue
@@ -137,7 +152,27 @@ def get_route_lookup(cust_code):
                 code = f"{week_num}{weekday}{staff_code.zfill(3)}"
                 if code not in route_codes:
                     route_codes.append(code)
-    return route_codes, staff_codes
+    return route_codes, staff_codes, staff_names
+
+
+def get_staff_name_by_code(staff_code):
+    """ご契約データ全体（顧客コードを問わず）からE列=担当者コードで検索し、
+    最初に見つかったF列=担当者名を返す（見つからなければ空文字）"""
+    if not staff_code or not str(staff_code).strip():
+        return ""
+    df_contract = _load_contract_df()
+    if df_contract is None:
+        return ""
+    if len(df_contract.columns) <= CONTRACT_COL_STAFF_NAME:
+        return ""
+
+    matched = df_contract[
+        df_contract.iloc[:, CONTRACT_COL_STAFF_CODE].astype(str).str.strip() == str(staff_code).strip()
+    ]
+    if matched.empty:
+        return ""
+    first_row = matched.iloc[0]
+    return str(first_row.iloc[CONTRACT_COL_STAFF_NAME]).strip() if pd.notna(first_row.iloc[CONTRACT_COL_STAFF_NAME]) else ""
 
 
 def maintenance_admin_screen():
@@ -160,6 +195,20 @@ def maintenance_admin_screen():
 
 
 def render_route_change_tabs():
+    # 💡 【CSS調整】disabled入力の文字が薄くて読みにくいのを解消（商品発注タブと同じ調整）
+    st.markdown("""
+        <style>
+        input:disabled, textarea:disabled {
+            -webkit-text-fill-color: #31333F !important;
+            color: #31333F !important;
+            opacity: 1 !important;
+        }
+        div[data-testid="stForm"] button[disabled] {
+            display: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     st.header("🗺️ ルート変更申請・承認・業務処理システム")
 
     if "user_name" not in st.session_state:
@@ -170,18 +219,14 @@ def render_route_change_tabs():
 
     rclear = f"_{st.session_state['route_form_clear_key']}"
 
-    if f"rt_ccode{rclear}" not in st.session_state:
-        st.session_state[f"rt_ccode{rclear}"] = ""
-    if f"rt_cname{rclear}" not in st.session_state:
-        st.session_state[f"rt_cname{rclear}"] = ""
-    if f"rt_scode{rclear}" not in st.session_state:
-        st.session_state[f"rt_scode{rclear}"] = ""
-    if f"rt_sname{rclear}" not in st.session_state:
-        st.session_state[f"rt_sname{rclear}"] = ""
-    if f"rt_rbefore{rclear}" not in st.session_state:
-        st.session_state[f"rt_rbefore{rclear}"] = ""
-    if f"rt_obefore{rclear}" not in st.session_state:
-        st.session_state[f"rt_obefore{rclear}"] = ""
+    for _key, _default in [
+        (f"rt_ccode{rclear}", ""), (f"rt_cname{rclear}", ""),
+        (f"rt_scode{rclear}", ""), (f"rt_sname{rclear}", ""),
+        (f"rt_rbefore{rclear}", ""), (f"rt_obefore_code{rclear}", ""), (f"rt_obefore_name{rclear}", ""),
+        (f"rt_oafter_code{rclear}", ""), (f"rt_oafter_name{rclear}", ""),
+    ]:
+        if _key not in st.session_state:
+            st.session_state[_key] = _default
 
     if "route_searched_ccode" not in st.session_state:
         st.session_state["route_searched_ccode"] = ""
@@ -220,7 +265,7 @@ def render_route_change_tabs():
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
-                            route_codes, staff_codes = get_route_lookup(cust_code_input)
+                            route_codes, staff_codes, staff_names = get_route_lookup(cust_code_input)
 
                             st.session_state["route_searched_ccode"] = str(cust_code_input)
                             st.session_state[f"rt_ccode{rclear}"] = str(cust_code_input)
@@ -228,7 +273,8 @@ def render_route_change_tabs():
                             st.session_state[f"rt_cname{rclear}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
                             st.session_state[f"rt_scode{rclear}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
                             st.session_state[f"rt_rbefore{rclear}"] = "、".join(route_codes)
-                            st.session_state[f"rt_obefore{rclear}"] = "、".join(staff_codes)
+                            st.session_state[f"rt_obefore_code{rclear}"] = "、".join(staff_codes)
+                            st.session_state[f"rt_obefore_name{rclear}"] = "、".join([n for n in staff_names if n])
 
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.3)
@@ -239,6 +285,30 @@ def render_route_change_tabs():
                         st.error(f"マスタ参照エラー: {e}")
                 else:
                     st.warning("顧客コードを入力してください。")
+
+            st.write("---")
+            st.caption("🔍 変更後担当者コードが分かっている場合は、下で検索すると担当者名を自動表示できます（任意）")
+            col_staff_input, col_staff_btn = st.columns([4, 1])
+            oafter_code_search = col_staff_input.text_input(
+                "変更後担当者コードで名前を検索",
+                value="",
+                key=f"rt_oafter_search{rclear}"
+            )
+            btn_staff_search = col_staff_btn.button("🔍 名前検索", use_container_width=True, type="secondary", key=f"rt_staff_search_btn{rclear}")
+
+            if btn_staff_search:
+                if oafter_code_search.strip():
+                    name_found = get_staff_name_by_code(oafter_code_search.strip())
+                    st.session_state[f"rt_oafter_code{rclear}"] = oafter_code_search.strip()
+                    st.session_state[f"rt_oafter_name{rclear}"] = name_found
+                    if name_found:
+                        st.toast(f"担当者名を取得しました：{name_found}", icon="✅")
+                    else:
+                        st.warning("該当する担当者コードが見つかりませんでした。担当者名は手入力してください。")
+                    time.sleep(0.3)
+                    st.rerun()
+                else:
+                    st.warning("担当者コードを入力してください。")
 
             st.write("---")
 
@@ -258,13 +328,15 @@ def render_route_change_tabs():
 
                 st.write("---")
                 st.write("**🗺️ ルート情報**")
-                row3_col1, row3_col2 = st.columns(2)
+                row3_col1, row3_col2, row3_col3 = st.columns(3)
                 route_before = row3_col1.text_input("変更前ルート（顧客コード検索で自動表示）", key=f"rt_rbefore{rclear}", disabled=True)
-                op_before = row3_col2.text_input("変更前担当者（顧客コード検索で自動表示）", key=f"rt_obefore{rclear}", disabled=True)
+                op_before_code = row3_col2.text_input("変更前担当者コード（顧客コード検索で自動表示）", key=f"rt_obefore_code{rclear}", disabled=True)
+                op_before_name = row3_col3.text_input("変更前担当者（顧客コード検索で自動表示）", key=f"rt_obefore_name{rclear}", disabled=True)
 
-                row4_col1, row4_col2 = st.columns(2)
+                row4_col1, row4_col2, row4_col3 = st.columns(3)
                 route_after = row4_col1.text_input("変更後ルート", key=f"rt_rafter{rclear}")
-                op_after = row4_col2.text_input("変更後担当者", key=f"rt_oafter{rclear}")
+                op_after_code = row4_col2.text_input("変更後担当者コード", key=f"rt_oafter_code{rclear}")
+                op_after_name = row4_col3.text_input("変更後担当者（コード検索で自動表示・手入力も可）", key=f"rt_oafter_name{rclear}")
 
                 next_visit_val = st.date_input("次回訪問日", value=None, key=f"rt_nvisit{rclear}")
                 next_visit = next_visit_val.strftime("%Y/%m/%d") if next_visit_val else ""
@@ -284,7 +356,8 @@ def render_route_change_tabs():
 
                         full_row = [
                             now_str, applicant, customer_code, customer_name, store_name, store_code,
-                            route_before, op_before, route_after, op_after, next_visit,
+                            route_before, op_before_code, op_before_name,
+                            route_after, op_after_code, op_after_name, next_visit,
                             rt_comment, rt_reason, rt_contact, "申請中", "", ""
                         ]
 
@@ -337,13 +410,15 @@ def render_route_change_tabs():
                                 edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"rt_re_sname_{row_id}")
                                 edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"rt_re_app_{row_id}")
 
-                                r3_1, r3_2 = st.columns(2)
+                                r3_1, r3_2, r3_3 = st.columns(3)
                                 edit_route_before = r3_1.text_input("変更前ルート", value=_v("route_before"), key=f"rt_re_rbefore_{row_id}")
-                                edit_op_before = r3_2.text_input("変更前担当者", value=_v("op_before"), key=f"rt_re_obefore_{row_id}")
+                                edit_op_before_code = r3_2.text_input("変更前担当者コード", value=_v("op_before_code"), key=f"rt_re_obefore_code_{row_id}")
+                                edit_op_before_name = r3_3.text_input("変更前担当者", value=_v("op_before_name"), key=f"rt_re_obefore_name_{row_id}")
 
-                                r4_1, r4_2 = st.columns(2)
+                                r4_1, r4_2, r4_3 = st.columns(3)
                                 edit_route_after = r4_1.text_input("変更後ルート", value=_v("route_after"), key=f"rt_re_rafter_{row_id}")
-                                edit_op_after = r4_2.text_input("変更後担当者", value=_v("op_after"), key=f"rt_re_oafter_{row_id}")
+                                edit_op_after_code = r4_2.text_input("変更後担当者コード", value=_v("op_after_code"), key=f"rt_re_oafter_code_{row_id}")
+                                edit_op_after_name = r4_3.text_input("変更後担当者", value=_v("op_after_name"), key=f"rt_re_oafter_name_{row_id}")
 
                                 edit_next_visit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"rt_re_nvisit_{row_id}")
 
@@ -360,8 +435,9 @@ def render_route_change_tabs():
                                     else:
                                         updated_row = [
                                             _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code, edit_route_before, edit_op_before,
-                                            edit_route_after, edit_op_after, edit_next_visit,
+                                            edit_store_name, edit_store_code,
+                                            edit_route_before, edit_op_before_code, edit_op_before_name,
+                                            edit_route_after, edit_op_after_code, edit_op_after_name, edit_next_visit,
                                             edit_comment, edit_reason, edit_contact, "申請中", "", ""
                                         ]
 
@@ -415,13 +491,15 @@ def render_route_change_tabs():
                                 edit_sname = m2_1.text_input("加盟店", value=_v("store_name"), key=f"rt_m_sname_{row_id}")
                                 edit_app = m2_2.text_input("担当者", value=_v("applicant"), key=f"rt_m_app_{row_id}")
 
-                                m3_1, m3_2 = st.columns(2)
+                                m3_1, m3_2, m3_3 = st.columns(3)
                                 edit_rbefore = m3_1.text_input("変更前ルート", value=_v("route_before"), key=f"rt_m_rbefore_{row_id}")
-                                edit_obefore = m3_2.text_input("変更前担当者", value=_v("op_before"), key=f"rt_m_obefore_{row_id}")
+                                edit_obefore_code = m3_2.text_input("変更前担当者コード", value=_v("op_before_code"), key=f"rt_m_obefore_code_{row_id}")
+                                edit_obefore_name = m3_3.text_input("変更前担当者", value=_v("op_before_name"), key=f"rt_m_obefore_name_{row_id}")
 
-                                m4_1, m4_2 = st.columns(2)
+                                m4_1, m4_2, m4_3 = st.columns(3)
                                 edit_rafter = m4_1.text_input("変更後ルート", value=_v("route_after"), key=f"rt_m_rafter_{row_id}")
-                                edit_oafter = m4_2.text_input("変更後担当者", value=_v("op_after"), key=f"rt_m_oafter_{row_id}")
+                                edit_oafter_code = m4_2.text_input("変更後担当者コード", value=_v("op_after_code"), key=f"rt_m_oafter_code_{row_id}")
+                                edit_oafter_name = m4_3.text_input("変更後担当者", value=_v("op_after_name"), key=f"rt_m_oafter_name_{row_id}")
 
                                 edit_nvisit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"rt_m_nvisit_{row_id}")
 
@@ -442,8 +520,10 @@ def render_route_change_tabs():
                                 if btn_approve or btn_reject or btn_delete:
                                     updated_row = [
                                         _v("timestamp"), edit_app, edit_ccode, edit_cname,
-                                        edit_sname, edit_scode, edit_rbefore, edit_obefore,
-                                        edit_rafter, edit_oafter, edit_nvisit, edit_comment, edit_reason, edit_contact
+                                        edit_sname, edit_scode,
+                                        edit_rbefore, edit_obefore_code, edit_obefore_name,
+                                        edit_rafter, edit_oafter_code, edit_oafter_name, edit_nvisit,
+                                        edit_comment, edit_reason, edit_contact
                                     ]
 
                                     action_type = ""
@@ -515,13 +595,15 @@ def render_route_change_tabs():
                             o2_c1.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"rt_v_sname_{row_id}")
                             o2_c2.text_input("担当者", value=_v("applicant"), disabled=True, key=f"rt_v_app_{row_id}")
 
-                            o3_c1, o3_c2 = st.columns(2)
+                            o3_c1, o3_c2, o3_c3 = st.columns(3)
                             o3_c1.text_input("変更前ルート", value=_v("route_before"), disabled=True, key=f"rt_v_rbefore_{row_id}")
-                            o3_c2.text_input("変更前担当者", value=_v("op_before"), disabled=True, key=f"rt_v_obefore_{row_id}")
+                            o3_c2.text_input("変更前担当者コード", value=_v("op_before_code"), disabled=True, key=f"rt_v_obefore_code_{row_id}")
+                            o3_c3.text_input("変更前担当者", value=_v("op_before_name"), disabled=True, key=f"rt_v_obefore_name_{row_id}")
 
-                            o4_c1, o4_c2 = st.columns(2)
+                            o4_c1, o4_c2, o4_c3 = st.columns(3)
                             o4_c1.text_input("変更後ルート", value=_v("route_after"), disabled=True, key=f"rt_v_rafter_{row_id}")
-                            o4_c2.text_input("変更後担当者", value=_v("op_after"), disabled=True, key=f"rt_v_oafter_{row_id}")
+                            o4_c2.text_input("変更後担当者コード", value=_v("op_after_code"), disabled=True, key=f"rt_v_oafter_code_{row_id}")
+                            o4_c3.text_input("変更後担当者", value=_v("op_after_name"), disabled=True, key=f"rt_v_oafter_name_{row_id}")
 
                             o5_c1, o5_c2 = st.columns(2)
                             o5_c1.text_input("次回訪問日", value=_v("next_visit"), disabled=True, key=f"rt_v_nvisit_{row_id}")
@@ -661,17 +743,19 @@ def render_route_change_tabs():
                             c4.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"rt_chk_sname_{row_id}")
                             c5.text_input("担当者", value=_v("applicant"), disabled=True, key=f"rt_chk_app_{row_id}")
 
-                            c6, c7 = st.columns(2)
+                            c6, c7, c8 = st.columns(3)
                             c6.text_input("変更前ルート", value=_v("route_before"), disabled=True, key=f"rt_chk_rbefore_{row_id}")
-                            c7.text_input("変更前担当者", value=_v("op_before"), disabled=True, key=f"rt_chk_obefore_{row_id}")
+                            c7.text_input("変更前担当者コード", value=_v("op_before_code"), disabled=True, key=f"rt_chk_obefore_code_{row_id}")
+                            c8.text_input("変更前担当者", value=_v("op_before_name"), disabled=True, key=f"rt_chk_obefore_name_{row_id}")
 
-                            c8, c9 = st.columns(2)
-                            c8.text_input("変更後ルート", value=_v("route_after"), disabled=True, key=f"rt_chk_rafter_{row_id}")
-                            c9.text_input("変更後担当者", value=_v("op_after"), disabled=True, key=f"rt_chk_oafter_{row_id}")
+                            c9, c10, c11 = st.columns(3)
+                            c9.text_input("変更後ルート", value=_v("route_after"), disabled=True, key=f"rt_chk_rafter_{row_id}")
+                            c10.text_input("変更後担当者コード", value=_v("op_after_code"), disabled=True, key=f"rt_chk_oafter_code_{row_id}")
+                            c11.text_input("変更後担当者", value=_v("op_after_name"), disabled=True, key=f"rt_chk_oafter_name_{row_id}")
 
-                            c10, c11 = st.columns(2)
-                            c10.text_input("次回訪問日", value=_v("next_visit"), disabled=True, key=f"rt_chk_nvisit_{row_id}")
-                            c11.text_input("処理者", value=op_user_val, disabled=True, key=f"rt_chk_op_{row_id}")
+                            c12, c13 = st.columns(2)
+                            c12.text_input("次回訪問日", value=_v("next_visit"), disabled=True, key=f"rt_chk_nvisit_{row_id}")
+                            c13.text_input("処理者", value=op_user_val, disabled=True, key=f"rt_chk_op_{row_id}")
 
                             st.text_input("承認者", value=mgr_name_val, disabled=True, key=f"rt_chk_mgr_{row_id}")
 
