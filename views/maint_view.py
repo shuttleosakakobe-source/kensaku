@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbzyaKOCVOZf8NYygU9dTZXhLofc8e2gLT29mI-8VJ5Ia7zjXF9IpbTBM02dNIqcajI4ow/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbw2zOxmcBHPX67aVJDBOZybG3U-JzJ_IFza9H6L_KDrxPFxMZkWxadlosWZxAiIX1TJVA/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -1605,23 +1605,23 @@ def render_product_order_tabs():
                             }
 
                         def matrix_for_record(rec):
-                            """1件分のデータを、base_row行目を起点にした13行×5列（A〜E）の行列に変換する。
-                            1行目=A/B/D/E(加盟店コード/顧客名/責任者/処理者)、2行おきに商品明細5件、
-                            最終行=特記事項。空欄になる行（間の行）は全て空文字にする。
-                            ※GASへは1件あたり1回のsetValuesでまとめて送るための行列（cell単位で送ると
-                            リクエスト回数が増えてタイムアウトするため）"""
+                            """1件分のデータを、base_row行目を起点にした行データに変換する。
+                            0行目=A/B/D/E(加盟店コード/顧客名/責任者/処理者)、2行おきに商品明細5件、
+                            12行目=特記事項。
+                            ※1,3,5,7,9,11行目はテンプレート側の固定見出し（商品記号・発注数・単価・伝票出力等）
+                            なので、ここでは一切含めない＝GAS側でも触らないようにして、印刷のたびに
+                            見出しが消えてしまう不具合を防ぐ。"""
                             blank = ["", "", "", "", ""]
                             if not rec:
-                                return [blank[:] for _ in range(13)]
-
-                            extra_e = [rec["cust_code"], rec["applicant"], rec["delivery_person"], rec["delivery_date"], rec["route_code"]]
-                            matrix = [blank[:] for _ in range(13)]
-                            matrix[0] = [rec["store_code"], rec["cust_name"], "", rec["manager"], rec["operator"]]
-                            for i_item, item_row in enumerate([2, 4, 6, 8, 10]):
-                                p_code, p_qty, p_price, p_flg = rec["items"][i_item]
-                                matrix[item_row] = [p_code, p_qty, p_price, p_flg, extra_e[i_item]]
-                            matrix[12] = [rec["special_note"], "", "", "", ""]
-                            return matrix
+                                rows = {0: blank[:], 2: blank[:], 4: blank[:], 6: blank[:], 8: blank[:], 10: blank[:], 12: blank[:]}
+                            else:
+                                extra_e = [rec["cust_code"], rec["applicant"], rec["delivery_person"], rec["delivery_date"], rec["route_code"]]
+                                rows = {0: [rec["store_code"], rec["cust_name"], "", rec["manager"], rec["operator"]]}
+                                for i_item, item_row in enumerate([2, 4, 6, 8, 10]):
+                                    p_code, p_qty, p_price, p_flg = rec["items"][i_item]
+                                    rows[item_row] = [p_code, p_qty, p_price, p_flg, extra_e[i_item]]
+                                rows[12] = [rec["special_note"], "", "", "", ""]
+                            return [{"offset": off, "values": vals} for off, vals in sorted(rows.items())]
 
                         chunk_size = 3
                         chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
@@ -1640,7 +1640,7 @@ def render_product_order_tabs():
                                 rec = build_record(chunk.iloc[slot]) if slot < len(chunk) else None
                                 if rec:
                                     preview_records.append(rec)
-                                blocks.append({"start_row": base_row, "matrix": matrix_for_record(rec)})
+                                blocks.append({"start_row": base_row, "rows": matrix_for_record(rec)})
 
                             with st.expander(f"プレビューを見る（{len(preview_records)} 件）"):
                                 for r_i, rec in enumerate(preview_records):
