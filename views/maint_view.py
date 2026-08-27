@@ -287,56 +287,41 @@ def render_route_change_tabs():
                     st.warning("顧客コードを入力してください。")
 
             st.write("---")
-            st.caption("🔍 変更後担当者コードが分かっている場合は、下で検索すると担当者名を自動表示できます（任意）")
-            col_staff_input, col_staff_btn = st.columns([4, 1])
-            oafter_code_search = col_staff_input.text_input(
-                "変更後担当者コードで名前を検索",
-                value="",
-                key=f"rt_oafter_search{rclear}"
-            )
-            btn_staff_search = col_staff_btn.button("🔍 名前検索", use_container_width=True, type="secondary", key=f"rt_staff_search_btn{rclear}")
+            st.write("**📋 入力情報**")
 
-            if btn_staff_search:
-                if oafter_code_search.strip():
-                    name_found = get_staff_name_by_code(oafter_code_search.strip())
-                    st.session_state[f"rt_oafter_code{rclear}"] = oafter_code_search.strip()
-                    st.session_state[f"rt_oafter_name{rclear}"] = name_found
-                    if name_found:
-                        st.toast(f"担当者名を取得しました：{name_found}", icon="✅")
-                    else:
-                        st.warning("該当する担当者コードが見つかりませんでした。担当者名は手入力してください。")
-                    time.sleep(0.3)
-                    st.rerun()
-                else:
-                    st.warning("担当者コードを入力してください。")
+            row1_col1, row1_col2, row1_col3 = st.columns(3)
+            customer_code = row1_col1.text_input("顧客コード", key=f"rt_ccode{rclear}")
+            customer_name = row1_col2.text_input("顧客名", key=f"rt_cname{rclear}")
+            store_code = row1_col3.text_input("加盟店コード", key=f"rt_scode{rclear}")
+
+            row2_col1, row2_col2 = st.columns(2)
+            store_name = row2_col1.text_input("加盟店", key=f"rt_sname{rclear}")
+            applicant = row2_col2.text_input("担当者", value=st.session_state["user_name"], key=f"rt_app{rclear}")
+
+            st.write("---")
+            st.write("**🗺️ ルート情報**")
+            row3_col1, row3_col2, row3_col3 = st.columns(3)
+            route_before = row3_col1.text_input("変更前ルート（顧客コード検索で自動表示）", key=f"rt_rbefore{rclear}", disabled=True)
+            op_before_code = row3_col2.text_input("変更前担当者コード（顧客コード検索で自動表示）", key=f"rt_obefore_code{rclear}", disabled=True)
+            op_before_name = row3_col3.text_input("変更前担当者（顧客コード検索で自動表示）", key=f"rt_obefore_name{rclear}", disabled=True)
+
+            def _on_rt_oafter_code_change(_rclear=rclear):
+                code_val = st.session_state.get(f"rt_oafter_code{_rclear}", "").strip()
+                st.session_state[f"rt_oafter_name{_rclear}"] = get_staff_name_by_code(code_val) if code_val else ""
+
+            row4_col1, row4_col2, row4_col3 = st.columns(3)
+            route_after = row4_col1.text_input("変更後ルート", key=f"rt_rafter{rclear}")
+            op_after_code = row4_col2.text_input(
+                "変更後担当者コード（入力すると担当者名を自動表示）",
+                key=f"rt_oafter_code{rclear}",
+                on_change=_on_rt_oafter_code_change,
+            )
+            op_after_name = row4_col3.text_input("変更後担当者（コードから自動表示・手入力も可）", key=f"rt_oafter_name{rclear}")
 
             st.write("---")
 
             with st.form("rt_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
-
-                st.write("**📋 入力情報**")
-
-                row1_col1, row1_col2, row1_col3 = st.columns(3)
-                customer_code = row1_col1.text_input("顧客コード", key=f"rt_ccode{rclear}")
-                customer_name = row1_col2.text_input("顧客名", key=f"rt_cname{rclear}")
-                store_code = row1_col3.text_input("加盟店コード", key=f"rt_scode{rclear}")
-
-                row2_col1, row2_col2 = st.columns(2)
-                store_name = row2_col1.text_input("加盟店", key=f"rt_sname{rclear}")
-                applicant = row2_col2.text_input("担当者", value=st.session_state["user_name"], key=f"rt_app{rclear}")
-
-                st.write("---")
-                st.write("**🗺️ ルート情報**")
-                row3_col1, row3_col2, row3_col3 = st.columns(3)
-                route_before = row3_col1.text_input("変更前ルート（顧客コード検索で自動表示）", key=f"rt_rbefore{rclear}", disabled=True)
-                op_before_code = row3_col2.text_input("変更前担当者コード（顧客コード検索で自動表示）", key=f"rt_obefore_code{rclear}", disabled=True)
-                op_before_name = row3_col3.text_input("変更前担当者（顧客コード検索で自動表示）", key=f"rt_obefore_name{rclear}", disabled=True)
-
-                row4_col1, row4_col2, row4_col3 = st.columns(3)
-                route_after = row4_col1.text_input("変更後ルート", key=f"rt_rafter{rclear}")
-                op_after_code = row4_col2.text_input("変更後担当者コード", key=f"rt_oafter_code{rclear}")
-                op_after_name = row4_col3.text_input("変更後担当者（コード検索で自動表示・手入力も可）", key=f"rt_oafter_name{rclear}")
 
                 next_visit_val = st.date_input("次回訪問日", value=None, key=f"rt_nvisit{rclear}")
                 next_visit = next_visit_val.strftime("%Y/%m/%d") if next_visit_val else ""
