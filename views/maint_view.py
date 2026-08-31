@@ -1264,27 +1264,26 @@ def render_contract_change_tabs():
             st.write("---")
             st.write("**📋 入力情報**")
 
-            row1_col1, row1_col2, row1_col3, row1_col4, row1_col5 = st.columns(5)
+            row1_col1, row1_col2, row1_col3 = st.columns(3)
             customer_code = row1_col1.text_input("顧客コード", key=f"cc_ccode{rclear}")
             customer_name = row1_col2.text_input("顧客名", key=f"cc_cname{rclear}")
             store_name = row1_col3.text_input("加盟店名", key=f"cc_sname{rclear}")
-            store_code = row1_col4.text_input("加盟店コード", key=f"cc_scode{rclear}")
-            applicant = row1_col5.text_input("担当者", value=st.session_state["user_name"], key=f"cc_app{rclear}")
+
+            row1b_col1, row1b_col2 = st.columns(2)
+            store_code = row1b_col1.text_input("加盟店コード", key=f"cc_scode{rclear}")
+            applicant = row1b_col2.text_input("担当者", value=st.session_state["user_name"], key=f"cc_app{rclear}")
 
             products = st.session_state[f"cc_products{rclear}"]
             product_codes = list(dict.fromkeys([p["code"] for p in products]))
 
             st.write("---")
-            hcol1, hcol2 = st.columns(2)
-            hcol1.markdown("#### 🔵 変更前")
-            hcol2.markdown("#### 🟢 変更後")
 
             items_data = []
             total_before = 0.0
             total_after = 0.0
 
             for n in range(CC_ITEM_COUNT):
-                st.caption(f"商品 {n + 1}")
+                st.markdown(f"**商品 {n + 1}**")
 
                 def _make_before_cb(_n=n, _rclear=rclear):
                     def _cb():
@@ -1303,49 +1302,49 @@ def render_contract_change_tabs():
                                 st.session_state[f"cc_before_{_suf}_{_n}{_rclear}"] = ""
                     return _cb
 
-                def _make_after_pick_cb(_n=n, _rclear=rclear):
-                    def _cb():
-                        _picked = st.session_state.get(f"cc_after_pick_{_n}{_rclear}", "")
-                        if _picked:
-                            st.session_state[f"cc_after_code_{_n}{_rclear}"] = _picked
-                    return _cb
+                # ---- 変更前・変更後をそれぞれ「商品記号/契約数/単価/周期」の行と「A/B/C/D」の行の
+                # 2段（最大4列）に分けて表示。半分幅の画面でも文字がつぶれないようにするため。 ----
+                st.markdown("🔵 変更前")
+                b_row1 = st.columns(4)
+                b_row2 = st.columns(4)
 
-                # ---- 変更前（左8列）・変更後（右8列）を1行に並べる ----
-                (bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8,
-                 ac1, ac2, ac3, ac4, ac5, ac6, ac7, ac8) = st.columns(16)
-
-                before_code = bc1.selectbox(
+                before_code = b_row1[0].selectbox(
                     "商品記号", [""] + product_codes,
                     key=f"cc_before_code_{n}{rclear}", on_change=_make_before_cb(),
                 )
-                before_price = bc3.text_input("単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
-                before_cycle = bc4.text_input("周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
-                before_a = bc5.text_input("A", key=f"cc_before_a_{n}{rclear}", disabled=True)
-                before_b = bc6.text_input("B", key=f"cc_before_b_{n}{rclear}", disabled=True)
-                before_c = bc7.text_input("C", key=f"cc_before_c_{n}{rclear}", disabled=True)
-                before_d = bc8.text_input("D", key=f"cc_before_d_{n}{rclear}", disabled=True)
+                before_price = b_row1[2].text_input("単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
+                before_cycle = b_row1[3].text_input("周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
+                before_a = b_row2[0].text_input("A", key=f"cc_before_a_{n}{rclear}", disabled=True)
+                before_b = b_row2[1].text_input("B", key=f"cc_before_b_{n}{rclear}", disabled=True)
+                before_c = b_row2[2].text_input("C", key=f"cc_before_c_{n}{rclear}", disabled=True)
+                before_d = b_row2[3].text_input("D", key=f"cc_before_d_{n}{rclear}", disabled=True)
 
                 before_count = _cc_sum4(before_a, before_b, before_c, before_d)
                 st.session_state[f"cc_before_count_{n}{rclear}"] = before_count
-                bc2.text_input("契約数", key=f"cc_before_count_{n}{rclear}", disabled=True)
+                b_row1[1].text_input("契約数", key=f"cc_before_count_{n}{rclear}", disabled=True)
 
-                with ac1:
-                    after_pick = st.selectbox(
-                        "商品記号（候補）", [""] + product_codes,
-                        key=f"cc_after_pick_{n}{rclear}", on_change=_make_after_pick_cb(),
-                        label_visibility="visible",
-                    )
-                    after_code = st.text_input("商品記号（自由入力）", key=f"cc_after_code_{n}{rclear}")
-                after_price = ac3.text_input("単価", key=f"cc_after_price_{n}{rclear}")
-                after_cycle = ac4.text_input("周期", key=f"cc_after_cycle_{n}{rclear}")
-                after_a = ac5.text_input("A", key=f"cc_after_a_{n}{rclear}")
-                after_b = ac6.text_input("B", key=f"cc_after_b_{n}{rclear}")
-                after_c = ac7.text_input("C", key=f"cc_after_c_{n}{rclear}")
-                after_d = ac8.text_input("D", key=f"cc_after_d_{n}{rclear}")
+                st.markdown("🟢 変更後")
+                a_row1 = st.columns(4)
+                a_row2 = st.columns(4)
+
+                after_code = a_row1[0].selectbox(
+                    "商品記号",
+                    product_codes,
+                    index=None,
+                    accept_new_options=True,
+                    placeholder="選択 or 入力",
+                    key=f"cc_after_code_{n}{rclear}",
+                ) or ""
+                after_price = a_row1[2].text_input("単価", key=f"cc_after_price_{n}{rclear}")
+                after_cycle = a_row1[3].text_input("周期", key=f"cc_after_cycle_{n}{rclear}")
+                after_a = a_row2[0].text_input("A", key=f"cc_after_a_{n}{rclear}")
+                after_b = a_row2[1].text_input("B", key=f"cc_after_b_{n}{rclear}")
+                after_c = a_row2[2].text_input("C", key=f"cc_after_c_{n}{rclear}")
+                after_d = a_row2[3].text_input("D", key=f"cc_after_d_{n}{rclear}")
 
                 after_count = _cc_sum4(after_a, after_b, after_c, after_d)
                 st.session_state[f"cc_after_count_{n}{rclear}"] = after_count
-                ac2.text_input("契約数", key=f"cc_after_count_{n}{rclear}", disabled=True)
+                a_row1[1].text_input("契約数", key=f"cc_after_count_{n}{rclear}", disabled=True)
 
                 items_data.append({
                     "before_code": before_code, "before_price": before_price, "before_cycle": before_cycle,
