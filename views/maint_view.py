@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbw6IzYD11E9pUr6hiM5IwEcMXUVb--uFb17Y2AlQzmtyB79ch65nR1KUVBGuZjpz8oINQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbx9UWdk5z8_OBTGlfRM90_TeIHPZFbaFkaN8rslwrlD4rCtKX---A2W52V65Tw_dE5G1A/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -67,6 +67,56 @@ ROUTE_PRINT_SHEET_GID = "1261728197"
 ROUTE_PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={ROUTE_PRINT_SHEET_GID}#gid={ROUTE_PRINT_SHEET_GID}"
 # 1ページに4件まで配置。各件の起点行（A列）：1件目=4, 2件目=15, 3件目=26, 4件目=38
 ROUTE_PRINT_BASE_ROWS = [4, 15, 26, 38]
+
+# ==========================================
+# 「契約内容変更」モード用シート
+# ==========================================
+# TAB1・TAB2用（申請〜承認）
+CC_TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=40673825#gid=40673825"
+CC_TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv&gid=40673825"
+# TAB3・TAB4用（転記〜チェック）
+CC_DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=1232708804#gid=1232708804"
+CC_DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv&gid=1232708804"
+
+# 契約内容変更：列インデックス（0始まり）
+# A タイムスタンプ, B 担当者(申請者), C 顧客コード, D 顧客名, E 加盟店, F 加盟店コード,
+# G〜 商品①〜⑤（1商品あたり14列＝変更前7列＋変更後7列。下のCC_ITEM_FIELDS順）,
+# （G+70列目から）理由, 連絡担当者様, 増減金額, サイン(ステータス/承認者名), 日時(承認日時), コメント(承認コメント/差戻し理由),
+# 処理日, 処理者, チェック日, チェック者, 印刷済
+CC_ITEM_FIELDS = [
+    "before_code", "before_price", "before_cycle", "before_a", "before_b", "before_c", "before_d",
+    "after_code", "after_price", "after_cycle", "after_a", "after_b", "after_c", "after_d",
+]
+CC_ITEM_COUNT = 5
+CC_ITEMS_START_COL = 6  # G列（0始まり）から商品①の「変更前商品記号」が始まる
+
+CC_COL = {
+    "timestamp": 0, "applicant": 1, "cust_code": 2, "cust_name": 3,
+    "store_name": 4, "store_code": 5,
+    "reason": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS),
+    "contact_person": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 1,
+    "amount_diff": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 2,
+    "status_sign": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 3,
+    "approval_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 4,
+    "approval_comment": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 5,
+    "process_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 6,
+    "process_user": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 7,
+    "check_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 8,
+    "check_user": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 9,
+    "print_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 10,
+}
+
+
+def cc_item_col(item_idx, field):
+    """item_idx: 0〜4（商品①〜⑤）, field: CC_ITEM_FIELDSのいずれか。列インデックス（0始まり）を返す"""
+    return CC_ITEMS_START_COL + item_idx * len(CC_ITEM_FIELDS) + CC_ITEM_FIELDS.index(field)
+
+
+# ご契約データシートの列（契約内容変更用）：商品記号=K(10)、商品単価=I(8)、交換周期=L(11)
+# A〜D週納品数はCONTRACT_WEEK_COLS(M/N/O/P=12/13/14/15)を共用
+CONTRACT_COL_PRODUCT_CODE = 10
+CONTRACT_COL_PRODUCT_PRICE = 8
+CONTRACT_COL_PRODUCT_CYCLE = 11
 
 
 def build_print_pdf_url(row_end=46, col_end=5, gid=None):
@@ -182,12 +232,91 @@ def get_staff_name_by_code(staff_code):
     return str(first_row.iloc[CONTRACT_COL_STAFF_NAME]).strip() if pd.notna(first_row.iloc[CONTRACT_COL_STAFF_NAME]) else ""
 
 
+def get_contract_products(cust_code):
+    """ご契約データから、指定した顧客コードの商品一覧
+    （商品記号・商品単価・交換周期・A〜D週納品数）を行ごとに返す（契約内容変更用）"""
+    if not cust_code or not str(cust_code).strip():
+        return []
+    df_contract = _load_contract_df()
+    if df_contract is None:
+        return []
+
+    matched = df_contract[
+        df_contract.iloc[:, CONTRACT_COL_CUST_CODE].astype(str).str.strip() == str(cust_code).strip()
+    ]
+    if matched.empty:
+        return []
+
+    def _cell(r, idx):
+        return str(r.iloc[idx]).strip() if idx < len(r) and pd.notna(r.iloc[idx]) else ""
+
+    products = []
+    for _, r in matched.iterrows():
+        code = _cell(r, CONTRACT_COL_PRODUCT_CODE)
+        if not code:
+            continue
+        products.append({
+            "code": code,
+            "price": _cell(r, CONTRACT_COL_PRODUCT_PRICE),
+            "cycle": _cell(r, CONTRACT_COL_PRODUCT_CYCLE),
+            "week_a": _cell(r, CONTRACT_WEEK_COLS[0]),
+            "week_b": _cell(r, CONTRACT_WEEK_COLS[1]),
+            "week_c": _cell(r, CONTRACT_WEEK_COLS[2]),
+            "week_d": _cell(r, CONTRACT_WEEK_COLS[3]),
+        })
+    return products
+
+
+def _cc_hide_zero(val):
+    """数値が0（または0扱いの文字列）なら空文字にする。それ以外はそのまま返す（契約内容変更・変更前欄の自動表示用）"""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    if s == "":
+        return ""
+    try:
+        if float(s) == 0:
+            return ""
+    except ValueError:
+        pass
+    return s
+
+
+def _cc_to_float(val):
+    try:
+        return float(str(val).strip())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def calc_cc_amount(price, cycle, week_a, week_b, week_c, week_d):
+    """(A〜D週の合計納品数) ×（4 ÷ 交換周期）× 商品単価 を計算する。
+    交換周期が0または未入力の場合は0を返す（ゼロ除算回避）"""
+    cycle_f = _cc_to_float(cycle)
+    if cycle_f == 0:
+        return 0.0
+    total_weekly = _cc_to_float(week_a) + _cc_to_float(week_b) + _cc_to_float(week_c) + _cc_to_float(week_d)
+    return total_weekly * (4.0 / cycle_f) * _cc_to_float(price)
+
+
+def cc_extract_items(row):
+    """行データから、5商品分（商品①〜⑤）の変更前・変更後フィールドを辞書のリストとして取り出す"""
+    items = []
+    for n in range(CC_ITEM_COUNT):
+        d = {}
+        for f in CC_ITEM_FIELDS:
+            idx = cc_item_col(n, f)
+            d[f] = str(row.iloc[idx]) if len(row) > idx and pd.notna(row.iloc[idx]) else ""
+        items.append(d)
+    return items
+
+
 def maintenance_admin_screen():
-    """メンテナンス画面の入口。商品発注／ルート変更を切り替えて、それぞれのタブ一式を表示する"""
-    st.markdown("#### 📦🗺️ メンテナンス業務")
+    """メンテナンス画面の入口。商品発注／ルート変更／契約内容変更を切り替えて、それぞれのタブ一式を表示する"""
+    st.markdown("#### 📦🗺️📋 メンテナンス業務")
     mode = st.radio(
         "モード切り替え",
-        ["📦 商品発注", "🗺️ ルート変更"],
+        ["📦 商品発注", "🗺️ ルート変更", "📋 契約内容変更"],
         index=0,
         horizontal=True,
         key="maint_mode_select",
@@ -197,8 +326,10 @@ def maintenance_admin_screen():
 
     if mode == "📦 商品発注":
         render_product_order_tabs()
-    else:
+    elif mode == "🗺️ ルート変更":
         render_route_change_tabs()
+    else:
+        render_contract_change_tabs()
 
 
 def render_route_change_tabs():
@@ -993,6 +1124,669 @@ def render_route_change_tabs():
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
 
+
+def cc_items_display_df(items):
+    """5商品分のitems（cc_extract_itemsの戻り値）から、表示用のDataFrameを作る。
+    変更前・変更後どちらの商品記号も空の行（未入力スロット）は表示しない"""
+    rows = []
+    for n, d in enumerate(items):
+        if not d["before_code"].strip() and not d["after_code"].strip():
+            continue
+        rows.append({
+            "商品": f"{n + 1}",
+            "変更前商品記号": d["before_code"], "変更前単価": d["before_price"], "変更前周期": d["before_cycle"],
+            "変更前A週": d["before_a"], "変更前B週": d["before_b"], "変更前C週": d["before_c"], "変更前D週": d["before_d"],
+            "変更後商品記号": d["after_code"], "変更後単価": d["after_price"], "変更後周期": d["after_cycle"],
+            "変更後A週": d["after_a"], "変更後B週": d["after_b"], "変更後C週": d["after_c"], "変更後D週": d["after_d"],
+        })
+    return pd.DataFrame(rows)
+
+
+def render_contract_change_tabs():
+    # 💡 【CSS調整】disabled入力の文字が薄くて読みにくいのを解消
+    st.markdown("""
+        <style>
+        input:disabled, textarea:disabled {
+            -webkit-text-fill-color: #31333F !important;
+            color: #31333F !important;
+            opacity: 1 !important;
+        }
+        div[data-testid="stForm"] button[disabled] {
+            display: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.header("📋 契約内容変更申請・承認・業務処理システム")
+
+    if "user_name" not in st.session_state:
+        st.session_state["user_name"] = "眞田 隆司"
+
+    if "cc_form_clear_key" not in st.session_state:
+        st.session_state["cc_form_clear_key"] = 0
+
+    rclear = f"_{st.session_state['cc_form_clear_key']}"
+
+    for _key, _default in [
+        (f"cc_ccode{rclear}", ""), (f"cc_cname{rclear}", ""),
+        (f"cc_scode{rclear}", ""), (f"cc_sname{rclear}", ""),
+        (f"cc_products{rclear}", []),
+    ]:
+        if _key not in st.session_state:
+            st.session_state[_key] = _default
+
+    for _n in range(CC_ITEM_COUNT):
+        for _suf in ["code", "price", "cycle", "a", "b", "c", "d"]:
+            for _side in ["before", "after"]:
+                _key = f"cc_{_side}_{_suf}_{_n}{rclear}"
+                if _key not in st.session_state:
+                    st.session_state[_key] = ""
+        _pick_key = f"cc_after_pick_{_n}{rclear}"
+        if _pick_key not in st.session_state:
+            st.session_state[_pick_key] = ""
+
+    if "cc_searched_ccode" not in st.session_state:
+        st.session_state["cc_searched_ccode"] = ""
+
+    c_tab1, c_tab2, c_tab3, c_tab4 = st.tabs([
+        "📝 メンテナンス / 差戻し修正",
+        "🔍 管理職チェック",
+        "🚚 業務担当メンテナンス処理",
+        "✅ メンテナンスチェック画面",
+    ])
+
+    # ==========================================
+    # TAB 1: 申請・差戻し対応
+    # ==========================================
+    with c_tab1:
+        st.subheader("📝 メンテナンス / 差戻し修正")
+        with st.expander("➕ 新規申請フォームを開く", expanded=True):
+
+            col_search_input, col_search_btn = st.columns([4, 1])
+            cust_code_input = col_search_input.text_input(
+                "🔍 顧客コード入力",
+                value=st.session_state["cc_searched_ccode"],
+                key=f"cc_cust_code_search{rclear}"
+            )
+            btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary", key=f"cc_search_btn{rclear}")
+
+            if btn_search:
+                if cust_code_input:
+                    try:
+                        df_master = pd.read_csv(
+                            CUSTOMER_MASTER_CSV,
+                            dtype=str,
+                            storage_options={"User-Agent": "Mozilla/5.0"}
+                        )
+                        matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
+
+                        if not matched.empty:
+                            last_row = matched.iloc[-1]
+                            st.session_state["cc_searched_ccode"] = str(cust_code_input)
+                            st.session_state[f"cc_ccode{rclear}"] = str(cust_code_input)
+                            st.session_state[f"cc_sname{rclear}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
+                            st.session_state[f"cc_cname{rclear}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
+                            st.session_state[f"cc_scode{rclear}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
+                            st.session_state[f"cc_products{rclear}"] = get_contract_products(cust_code_input)
+
+                            st.toast("顧客情報を取得しました！", icon="✅")
+                            time.sleep(0.3)
+                            st.rerun()
+                        else:
+                            st.warning("該当する顧客データが見つかりませんでした。")
+                    except Exception as e:
+                        st.error(f"マスタ参照エラー: {e}")
+                else:
+                    st.warning("顧客コードを入力してください。")
+
+            st.write("---")
+            st.write("**📋 入力情報**")
+
+            row1_col1, row1_col2, row1_col3 = st.columns(3)
+            customer_code = row1_col1.text_input("顧客コード", key=f"cc_ccode{rclear}")
+            customer_name = row1_col2.text_input("顧客名", key=f"cc_cname{rclear}")
+            store_code = row1_col3.text_input("加盟店コード", key=f"cc_scode{rclear}")
+
+            row2_col1, row2_col2 = st.columns(2)
+            store_name = row2_col1.text_input("加盟店", key=f"cc_sname{rclear}")
+            applicant = row2_col2.text_input("担当者", value=st.session_state["user_name"], key=f"cc_app{rclear}")
+
+            products = st.session_state[f"cc_products{rclear}"]
+            product_codes = list(dict.fromkeys([p["code"] for p in products]))
+
+            st.write("---")
+            st.write("**📦 商品情報（変更前・変更後）**")
+
+            items_data = []
+            total_before = 0.0
+            total_after = 0.0
+
+            for n in range(CC_ITEM_COUNT):
+                st.markdown(f"**商品 {n + 1}**")
+
+                def _make_before_cb(_n=n, _rclear=rclear):
+                    def _cb():
+                        _products = st.session_state.get(f"cc_products{_rclear}", [])
+                        _code = st.session_state.get(f"cc_before_code_{_n}{_rclear}", "")
+                        _match = next((p for p in _products if p["code"] == _code), None)
+                        if _match:
+                            st.session_state[f"cc_before_price_{_n}{_rclear}"] = _cc_hide_zero(_match["price"])
+                            st.session_state[f"cc_before_cycle_{_n}{_rclear}"] = _cc_hide_zero(_match["cycle"])
+                            st.session_state[f"cc_before_a_{_n}{_rclear}"] = _cc_hide_zero(_match["week_a"])
+                            st.session_state[f"cc_before_b_{_n}{_rclear}"] = _cc_hide_zero(_match["week_b"])
+                            st.session_state[f"cc_before_c_{_n}{_rclear}"] = _cc_hide_zero(_match["week_c"])
+                            st.session_state[f"cc_before_d_{_n}{_rclear}"] = _cc_hide_zero(_match["week_d"])
+                        else:
+                            for _suf in ["price", "cycle", "a", "b", "c", "d"]:
+                                st.session_state[f"cc_before_{_suf}_{_n}{_rclear}"] = ""
+                    return _cb
+
+                def _make_after_pick_cb(_n=n, _rclear=rclear):
+                    def _cb():
+                        _picked = st.session_state.get(f"cc_after_pick_{_n}{_rclear}", "")
+                        if _picked:
+                            st.session_state[f"cc_after_code_{_n}{_rclear}"] = _picked
+                    return _cb
+
+                b1, b2, b3, b4, b5, b6, b7 = st.columns(7)
+                before_code = b1.selectbox(
+                    "変更前商品記号", [""] + product_codes,
+                    key=f"cc_before_code_{n}{rclear}", on_change=_make_before_cb(),
+                )
+                before_price = b2.text_input("変更前単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
+                before_cycle = b3.text_input("変更前交換周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
+                before_a = b4.text_input("変更前A週", key=f"cc_before_a_{n}{rclear}", disabled=True)
+                before_b = b5.text_input("変更前B週", key=f"cc_before_b_{n}{rclear}", disabled=True)
+                before_c = b6.text_input("変更前C週", key=f"cc_before_c_{n}{rclear}", disabled=True)
+                before_d = b7.text_input("変更前D週", key=f"cc_before_d_{n}{rclear}", disabled=True)
+
+                p1, p2 = st.columns(2)
+                after_pick = p1.selectbox(
+                    "変更後商品記号（候補から選択）", [""] + product_codes,
+                    key=f"cc_after_pick_{n}{rclear}", on_change=_make_after_pick_cb(),
+                )
+                after_code = p2.text_input("変更後商品記号（自由入力可）", key=f"cc_after_code_{n}{rclear}")
+
+                a2, a3, a4, a5, a6, a7 = st.columns(6)
+                after_price = a2.text_input("変更後単価", key=f"cc_after_price_{n}{rclear}")
+                after_cycle = a3.text_input("変更後交換周期", key=f"cc_after_cycle_{n}{rclear}")
+                after_a = a4.text_input("変更後A週", key=f"cc_after_a_{n}{rclear}")
+                after_b = a5.text_input("変更後B週", key=f"cc_after_b_{n}{rclear}")
+                after_c = a6.text_input("変更後C週", key=f"cc_after_c_{n}{rclear}")
+                after_d = a7.text_input("変更後D週", key=f"cc_after_d_{n}{rclear}")
+
+                items_data.append({
+                    "before_code": before_code, "before_price": before_price, "before_cycle": before_cycle,
+                    "before_a": before_a, "before_b": before_b, "before_c": before_c, "before_d": before_d,
+                    "after_code": after_code, "after_price": after_price, "after_cycle": after_cycle,
+                    "after_a": after_a, "after_b": after_b, "after_c": after_c, "after_d": after_d,
+                })
+
+                total_before += calc_cc_amount(before_price, before_cycle, before_a, before_b, before_c, before_d)
+                total_after += calc_cc_amount(after_price, after_cycle, after_a, after_b, after_c, after_d)
+
+                st.write("---")
+
+            amount_diff = total_before - total_after
+            m1, m2, m3 = st.columns(3)
+            m1.metric("変更前 合計金額", f"{total_before:,.0f}")
+            m2.metric("変更後 合計金額", f"{total_after:,.0f}")
+            m3.metric("増減金額（変更前－変更後）", f"{amount_diff:,.0f}")
+
+            with st.form("cc_submit_form"):
+                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
+                cc_reason = st.text_input("変更理由", key=f"cc_reason{rclear}")
+                cc_contact = st.text_input("連絡担当者様", key=f"cc_contact{rclear}")
+
+                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+
+                if btn_submit:
+                    if not customer_code.strip():
+                        st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                    else:
+                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+
+                        full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
+                        for item in items_data:
+                            for f in CC_ITEM_FIELDS:
+                                full_row.append(item[f])
+                        full_row += [cc_reason, cc_contact, f"{amount_diff:.0f}", "申請中", "", ""]
+
+                        payload = {
+                            "action": "SUBMIT_CONTRACT_CHANGE",
+                            "target_sheet_url": CC_TARGET_SHEET_URL,
+                            "full_row": full_row
+                        }
+                        res = post_to_gas(payload)
+                        if res.get("status") == "success":
+                            st.toast("新規申請を送信しました！", icon="🎉")
+                            st.session_state["cc_searched_ccode"] = ""
+                            st.session_state["cc_form_clear_key"] += 1
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"送信失敗: {res.get('message')}")
+
+        st.write("---")
+        st.subheader("⚠️ 差戻し・再修正が必要なデータ")
+        try:
+            st.cache_data.clear()
+            df = pd.read_csv(CC_TARGET_SHEET_CSV, dtype=str)
+            if not df.empty and len(df.columns) > CC_COL["status_sign"]:
+                rejected_df = df[df.iloc[:, CC_COL["status_sign"]].astype(str).str.strip() == "差戻し"]
+                if rejected_df.empty:
+                    st.info("現在、差戻しデータはありません。")
+                else:
+                    for idx, row in rejected_df.iloc[::-1].iterrows():
+                        row_id = idx + 2
+
+                        def _v(col_key, r=row):
+                            i = CC_COL[col_key]
+                            return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+                        rej_comment = _v("approval_comment")
+                        items = cc_extract_items(row)
+
+                        with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
+                            st.write("**現在の内容**")
+                            df_items = cc_items_display_df(items)
+                            if not df_items.empty:
+                                st.dataframe(df_items, use_container_width=True, hide_index=True)
+
+                            with st.form(key=f"cc_resubmit_form_{row_id}"):
+                                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
+                                st.write("**📋 入力情報修正**")
+
+                                r1_1, r1_2, r1_3 = st.columns(3)
+                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"cc_re_ccode_{row_id}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"cc_re_cname_{row_id}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"cc_re_scode_{row_id}")
+
+                                r2_1, r2_2 = st.columns(2)
+                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"cc_re_sname_{row_id}")
+                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"cc_re_app_{row_id}")
+
+                                st.caption("商品内容（変更前・変更後）は上の表の内容がそのまま再申請されます。商品自体を修正したい場合は新規申請からやり直してください。")
+
+                                edit_reason = st.text_input("変更理由", value=_v("reason"), key=f"cc_re_reason_{row_id}")
+                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"cc_re_contact_{row_id}")
+
+                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
+
+                                if btn_resubmit:
+                                    if not edit_cust_code.strip():
+                                        st.error("⚠️ 「顧客コード」は必須項目です。")
+                                    else:
+                                        item_values = []
+                                        for item in items:
+                                            for f in CC_ITEM_FIELDS:
+                                                item_values.append(item[f])
+
+                                        updated_row = [
+                                            _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
+                                            edit_store_name, edit_store_code
+                                        ] + item_values + [
+                                            edit_reason, edit_contact, _v("amount_diff"), "申請中", "", ""
+                                        ]
+
+                                        payload = {
+                                            "action": "RESUBMIT_CONTRACT_CHANGE",
+                                            "target_sheet_url": CC_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": updated_row
+                                        }
+                                        res = post_to_gas(payload)
+                                        if res.get("status") == "success":
+                                            st.toast("再申請が完了しました！")
+                                            time.sleep(1)
+                                            st.rerun()
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
+
+    # ==========================================
+    # TAB 2: 管理職チェック
+    # ==========================================
+    with c_tab2:
+        st.subheader("🔍 管理職チェック")
+        try:
+            st.cache_data.clear()
+            df = pd.read_csv(CC_TARGET_SHEET_CSV, dtype=str)
+            if not df.empty and len(df.columns) > CC_COL["status_sign"]:
+                pending_df = df[df.iloc[:, CC_COL["status_sign"]].astype(str).str.strip() == "申請中"]
+                if pending_df.empty:
+                    st.info("現在、未承認の申請はありません。")
+                else:
+                    st.warning(f"承認待ちデータ: **{len(pending_df)} 件**")
+                    for idx, row in pending_df.iloc[::-1].iterrows():
+                        row_id = idx + 2
+
+                        def _v(col_key, r=row):
+                            i = CC_COL[col_key]
+                            return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+                        items = cc_extract_items(row)
+
+                        with st.expander(f"⏳ 【承認待ち】{_v('cust_name')}（{_v('cust_code')}） | 行: {row_id}"):
+                            df_items = cc_items_display_df(items)
+                            if not df_items.empty:
+                                st.dataframe(df_items, use_container_width=True, hide_index=True)
+                            st.caption(f"増減金額: {_v('amount_diff')}")
+
+                            with st.form(key=f"cc_mgr_edit_form_{row_id}"):
+                                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
+                                st.write("**📋 入力情報（修正可能）**")
+
+                                m1_1, m1_2, m1_3 = st.columns(3)
+                                edit_ccode = m1_1.text_input("顧客コード", value=_v("cust_code"), key=f"cc_m_ccode_{row_id}")
+                                edit_cname = m1_2.text_input("顧客名", value=_v("cust_name"), key=f"cc_m_cname_{row_id}")
+                                edit_scode = m1_3.text_input("加盟店コード", value=_v("store_code"), key=f"cc_m_scode_{row_id}")
+
+                                m2_1, m2_2 = st.columns(2)
+                                edit_sname = m2_1.text_input("加盟店", value=_v("store_name"), key=f"cc_m_sname_{row_id}")
+                                edit_app = m2_2.text_input("担当者", value=_v("applicant"), key=f"cc_m_app_{row_id}")
+
+                                edit_reason = st.text_input("変更理由", value=_v("reason"), key=f"cc_m_reason_{row_id}")
+                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"cc_m_contact_{row_id}")
+                                mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"cc_mgr_com_{row_id}")
+
+                                col_app, col_rej, col_del = st.columns(3)
+                                btn_approve = col_app.form_submit_button("✅ 承認（変更内容を反映）", type="primary", use_container_width=True)
+                                btn_reject = col_rej.form_submit_button("↩️ 差戻し", use_container_width=True)
+                                btn_delete = col_del.form_submit_button("🗑️ 削除", use_container_width=True)
+
+                                mgr_name = st.session_state["user_name"]
+                                now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+
+                                if btn_approve or btn_reject or btn_delete:
+                                    item_values = []
+                                    for item in items:
+                                        for f in CC_ITEM_FIELDS:
+                                            item_values.append(item[f])
+
+                                    updated_row = [
+                                        _v("timestamp"), edit_app, edit_ccode, edit_cname,
+                                        edit_sname, edit_scode
+                                    ] + item_values + [edit_reason, edit_contact, _v("amount_diff")]
+
+                                    action_type = ""
+                                    if btn_approve:
+                                        action_type = "APPROVE_CONTRACT_CHANGE"
+                                        updated_row.extend([mgr_name, now_str, mgr_comment])
+                                    elif btn_reject:
+                                        action_type = "REJECT_CONTRACT_CHANGE"
+                                        updated_row.extend(["差戻し", now_str, mgr_comment])
+                                    elif btn_delete:
+                                        action_type = "DELETE_CONTRACT_CHANGE"
+                                        updated_row.extend(["削除", now_str, mgr_comment])
+
+                                    payload = {
+                                        "action": action_type,
+                                        "target_sheet_url": CC_TARGET_SHEET_URL,
+                                        "row_index": row_id,
+                                        "updated_row": updated_row
+                                    }
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        st.toast("処理が完了しました！")
+                                        time.sleep(1)
+                                        st.rerun()
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
+
+    # ==========================================
+    # TAB 3: 業務担当メンテナンス処理
+    # ==========================================
+    with c_tab3:
+        st.subheader("🚚 業務担当メンテナンス処理")
+        try:
+            st.cache_data.clear()
+            df = pd.read_csv(CC_TARGET_SHEET_CSV, dtype=str)
+
+            if df.empty or len(df.columns) <= CC_COL["status_sign"]:
+                st.info("現在、処理可能なデータはありません。")
+            else:
+                status_series = df.iloc[:, CC_COL["status_sign"]].astype(str).str.strip()
+                approved_df = df[
+                    (~df.iloc[:, CC_COL["status_sign"]].isna()) &
+                    (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+                ]
+
+                if approved_df.empty:
+                    st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
+                else:
+                    st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
+
+                    for idx, row in approved_df.iloc[::-1].iterrows():
+                        row_id = idx + 2
+
+                        def _v(col_key, r=row):
+                            i = CC_COL[col_key]
+                            return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+                        mgr_name = _v("status_sign")
+                        items = cc_extract_items(row)
+
+                        with st.expander(f"🟢【{_v('cust_name')}（{_v('cust_code')}）】 承認者: {mgr_name}"):
+                            st.write("**📋 申請内容**")
+
+                            o1_c1, o1_c2, o1_c3 = st.columns(3)
+                            o1_c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"cc_v_ccode_{row_id}")
+                            o1_c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"cc_v_cname_{row_id}")
+                            o1_c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"cc_v_scode_{row_id}")
+
+                            o2_c1, o2_c2 = st.columns(2)
+                            o2_c1.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"cc_v_sname_{row_id}")
+                            o2_c2.text_input("担当者", value=_v("applicant"), disabled=True, key=f"cc_v_app_{row_id}")
+
+                            df_items = cc_items_display_df(items)
+                            if not df_items.empty:
+                                st.dataframe(df_items, use_container_width=True, hide_index=True)
+
+                            reason_val = _v("reason")
+                            contact_val = _v("contact_person")
+                            if reason_val.strip() or contact_val.strip():
+                                if reason_val.strip():
+                                    st.text_input("変更理由", value=reason_val, disabled=True, key=f"cc_v_reason_{row_id}")
+                                if contact_val.strip():
+                                    st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"cc_v_contact_{row_id}")
+                            st.caption(f"増減金額: {_v('amount_diff')}")
+
+                            st.write("---")
+                            with st.form(key=f"cc_transfer_form_{row_id}"):
+                                st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
+                                op_reject_reason = st.text_input("⚠️ 差戻し理由（※業務側で不備がある場合のみ入力）", key=f"cc_op_rej_reason_{row_id}")
+
+                                col_trans, col_rej = st.columns(2)
+                                btn_transfer = col_trans.form_submit_button("📋 別シートへ出力・転記", type="primary", use_container_width=True)
+                                btn_op_reject = col_rej.form_submit_button("↩️ 申請者へ差戻し", use_container_width=True)
+
+                                action_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                op_user = st.session_state["user_name"]
+
+                                if btn_transfer:
+                                    clean_base_row = [
+                                        "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                        for i in range(CC_COL["status_sign"] + 3)
+                                    ]
+                                    transfer_row = clean_base_row + [action_time, op_user]
+
+                                    payload = {
+                                        "action": "TRANSFER_CONTRACT_CHANGE_TO_OPERATOR",
+                                        "target_sheet_url": CC_TARGET_SHEET_URL,
+                                        "dest_sheet_url": CC_DEST_SHEET_URL,
+                                        "row_index": row_id,
+                                        "transfer_row": transfer_row,
+                                        "status_col": CC_COL["status_sign"] + 1,
+                                    }
+
+                                    with st.spinner("業務シートへ転記中..."):
+                                        res = post_to_gas(payload)
+                                        if res.get("status") == "success":
+                                            st.cache_data.clear()
+                                            st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
+                                            time.sleep(1.5)
+                                            st.rerun()
+                                        else:
+                                            st.error(f"転記失敗: {res.get('message')}")
+
+                                elif btn_op_reject:
+                                    if not op_reject_reason.strip():
+                                        st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
+                                    else:
+                                        base_data = [
+                                            "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                            for i in range(CC_COL["status_sign"])
+                                        ]
+                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
+
+                                        payload = {
+                                            "action": "REJECT_CONTRACT_CHANGE",
+                                            "target_sheet_url": CC_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": final_reject_row
+                                        }
+
+                                        res = post_to_gas(payload)
+                                        if res.get("status") == "success":
+                                            st.cache_data.clear()
+                                            st.toast("申請を差し戻しました。", icon="↩️")
+                                            time.sleep(1)
+                                            st.rerun()
+                                        else:
+                                            st.error(f"差戻し失敗: {res.get('message')}")
+
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
+
+    # ==========================================
+    # TAB 4: メンテナンスチェック画面
+    # ==========================================
+    with c_tab4:
+        st.subheader("✅ メンテナンスチェック画面")
+
+        try:
+            st.cache_data.clear()
+            df_dest = pd.read_csv(CC_DEST_SHEET_CSV, dtype=str)
+
+            if df_dest.empty:
+                st.info("現在、チェック対象のデータ（転記済みデータ）はありません。")
+            else:
+                show_checked = st.checkbox("✅ チェック済みのデータも表示する", value=False, key="cc_chk_show_checked")
+
+                if not show_checked and len(df_dest.columns) > CC_COL["check_time"]:
+                    unchecked_mask = df_dest.iloc[:, CC_COL["check_time"]].fillna("").astype(str).str.strip() == ""
+                    df_dest = df_dest[unchecked_mask]
+
+                if df_dest.empty:
+                    st.info("チェック待ちのデータはありません（すべてチェック済みです）。上のチェックボックスでチェック済みも表示できます。")
+                else:
+                    st.success(f"📋 チェック対象データ: **{len(df_dest)} 件**")
+
+                for idx, row in df_dest.iterrows():
+                    row_id = idx + 2
+
+                    def _v(col_key, r=row):
+                        i = CC_COL[col_key]
+                        return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+                    mgr_name_val = _v("status_sign") or "不明"
+                    op_user_val = _v("process_user") or "不明"
+                    checked_time_val = _v("check_time")
+                    checked_user_val = _v("check_user")
+                    items = cc_extract_items(row)
+
+                    expander_label = f"📌 {_v('cust_name')}（{_v('cust_code')}） | 加盟店: {_v('store_name') or '未設定'}"
+                    if checked_time_val:
+                        expander_label += " ✅【チェック済み】"
+
+                    with st.expander(expander_label):
+                        with st.form(key=f"cc_check_form_{row_id}"):
+                            st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
+
+                            st.write("**📋 登録内容詳細**")
+                            c1, c2, c3 = st.columns(3)
+                            c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"cc_chk_ccode_{row_id}")
+                            c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"cc_chk_cname_{row_id}")
+                            c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"cc_chk_scode_{row_id}")
+
+                            c4, c5 = st.columns(2)
+                            c4.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"cc_chk_sname_{row_id}")
+                            c5.text_input("担当者", value=_v("applicant"), disabled=True, key=f"cc_chk_app_{row_id}")
+
+                            df_items = cc_items_display_df(items)
+                            if not df_items.empty:
+                                st.dataframe(df_items, use_container_width=True, hide_index=True)
+
+                            c6, c7 = st.columns(2)
+                            c6.text_input("処理者", value=op_user_val, disabled=True, key=f"cc_chk_op_{row_id}")
+                            c7.text_input("承認者", value=mgr_name_val, disabled=True, key=f"cc_chk_mgr_{row_id}")
+
+                            st.caption(f"増減金額: {_v('amount_diff')}")
+
+                            if checked_time_val:
+                                st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
+
+                            reason_val = _v("reason")
+                            contact_val = _v("contact_person")
+                            if reason_val.strip() or contact_val.strip():
+                                st.write("---")
+                                if reason_val.strip():
+                                    st.text_input("変更理由", value=reason_val, disabled=True, key=f"cc_chk_reason_{row_id}")
+                                if contact_val.strip():
+                                    st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"cc_chk_contact_{row_id}")
+
+                            st.write("---")
+                            st.write("⚠️ **差戻しを行う場合の設定**")
+                            r_col1, r_col2 = st.columns(2)
+                            reject_target = r_col1.selectbox("差戻し先を選択", ["業務担当", "申請者"], key=f"cc_chk_rej_target_{row_id}")
+                            reject_reason = r_col2.text_input("差戻し理由", key=f"cc_chk_rej_reason_{row_id}")
+
+                            col_ok, col_ng = st.columns(2)
+                            btn_checked_ok = col_ok.form_submit_button("✅ チェック完了（確認済み）", type="primary", use_container_width=True)
+                            btn_checked_reject = col_ng.form_submit_button("↩️ 指定先へ差戻し", use_container_width=True)
+
+                            if btn_checked_ok:
+                                check_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                checker_name = st.session_state["user_name"]
+
+                                clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
+                                while len(clean_base_row) < CC_COL["check_user"] + 1:
+                                    clean_base_row.append("")
+
+                                clean_base_row[CC_COL["check_time"]] = check_time
+                                clean_base_row[CC_COL["check_user"]] = checker_name
+                                # ※ print_time列（印刷済）はここでは触らない。既存の値を保持する。
+
+                                payload = {
+                                    "action": "UPDATE_CONTRACT_CHANGE_CHECK",
+                                    "target_sheet_url": CC_DEST_SHEET_URL,
+                                    "row_index": row_id,
+                                    "updated_row": clean_base_row
+                                }
+
+                                res = post_to_gas(payload)
+                                if res.get("status") == "success":
+                                    st.cache_data.clear()
+                                    st.toast(f"行 {row_id} のメンテナンスチェックを完了しました！", icon="✅")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"更新失敗: {res.get('message')}")
+
+                            elif btn_checked_reject:
+                                if not reject_reason.strip():
+                                    st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
+                                else:
+                                    st.toast(f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）", icon="↩️")
+                                    time.sleep(1.5)
+                                    st.rerun()
+
+        except Exception as e:
+            st.error(f"データ読み込みエラー: {e}")
 
 def render_product_order_tabs():
     # 💡 【CSS調整】指定レイアウトに合わせた帳票・印刷用スタイル定義
