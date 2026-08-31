@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbzU8RZJ_gLQKTqU_b8_JmrL9FKC3PYdqx832NvRN8bCFQFDI_frK29dID3FpweXJQeOIQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -292,19 +292,30 @@ def _cc_to_float(val):
         return 0.0
 
 
+def _cc_nonzero_qty(week_a, week_b, week_c, week_d):
+    """A〜D週の納品数のうち、0以外の納品数を「契約数」として採用する
+    （A〜D週の合計ではなく、0以外に入っている納品数そのものを使う。
+    同じ数量が複数曜日に入っている場合はその数量を、異なる数量が混在する場合はそれらを合計する）"""
+    vals = [_cc_to_float(v) for v in (week_a, week_b, week_c, week_d)]
+    nonzero = [v for v in vals if v != 0]
+    if not nonzero:
+        return 0.0
+    return nonzero[0] if len(set(nonzero)) == 1 else sum(nonzero)
+
+
 def calc_cc_amount(price, cycle, week_a, week_b, week_c, week_d):
-    """(A〜D週の合計納品数) ×（4 ÷ 交換周期）× 商品単価 を計算する。
+    """契約数（A〜D週のうち0以外の納品数）×（4 ÷ 交換周期）× 商品単価 を計算する。
     交換周期が0または未入力の場合は0を返す（ゼロ除算回避）"""
     cycle_f = _cc_to_float(cycle)
     if cycle_f == 0:
         return 0.0
-    total_weekly = _cc_to_float(week_a) + _cc_to_float(week_b) + _cc_to_float(week_c) + _cc_to_float(week_d)
-    return total_weekly * (4.0 / cycle_f) * _cc_to_float(price)
+    qty = _cc_nonzero_qty(week_a, week_b, week_c, week_d)
+    return qty * (4.0 / cycle_f) * _cc_to_float(price)
 
 
 def _cc_sum4(week_a, week_b, week_c, week_d):
-    """A〜D週の納品数を合計した「契約数」を計算し、文字列で返す（整数ならそのまま、それ以外は元の値を保持）"""
-    total = _cc_to_float(week_a) + _cc_to_float(week_b) + _cc_to_float(week_c) + _cc_to_float(week_d)
+    """A〜D週のうち0以外の納品数を「契約数」として文字列で返す（整数ならそのまま、それ以外は元の値を保持）"""
+    total = _cc_nonzero_qty(week_a, week_b, week_c, week_d)
     if total == 0:
         return ""
     return str(int(total)) if total == int(total) else str(total)
