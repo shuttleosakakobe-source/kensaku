@@ -270,6 +270,30 @@ def get_contract_products(cust_code):
     return products
 
 
+def _cc_product_labels(products):
+    """商品一覧（get_contract_productsの戻り値）から、プルダウン表示用のラベルを作る。
+    同じ商品記号が複数行ある場合、記号だけだとプルダウン上で見分けがつかず
+    （見た目が同じ選択肢が2つあると正しく選び分けられない）、
+    単価・周期・A〜D週の内訳をカッコ書きで添えて区別できるようにする
+    （商品記号が1件しかない場合は記号だけを表示する）"""
+    code_counts = {}
+    for p in products:
+        code_counts[p["code"]] = code_counts.get(p["code"], 0) + 1
+
+    labels = []
+    for p in products:
+        if code_counts[p["code"]] > 1:
+            detail = (
+                f"単価{p['price'] or '-'}"
+                f"/周期{p['cycle'] or '-'}"
+                f"/A{p['week_a'] or '-'}B{p['week_b'] or '-'}C{p['week_c'] or '-'}D{p['week_d'] or '-'}"
+            )
+            labels.append(f"{p['code']}（{detail}）")
+        else:
+            labels.append(p["code"])
+    return labels
+
+
 
 
 def _cc_hide_zero(val):
@@ -1276,6 +1300,7 @@ def render_contract_change_tabs():
             applicant = row1b_col2.text_input("担当者", value=st.session_state["user_name"], key=f"cc_app{rclear}")
 
             products = st.session_state[f"cc_products{rclear}"]
+            product_labels = _cc_product_labels(products)
 
             st.write("---")
 
@@ -1311,7 +1336,7 @@ def render_contract_change_tabs():
 
                 before_idx = b_row1[0].selectbox(
                     "商品記号", [None] + list(range(len(products))),
-                    format_func=lambda i: "" if i is None else products[i]["code"],
+                    format_func=lambda i: "" if i is None else product_labels[i],
                     key=f"cc_before_code_{n}{rclear}", on_change=_make_before_cb(),
                 )
                 before_code = products[before_idx]["code"] if isinstance(before_idx, int) else ""
@@ -1335,7 +1360,7 @@ def render_contract_change_tabs():
                     list(range(len(products))),
                     index=None,
                     accept_new_options=True,
-                    format_func=lambda i: products[i]["code"] if isinstance(i, int) else str(i),
+                    format_func=lambda i: product_labels[i] if isinstance(i, int) else str(i),
                     placeholder="選択 or 入力",
                     key=f"cc_after_code_{n}{rclear}",
                 )
