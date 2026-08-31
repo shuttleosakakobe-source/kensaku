@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbzU8RZJ_gLQKTqU_b8_JmrL9FKC3PYdqx832NvRN8bCFQFDI_frK29dID3FpweXJQeOIQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -389,6 +389,16 @@ def render_route_change_tabs():
             color: #31333F !important;
             opacity: 1 !important;
         }
+        div[data-testid="stTextInput"], div[data-testid="stTextArea"], div[data-testid="stSelectbox"],
+        div[data-testid="stTextInput"] label, div[data-testid="stTextArea"] label, div[data-testid="stSelectbox"] label,
+        div[data-testid="stWidgetLabel"], div[data-testid="stWidgetLabel"] p {
+            opacity: 1 !important;
+        }
+        div[data-testid="stSelectbox"] div[aria-disabled="true"],
+        div[data-testid="stSelectbox"] div[aria-disabled="true"] * {
+            opacity: 1 !important;
+            color: #31333F !important;
+        }
         div[data-testid="stForm"] button[disabled] {
             display: none !important;
         }
@@ -488,9 +498,9 @@ def render_route_change_tabs():
             st.write("---")
             st.write("**🗺️ ルート情報**")
             row3_col1, row3_col2, row3_col3 = st.columns(3)
-            route_before = row3_col1.text_input("変更前ルート（顧客コード検索で自動表示）", key=f"rt_rbefore{rclear}", disabled=True)
-            op_before_code = row3_col2.text_input("変更前担当者コード（顧客コード検索で自動表示）", key=f"rt_obefore_code{rclear}", disabled=True)
-            op_before_name = row3_col3.text_input("変更前担当者（顧客コード検索で自動表示）", key=f"rt_obefore_name{rclear}", disabled=True)
+            route_before = row3_col1.text_input("変更前ルート", key=f"rt_rbefore{rclear}", disabled=True)
+            op_before_code = row3_col2.text_input("変更前担当者コード", key=f"rt_obefore_code{rclear}", disabled=True)
+            op_before_name = row3_col3.text_input("変更前担当者", key=f"rt_obefore_name{rclear}", disabled=True)
 
             def _on_rt_oafter_code_change(_rclear=rclear):
                 code_val = st.session_state.get(f"rt_oafter_code{_rclear}", "").strip()
@@ -1199,6 +1209,16 @@ def render_contract_change_tabs():
             color: #31333F !important;
             opacity: 1 !important;
         }
+        div[data-testid="stTextInput"], div[data-testid="stTextArea"], div[data-testid="stSelectbox"],
+        div[data-testid="stTextInput"] label, div[data-testid="stTextArea"] label, div[data-testid="stSelectbox"] label,
+        div[data-testid="stWidgetLabel"], div[data-testid="stWidgetLabel"] p {
+            opacity: 1 !important;
+        }
+        div[data-testid="stSelectbox"] div[aria-disabled="true"],
+        div[data-testid="stSelectbox"] div[aria-disabled="true"] * {
+            opacity: 1 !important;
+            color: #31333F !important;
+        }
         div[data-testid="stForm"] button[disabled] {
             display: none !important;
         }
@@ -1867,10 +1887,20 @@ def render_product_order_tabs():
             color: #31333F !important;
             opacity: 1 !important;
         }
+        div[data-testid="stTextInput"], div[data-testid="stTextArea"], div[data-testid="stSelectbox"],
+        div[data-testid="stTextInput"] label, div[data-testid="stTextArea"] label, div[data-testid="stSelectbox"] label,
+        div[data-testid="stWidgetLabel"], div[data-testid="stWidgetLabel"] p {
+            opacity: 1 !important;
+        }
+        div[data-testid="stSelectbox"] div[aria-disabled="true"],
+        div[data-testid="stSelectbox"] div[aria-disabled="true"] * {
+            opacity: 1 !important;
+            color: #31333F !important;
+        }
         div[data-testid="stForm"] button[disabled] {
             display: none !important;
         }
-        
+
         /* 🖨️ 印刷/PDF出力時のレイアウト最適化（A4サイズ・3件1ページ） */
         @media print {
             body {
