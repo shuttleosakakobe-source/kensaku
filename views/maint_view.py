@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbw2zOxmcBHPX67aVJDBOZybG3U-JzJ_IFza9H6L_KDrxPFxMZkWxadlosWZxAiIX1TJVA/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbw6IzYD11E9pUr6hiM5IwEcMXUVb--uFb17Y2AlQzmtyB79ch65nR1KUVBGuZjpz8oINQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -62,13 +62,20 @@ CHECK_TIME_COL_IDX = 35   # AJ列：チェック日時
 CHECK_USER_COL_IDX = 36   # AK列：チェック者
 PRINT_TIME_COL_IDX = 37   # AL列：印刷日時（TAB5で反映が完了したらここに日時が入る）
 
+# 「ルート変更」モードTAB5用：加盟店別 印刷フォーマットのスプレッドシート（同じブック内・別タブ）
+ROUTE_PRINT_SHEET_GID = "1261728197"
+ROUTE_PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={ROUTE_PRINT_SHEET_GID}#gid={ROUTE_PRINT_SHEET_GID}"
+# 1ページに4件まで配置。各件の起点行（A列）：1件目=4, 2件目=15, 3件目=26, 4件目=38
+ROUTE_PRINT_BASE_ROWS = [4, 15, 26, 38]
 
-def build_print_pdf_url(row_end=46, col_end=5):
+
+def build_print_pdf_url(row_end=46, col_end=5, gid=None):
     """印刷フォーマットシートのA1〜(row_end, col_end)の範囲をPDFとして書き出すURLを作る
-    （row_end/col_endは0始まりの終端。col_end=5はA〜E列を含む）"""
+    （row_end/col_endは0始まりの終端。col_end=5はA〜E列を含む。
+    gid省略時は商品発注用（PRINT_SHEET_GID）。ルート変更タブ5からはROUTE_PRINT_SHEET_GIDを渡す）"""
     params = {
         "format": "pdf",
-        "gid": PRINT_SHEET_GID,
+        "gid": gid or PRINT_SHEET_GID,
         "size": "A4",
         "portrait": "true",
         "fitw": "true",
@@ -231,11 +238,12 @@ def render_route_change_tabs():
     if "route_searched_ccode" not in st.session_state:
         st.session_state["route_searched_ccode"] = ""
 
-    r_tab1, r_tab2, r_tab3, r_tab4 = st.tabs([
+    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5 = st.tabs([
         "📝 メンテナンス / 差戻し修正",
         "🔍 管理職チェック",
         "🚚 業務担当メンテナンス処理",
         "✅ メンテナンスチェック画面",
+        "🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）",
     ])
 
     # ==========================================
@@ -804,6 +812,181 @@ def render_route_change_tabs():
                                     st.toast(f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）", icon="↩️")
                                     time.sleep(1.5)
                                     st.rerun()
+
+        except Exception as e:
+            st.error(f"データ読み込みエラー: {e}")
+
+    # ==========================================
+    # TAB 5: 加盟店別 印刷プレビュー画面
+    # ==========================================
+    with r_tab5:
+        st.subheader("🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）")
+
+        try:
+            st.cache_data.clear()
+            df_print = pd.read_csv(ROUTE_DEST_SHEET_CSV, dtype=str)
+
+            if df_print.empty:
+                st.info("現在、印刷対象のデータはありません。")
+            else:
+                # TAB4で「✅ チェック完了」になったデータだけを対象にする
+                if len(df_print.columns) > ROUTE_COL["check_time"]:
+                    checked_mask = df_print.iloc[:, ROUTE_COL["check_time"]].fillna("").astype(str).str.strip() != ""
+                    df_print = df_print[checked_mask]
+
+                # すでに印刷済み（印刷日時が入っている行）は印刷画面に出さない
+                if len(df_print.columns) > ROUTE_COL["print_time"]:
+                    not_printed_mask = df_print.iloc[:, ROUTE_COL["print_time"]].fillna("").astype(str).str.strip() == ""
+                    df_print = df_print[not_printed_mask]
+
+                if df_print.empty:
+                    st.info("印刷対象のデータがありません（TAB4でチェック未完了、またはすでに印刷済みです）。")
+                else:
+                    store_col_idx = ROUTE_COL["store_name"]
+                    df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
+                    stores = sorted(df_print["_store_name"].unique())
+
+                    selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="rt_print_store_select")
+
+                    if selected_store:
+                        store_df = df_print[df_print["_store_name"] == selected_store]
+                        total_records = len(store_df)
+
+                        st.info(f"🏪 加盟店: **{selected_store}** （未印刷のチェック完了済みデータ: {total_records} 件）※1ページに最大{len(ROUTE_PRINT_BASE_ROWS)}件まで配置されます。")
+
+                        def build_route_record(r_row):
+                            """行データを、印刷フォーマットのラベルに沿って取り出す"""
+                            def _f(col_key):
+                                i = ROUTE_COL[col_key]
+                                return str(r_row.iloc[i]) if len(r_row) > i and pd.notna(r_row.iloc[i]) else ""
+
+                            manager = _f("status_sign") or "未確認"
+                            operator = _f("process_user") or st.session_state["user_name"]
+                            contact = _f("contact_person")
+                            contact_disp = f"{contact} 様" if contact.strip() else ""
+
+                            return {
+                                "store_code": _f("store_code"), "cust_name": _f("cust_name"),
+                                "manager": manager, "operator": operator,
+                                "route_before": _f("route_before"), "route_after": _f("route_after"),
+                                "cust_code": _f("cust_code"),
+                                "op_before_name": _f("op_before_name"), "op_after_name": _f("op_after_name"),
+                                "applicant": _f("applicant"),
+                                "next_visit": _f("next_visit"), "reason": _f("reason"),
+                                "comment": _f("comment") or "特記事項なし",
+                                "contact_disp": contact_disp,
+                            }
+
+                        def route_cells_for_record(rec):
+                            """1件分のデータを、base_row行目を起点にした「行オフセット・列・値」のリストに変換する。
+                            指定されていないセル（行・列）はテンプレート側の固定内容として一切触らない。
+                            C1=加盟店名, A/B/D/E(+0)=加盟店コード/顧客名/責任者/処理者,
+                            A/C/E(+2)=変更前ルート/変更後ルート/シャトルコード(顧客コード),
+                            B/C/E(+4)=変更前担当者/変更後担当者/提出者,
+                            A/C(+6)=次回訪問日/変更理由, A/E(+8)=特記事項/連絡担当者"""
+                            if not rec:
+                                rec = {k: "" for k in [
+                                    "store_code", "cust_name", "manager", "operator",
+                                    "route_before", "route_after", "cust_code",
+                                    "op_before_name", "op_after_name", "applicant",
+                                    "next_visit", "reason", "comment", "contact_disp",
+                                ]}
+                            return [
+                                {"offset": 0, "col": 1, "value": rec["store_code"]},
+                                {"offset": 0, "col": 2, "value": rec["cust_name"]},
+                                {"offset": 0, "col": 4, "value": rec["manager"]},
+                                {"offset": 0, "col": 5, "value": rec["operator"]},
+                                {"offset": 2, "col": 1, "value": rec["route_before"]},
+                                {"offset": 2, "col": 3, "value": rec["route_after"]},
+                                {"offset": 2, "col": 5, "value": rec["cust_code"]},
+                                {"offset": 4, "col": 2, "value": rec["op_before_name"]},
+                                {"offset": 4, "col": 3, "value": rec["op_after_name"]},
+                                {"offset": 4, "col": 5, "value": rec["applicant"]},
+                                {"offset": 6, "col": 1, "value": rec["next_visit"]},
+                                {"offset": 6, "col": 3, "value": rec["reason"]},
+                                {"offset": 8, "col": 1, "value": rec["comment"]},
+                                {"offset": 8, "col": 5, "value": rec["contact_disp"]},
+                            ]
+
+                        chunk_size = len(ROUTE_PRINT_BASE_ROWS)
+                        chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
+
+                        for page_idx, chunk in enumerate(chunks):
+                            st.markdown(f"#### 📄 ページ {page_idx + 1} / {len(chunks)}")
+
+                            c1_value = selected_store
+                            blocks = []
+                            preview_records = []
+                            page_row_ids = [int(idx) + 2 for idx in chunk.index]
+
+                            for slot, base_row in enumerate(ROUTE_PRINT_BASE_ROWS):
+                                rec = build_route_record(chunk.iloc[slot]) if slot < len(chunk) else None
+                                if rec:
+                                    preview_records.append(rec)
+                                blocks.append({"start_row": base_row, "cells": route_cells_for_record(rec)})
+
+                            with st.expander(f"プレビューを見る（{len(preview_records)} 件）"):
+                                for r_i, rec in enumerate(preview_records):
+                                    st.write(f"**[{r_i + 1}件目] 加盟店コード: {rec['store_code']} ／ 顧客名: {rec['cust_name']} ／ 責任者: {rec['manager']} ／ 処理者: {rec['operator']}**")
+                                    st.caption(f"変更前ルート: {rec['route_before']} → 変更後ルート: {rec['route_after']} ｜ シャトルコード（顧客コード）: {rec['cust_code']}")
+                                    st.caption(f"変更前担当者: {rec['op_before_name']} → 変更後担当者: {rec['op_after_name']} ｜ 提出者: {rec['applicant']}")
+                                    st.caption(f"次回訪問日: {rec['next_visit']} ｜ 変更理由: {rec['reason']} ｜ 連絡担当者: {rec['contact_disp']}")
+                                    st.caption(f"特記事項: {rec['comment']}")
+
+                            if st.button("📥 反映してPDFを作成する", key=f"rt_print_sync_btn_{page_idx}", type="primary"):
+                                payload = {
+                                    "action": "SYNC_PRINT_STORE_DATA",
+                                    "print_sheet_url": ROUTE_PRINT_SHEET_URL,
+                                    "store_name": selected_store,
+                                    "c1_value": c1_value,
+                                    "blocks": blocks,
+                                }
+                                with st.spinner("印刷用スプレッドシートへ反映しています..."):
+                                    res = post_to_gas(payload)
+
+                                if res.get("status") == "success":
+                                    print_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                    mark_payload = {
+                                        "action": "MARK_PRINTED",
+                                        "target_sheet_url": ROUTE_DEST_SHEET_URL,
+                                        "row_indices": page_row_ids,
+                                        "print_time": print_time,
+                                        "print_col": ROUTE_COL["print_time"] + 1,
+                                    }
+                                    mark_res = post_to_gas(mark_payload)
+                                    if mark_res.get("status") != "success":
+                                        st.warning(f"印刷済みマークの更新に失敗しました（反映自体は完了しています）: {mark_res.get('message')}")
+
+                                    st.toast("🎉 反映が完了しました。PDFを作成しています…", icon="✅")
+                                    try:
+                                        pdf_row_end = ROUTE_PRINT_BASE_ROWS[len(chunk) - 1] + 8 if len(chunk) > 0 else 12
+                                        with st.spinner("PDFを作成しています..."):
+                                            pdf_res = requests.get(
+                                                build_print_pdf_url(row_end=pdf_row_end, gid=ROUTE_PRINT_SHEET_GID),
+                                                timeout=30
+                                            )
+                                        content_type = pdf_res.headers.get("Content-Type", "")
+                                        if pdf_res.status_code == 200 and "pdf" in content_type.lower():
+                                            st.success("✅ PDFが作成できました。下のボタンからダウンロードしてください。")
+                                            st.download_button(
+                                                "📄 PDFをダウンロード",
+                                                data=pdf_res.content,
+                                                file_name=f"{selected_store}_route_p{page_idx + 1}.pdf",
+                                                mime="application/pdf",
+                                                key=f"rt_pdf_dl_{page_idx}",
+                                            )
+                                        else:
+                                            st.warning(
+                                                "スプレッドシートへの反映は完了しましたが、アプリ上でのPDF取得に失敗しました"
+                                                "（共有設定などが原因の可能性があります）。"
+                                                f"[印刷用スプレッドシートを開く]({ROUTE_PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                            )
+                                    except Exception as pdf_e:
+                                        st.warning(f"PDF作成中にエラーが発生しました: {pdf_e}")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"反映に失敗しました: {res.get('message')}")
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
@@ -1669,6 +1852,7 @@ def render_product_order_tabs():
                                         "target_sheet_url": DEST_SHEET_URL,
                                         "row_indices": page_row_ids,
                                         "print_time": print_time,
+                                        "print_col": PRINT_TIME_COL_IDX + 1,
                                     }
                                     mark_res = post_to_gas(mark_payload)
                                     if mark_res.get("status") != "success":
