@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycby1FN6-ps0dXFlZALcHFP3GMOY962hExixAIQ5Ec1k6UqiMDptnrOxB9l9h10xNapz-Iw/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -294,6 +294,19 @@ def _cc_product_labels(products):
     return labels
 
 
+
+
+def _cc_format_yen(amount):
+    """増減金額を表示用に整形する。マイナスの場合は「－」を付け、「1,234円」の形式にする
+    （数値に変換できない場合は元の値をそのまま返す）"""
+    if amount is None or str(amount).strip() == "":
+        return ""
+    try:
+        val = float(amount)
+    except (TypeError, ValueError):
+        return str(amount)
+    sign = "－" if val < 0 else ""
+    return f"{sign}{abs(val):,.0f}円"
 
 
 def _cc_hide_zero(val):
@@ -1412,7 +1425,7 @@ def render_contract_change_tabs():
             m1, m2, m3 = st.columns(3)
             m1.metric("変更前 合計金額", f"{total_before:,.0f}")
             m2.metric("変更後 合計金額", f"{total_after:,.0f}")
-            m3.metric("増減金額（変更前－変更後）", f"{amount_diff:,.0f}")
+            m3.metric("増減金額（変更前－変更後）", _cc_format_yen(amount_diff))
 
             with st.form("cc_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
@@ -1555,7 +1568,7 @@ def render_contract_change_tabs():
                             df_items = cc_items_display_df(items)
                             if not df_items.empty:
                                 st.dataframe(df_items, use_container_width=True, hide_index=True)
-                            st.caption(f"増減金額: {_v('amount_diff')}")
+                            st.caption(f"増減金額: {_cc_format_yen(_v('amount_diff'))}")
 
                             with st.form(key=f"cc_mgr_edit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
@@ -1679,7 +1692,7 @@ def render_contract_change_tabs():
                                     st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"cc_v_contact_{row_id}")
                                 if comment_val.strip():
                                     st.text_area("特記事項", value=comment_val, disabled=True, key=f"cc_v_comment_{row_id}")
-                            st.caption(f"増減金額: {_v('amount_diff')}")
+                            st.caption(f"増減金額: {_cc_format_yen(_v('amount_diff'))}")
 
                             st.write("---")
                             with st.form(key=f"cc_transfer_form_{row_id}"):
@@ -1812,7 +1825,7 @@ def render_contract_change_tabs():
                             c6.text_input("処理者", value=op_user_val, disabled=True, key=f"cc_chk_op_{row_id}")
                             c7.text_input("承認者", value=mgr_name_val, disabled=True, key=f"cc_chk_mgr_{row_id}")
 
-                            st.caption(f"増減金額: {_v('amount_diff')}")
+                            st.caption(f"増減金額: {_cc_format_yen(_v('amount_diff'))}")
 
                             if checked_time_val:
                                 st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
