@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbw6IzYD11E9pUr6hiM5IwEcMXUVb--uFb17Y2AlQzmtyB79ch65nR1KUVBGuZjpz8oINQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzU8RZJ_gLQKTqU_b8_JmrL9FKC3PYdqx832NvRN8bCFQFDI_frK29dID3FpweXJQeOIQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -81,29 +81,32 @@ CC_DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qi
 # 契約内容変更：列インデックス（0始まり）
 # A タイムスタンプ, B 担当者(申請者), C 顧客コード, D 顧客名, E 加盟店, F 加盟店コード,
 # G〜 商品①〜⑤（1商品あたり14列＝変更前7列＋変更後7列。下のCC_ITEM_FIELDS順）,
-# （G+70列目から）理由, 連絡担当者様, 増減金額, サイン(ステータス/承認者名), 日時(承認日時), コメント(承認コメント/差戻し理由),
+# （その後）理由, 連絡担当者様, 特記事項, 増減金額, サイン(ステータス/承認者名), 日時(承認日時), コメント(承認コメント/差戻し理由),
 # 処理日, 処理者, チェック日, チェック者, 印刷済
+# ※特記事項列はTAB1/2シート・TAB3/4シートどちらにも「連絡担当者様」の直後・「増減金額」の直前に追加が必要
 CC_ITEM_FIELDS = [
     "before_code", "before_price", "before_cycle", "before_a", "before_b", "before_c", "before_d",
     "after_code", "after_price", "after_cycle", "after_a", "after_b", "after_c", "after_d",
 ]
 CC_ITEM_COUNT = 5
 CC_ITEMS_START_COL = 6  # G列（0始まり）から商品①の「変更前商品記号」が始まる
+CC_ITEMS_END_COL = CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS)  # 商品ブロックの直後の列
 
 CC_COL = {
     "timestamp": 0, "applicant": 1, "cust_code": 2, "cust_name": 3,
     "store_name": 4, "store_code": 5,
-    "reason": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS),
-    "contact_person": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 1,
-    "amount_diff": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 2,
-    "status_sign": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 3,
-    "approval_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 4,
-    "approval_comment": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 5,
-    "process_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 6,
-    "process_user": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 7,
-    "check_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 8,
-    "check_user": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 9,
-    "print_time": CC_ITEMS_START_COL + CC_ITEM_COUNT * len(CC_ITEM_FIELDS) + 10,
+    "reason": CC_ITEMS_END_COL,
+    "contact_person": CC_ITEMS_END_COL + 1,
+    "comment": CC_ITEMS_END_COL + 2,
+    "amount_diff": CC_ITEMS_END_COL + 3,
+    "status_sign": CC_ITEMS_END_COL + 4,
+    "approval_time": CC_ITEMS_END_COL + 5,
+    "approval_comment": CC_ITEMS_END_COL + 6,
+    "process_time": CC_ITEMS_END_COL + 7,
+    "process_user": CC_ITEMS_END_COL + 8,
+    "check_time": CC_ITEMS_END_COL + 9,
+    "check_user": CC_ITEMS_END_COL + 10,
+    "print_time": CC_ITEMS_END_COL + 11,
 }
 
 
@@ -297,6 +300,14 @@ def calc_cc_amount(price, cycle, week_a, week_b, week_c, week_d):
         return 0.0
     total_weekly = _cc_to_float(week_a) + _cc_to_float(week_b) + _cc_to_float(week_c) + _cc_to_float(week_d)
     return total_weekly * (4.0 / cycle_f) * _cc_to_float(price)
+
+
+def _cc_sum4(week_a, week_b, week_c, week_d):
+    """A〜D週の納品数を合計した「契約数」を計算し、文字列で返す（整数ならそのまま、それ以外は元の値を保持）"""
+    total = _cc_to_float(week_a) + _cc_to_float(week_b) + _cc_to_float(week_c) + _cc_to_float(week_d)
+    if total == 0:
+        return ""
+    return str(int(total)) if total == int(total) else str(total)
 
 
 def cc_extract_items(row):
@@ -1242,27 +1253,27 @@ def render_contract_change_tabs():
             st.write("---")
             st.write("**📋 入力情報**")
 
-            row1_col1, row1_col2, row1_col3 = st.columns(3)
+            row1_col1, row1_col2, row1_col3, row1_col4, row1_col5 = st.columns(5)
             customer_code = row1_col1.text_input("顧客コード", key=f"cc_ccode{rclear}")
             customer_name = row1_col2.text_input("顧客名", key=f"cc_cname{rclear}")
-            store_code = row1_col3.text_input("加盟店コード", key=f"cc_scode{rclear}")
-
-            row2_col1, row2_col2 = st.columns(2)
-            store_name = row2_col1.text_input("加盟店", key=f"cc_sname{rclear}")
-            applicant = row2_col2.text_input("担当者", value=st.session_state["user_name"], key=f"cc_app{rclear}")
+            store_name = row1_col3.text_input("加盟店名", key=f"cc_sname{rclear}")
+            store_code = row1_col4.text_input("加盟店コード", key=f"cc_scode{rclear}")
+            applicant = row1_col5.text_input("担当者", value=st.session_state["user_name"], key=f"cc_app{rclear}")
 
             products = st.session_state[f"cc_products{rclear}"]
             product_codes = list(dict.fromkeys([p["code"] for p in products]))
 
             st.write("---")
-            st.write("**📦 商品情報（変更前・変更後）**")
+            hcol1, hcol2 = st.columns(2)
+            hcol1.markdown("#### 🔵 変更前")
+            hcol2.markdown("#### 🟢 変更後")
 
             items_data = []
             total_before = 0.0
             total_after = 0.0
 
             for n in range(CC_ITEM_COUNT):
-                st.markdown(f"**商品 {n + 1}**")
+                st.caption(f"商品 {n + 1}")
 
                 def _make_before_cb(_n=n, _rclear=rclear):
                     def _cb():
@@ -1288,32 +1299,42 @@ def render_contract_change_tabs():
                             st.session_state[f"cc_after_code_{_n}{_rclear}"] = _picked
                     return _cb
 
-                b1, b2, b3, b4, b5, b6, b7 = st.columns(7)
-                before_code = b1.selectbox(
-                    "変更前商品記号", [""] + product_codes,
+                # ---- 変更前（左8列）・変更後（右8列）を1行に並べる ----
+                (bc1, bc2, bc3, bc4, bc5, bc6, bc7, bc8,
+                 ac1, ac2, ac3, ac4, ac5, ac6, ac7, ac8) = st.columns(16)
+
+                before_code = bc1.selectbox(
+                    "商品記号", [""] + product_codes,
                     key=f"cc_before_code_{n}{rclear}", on_change=_make_before_cb(),
                 )
-                before_price = b2.text_input("変更前単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
-                before_cycle = b3.text_input("変更前交換周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
-                before_a = b4.text_input("変更前A週", key=f"cc_before_a_{n}{rclear}", disabled=True)
-                before_b = b5.text_input("変更前B週", key=f"cc_before_b_{n}{rclear}", disabled=True)
-                before_c = b6.text_input("変更前C週", key=f"cc_before_c_{n}{rclear}", disabled=True)
-                before_d = b7.text_input("変更前D週", key=f"cc_before_d_{n}{rclear}", disabled=True)
+                before_price = bc3.text_input("単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
+                before_cycle = bc4.text_input("周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
+                before_a = bc5.text_input("A", key=f"cc_before_a_{n}{rclear}", disabled=True)
+                before_b = bc6.text_input("B", key=f"cc_before_b_{n}{rclear}", disabled=True)
+                before_c = bc7.text_input("C", key=f"cc_before_c_{n}{rclear}", disabled=True)
+                before_d = bc8.text_input("D", key=f"cc_before_d_{n}{rclear}", disabled=True)
 
-                p1, p2 = st.columns(2)
-                after_pick = p1.selectbox(
-                    "変更後商品記号（候補から選択）", [""] + product_codes,
-                    key=f"cc_after_pick_{n}{rclear}", on_change=_make_after_pick_cb(),
-                )
-                after_code = p2.text_input("変更後商品記号（自由入力可）", key=f"cc_after_code_{n}{rclear}")
+                before_count = _cc_sum4(before_a, before_b, before_c, before_d)
+                st.session_state[f"cc_before_count_{n}{rclear}"] = before_count
+                bc2.text_input("契約数", key=f"cc_before_count_{n}{rclear}", disabled=True)
 
-                a2, a3, a4, a5, a6, a7 = st.columns(6)
-                after_price = a2.text_input("変更後単価", key=f"cc_after_price_{n}{rclear}")
-                after_cycle = a3.text_input("変更後交換周期", key=f"cc_after_cycle_{n}{rclear}")
-                after_a = a4.text_input("変更後A週", key=f"cc_after_a_{n}{rclear}")
-                after_b = a5.text_input("変更後B週", key=f"cc_after_b_{n}{rclear}")
-                after_c = a6.text_input("変更後C週", key=f"cc_after_c_{n}{rclear}")
-                after_d = a7.text_input("変更後D週", key=f"cc_after_d_{n}{rclear}")
+                with ac1:
+                    after_pick = st.selectbox(
+                        "商品記号（候補）", [""] + product_codes,
+                        key=f"cc_after_pick_{n}{rclear}", on_change=_make_after_pick_cb(),
+                        label_visibility="visible",
+                    )
+                    after_code = st.text_input("商品記号（自由入力）", key=f"cc_after_code_{n}{rclear}")
+                after_price = ac3.text_input("単価", key=f"cc_after_price_{n}{rclear}")
+                after_cycle = ac4.text_input("周期", key=f"cc_after_cycle_{n}{rclear}")
+                after_a = ac5.text_input("A", key=f"cc_after_a_{n}{rclear}")
+                after_b = ac6.text_input("B", key=f"cc_after_b_{n}{rclear}")
+                after_c = ac7.text_input("C", key=f"cc_after_c_{n}{rclear}")
+                after_d = ac8.text_input("D", key=f"cc_after_d_{n}{rclear}")
+
+                after_count = _cc_sum4(after_a, after_b, after_c, after_d)
+                st.session_state[f"cc_after_count_{n}{rclear}"] = after_count
+                ac2.text_input("契約数", key=f"cc_after_count_{n}{rclear}", disabled=True)
 
                 items_data.append({
                     "before_code": before_code, "before_price": before_price, "before_cycle": before_cycle,
@@ -1336,8 +1357,9 @@ def render_contract_change_tabs():
             with st.form("cc_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                cc_reason = st.text_input("変更理由", key=f"cc_reason{rclear}")
+                cc_reason = st.text_input("理由", key=f"cc_reason{rclear}")
                 cc_contact = st.text_input("連絡担当者様", key=f"cc_contact{rclear}")
+                cc_comment = st.text_area("特記事項", key=f"cc_comment{rclear}")
 
                 btn_submit = st.form_submit_button("新規申請を送信", type="primary")
 
@@ -1351,7 +1373,7 @@ def render_contract_change_tabs():
                         for item in items_data:
                             for f in CC_ITEM_FIELDS:
                                 full_row.append(item[f])
-                        full_row += [cc_reason, cc_contact, f"{amount_diff:.0f}", "申請中", "", ""]
+                        full_row += [cc_reason, cc_contact, cc_comment, f"{amount_diff:.0f}", "申請中", "", ""]
 
                         payload = {
                             "action": "SUBMIT_CONTRACT_CHANGE",
@@ -1412,6 +1434,7 @@ def render_contract_change_tabs():
 
                                 edit_reason = st.text_input("変更理由", value=_v("reason"), key=f"cc_re_reason_{row_id}")
                                 edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"cc_re_contact_{row_id}")
+                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"cc_re_comment_{row_id}")
 
                                 btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
 
@@ -1428,7 +1451,7 @@ def render_contract_change_tabs():
                                             _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                             edit_store_name, edit_store_code
                                         ] + item_values + [
-                                            edit_reason, edit_contact, _v("amount_diff"), "申請中", "", ""
+                                            edit_reason, edit_contact, edit_comment, _v("amount_diff"), "申請中", "", ""
                                         ]
 
                                         payload = {
@@ -1490,6 +1513,7 @@ def render_contract_change_tabs():
 
                                 edit_reason = st.text_input("変更理由", value=_v("reason"), key=f"cc_m_reason_{row_id}")
                                 edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"cc_m_contact_{row_id}")
+                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"cc_m_comment_{row_id}")
                                 mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"cc_mgr_com_{row_id}")
 
                                 col_app, col_rej, col_del = st.columns(3)
@@ -1509,7 +1533,7 @@ def render_contract_change_tabs():
                                     updated_row = [
                                         _v("timestamp"), edit_app, edit_ccode, edit_cname,
                                         edit_sname, edit_scode
-                                    ] + item_values + [edit_reason, edit_contact, _v("amount_diff")]
+                                    ] + item_values + [edit_reason, edit_contact, edit_comment, _v("amount_diff")]
 
                                     action_type = ""
                                     if btn_approve:
@@ -1587,11 +1611,14 @@ def render_contract_change_tabs():
 
                             reason_val = _v("reason")
                             contact_val = _v("contact_person")
-                            if reason_val.strip() or contact_val.strip():
+                            comment_val = _v("comment")
+                            if reason_val.strip() or contact_val.strip() or comment_val.strip():
                                 if reason_val.strip():
                                     st.text_input("変更理由", value=reason_val, disabled=True, key=f"cc_v_reason_{row_id}")
                                 if contact_val.strip():
                                     st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"cc_v_contact_{row_id}")
+                                if comment_val.strip():
+                                    st.text_area("特記事項", value=comment_val, disabled=True, key=f"cc_v_comment_{row_id}")
                             st.caption(f"増減金額: {_v('amount_diff')}")
 
                             st.write("---")
@@ -1732,12 +1759,15 @@ def render_contract_change_tabs():
 
                             reason_val = _v("reason")
                             contact_val = _v("contact_person")
-                            if reason_val.strip() or contact_val.strip():
+                            comment_val = _v("comment")
+                            if reason_val.strip() or contact_val.strip() or comment_val.strip():
                                 st.write("---")
                                 if reason_val.strip():
                                     st.text_input("変更理由", value=reason_val, disabled=True, key=f"cc_chk_reason_{row_id}")
                                 if contact_val.strip():
                                     st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"cc_chk_contact_{row_id}")
+                                if comment_val.strip():
+                                    st.text_area("特記事項", value=comment_val, disabled=True, key=f"cc_chk_comment_{row_id}")
 
                             st.write("---")
                             st.write("⚠️ **差戻しを行う場合の設定**")
