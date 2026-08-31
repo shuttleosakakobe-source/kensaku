@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbzySkpua5aW6qTRa3BsKgY0PG1FOPWjLs5smKZdbhv7yB4GRbtKRv3SpWF-Tp1owfLXtw/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
@@ -655,6 +655,8 @@ def render_route_change_tabs():
                                             st.toast("再申請が完了しました！")
                                             time.sleep(1)
                                             st.rerun()
+                                        else:
+                                            st.error(f"処理に失敗しました: {res.get('message')}")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -751,6 +753,8 @@ def render_route_change_tabs():
                                         st.toast("処理が完了しました！")
                                         time.sleep(1)
                                         st.rerun()
+                                    else:
+                                        st.error(f"処理に失敗しました: {res.get('message')}")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -1592,6 +1596,8 @@ def render_contract_change_tabs():
                                             st.toast("再申請が完了しました！")
                                             time.sleep(1)
                                             st.rerun()
+                                        else:
+                                            st.error(f"処理に失敗しました: {res.get('message')}")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -1683,6 +1689,8 @@ def render_contract_change_tabs():
                                         st.toast("処理が完了しました！")
                                         time.sleep(1)
                                         st.rerun()
+                                    else:
+                                        st.error(f"処理に失敗しました: {res.get('message')}")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -2487,6 +2495,8 @@ def render_product_order_tabs():
                                             st.toast("再申請が完了しました！")
                                             time.sleep(1)
                                             st.rerun()
+                                        else:
+                                            st.error(f"処理に失敗しました: {res.get('message')}")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -2593,6 +2603,8 @@ def render_product_order_tabs():
                                         st.toast("処理が完了しました！")
                                         time.sleep(1)
                                         st.rerun()
+                                    else:
+                                        st.error(f"処理に失敗しました: {res.get('message')}")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -2712,6 +2724,8 @@ def render_product_order_tabs():
                                             time.sleep(1.5)
                                             st.rerun()
 
+                                        else:
+                                            st.error(f"処理に失敗しました: {res.get('message')}")
                                 elif btn_op_reject:
                                     if not op_reject_reason.strip():
                                         st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
