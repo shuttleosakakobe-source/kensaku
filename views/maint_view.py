@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-GAS_URL = "https://script.google.com/macros/s/AKfycby1FN6-ps0dXFlZALcHFP3GMOY962hExixAIQ5Ec1k6UqiMDptnrOxB9l9h10xNapz-Iw/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbwa18weo2Keoa_hjNqgfqvYTIKSsGZP_FrBdV00AuqMp9BXcXYMEHF7i_RatDYggSZHyQ/exec"
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
 TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
