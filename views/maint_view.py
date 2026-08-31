@@ -1221,6 +1221,48 @@ def cc_items_display_df(items):
     return pd.DataFrame(rows)
 
 
+def cc_render_items_readonly(items, key_prefix):
+    """5商品分のitems（cc_extract_itemsの戻り値）を、TAB1の新規申請フォームと同じ
+    「🔵 変更前」「🟢 変更後」カード形式（読み取り専用）で表示する（TAB2〜4の確認画面用）。
+    変更前・変更後どちらの商品記号も空の行（未入力スロット）は表示しない"""
+    any_shown = False
+    for n, d in enumerate(items):
+        if not d["before_code"].strip() and not d["after_code"].strip():
+            continue
+        any_shown = True
+        st.markdown(f"**商品 {n + 1}**")
+
+        st.markdown("🔵 変更前")
+        b_row1 = st.columns(4)
+        b_row2 = st.columns(4)
+        b_row1[0].text_input("商品記号", value=d["before_code"], disabled=True, key=f"{key_prefix}_b_code_{n}")
+        before_count = _cc_sum4(d["before_a"], d["before_b"], d["before_c"], d["before_d"])
+        b_row1[1].text_input("契約数", value=before_count, disabled=True, key=f"{key_prefix}_b_count_{n}")
+        b_row1[2].text_input("単価", value=d["before_price"], disabled=True, key=f"{key_prefix}_b_price_{n}")
+        b_row1[3].text_input("周期", value=d["before_cycle"], disabled=True, key=f"{key_prefix}_b_cycle_{n}")
+        b_row2[0].text_input("A", value=d["before_a"], disabled=True, key=f"{key_prefix}_b_a_{n}")
+        b_row2[1].text_input("B", value=d["before_b"], disabled=True, key=f"{key_prefix}_b_b_{n}")
+        b_row2[2].text_input("C", value=d["before_c"], disabled=True, key=f"{key_prefix}_b_c_{n}")
+        b_row2[3].text_input("D", value=d["before_d"], disabled=True, key=f"{key_prefix}_b_d_{n}")
+
+        st.markdown("🟢 変更後")
+        a_row1 = st.columns(4)
+        a_row2 = st.columns(4)
+        a_row1[0].text_input("商品記号", value=d["after_code"], disabled=True, key=f"{key_prefix}_a_code_{n}")
+        after_count = _cc_sum4(d["after_a"], d["after_b"], d["after_c"], d["after_d"])
+        a_row1[1].text_input("契約数", value=after_count, disabled=True, key=f"{key_prefix}_a_count_{n}")
+        a_row1[2].text_input("単価", value=d["after_price"], disabled=True, key=f"{key_prefix}_a_price_{n}")
+        a_row1[3].text_input("周期", value=d["after_cycle"], disabled=True, key=f"{key_prefix}_a_cycle_{n}")
+        a_row2[0].text_input("A", value=d["after_a"], disabled=True, key=f"{key_prefix}_a_a_{n}")
+        a_row2[1].text_input("B", value=d["after_b"], disabled=True, key=f"{key_prefix}_a_b_{n}")
+        a_row2[2].text_input("C", value=d["after_c"], disabled=True, key=f"{key_prefix}_a_c_{n}")
+        a_row2[3].text_input("D", value=d["after_d"], disabled=True, key=f"{key_prefix}_a_d_{n}")
+
+        st.write("---")
+    if not any_shown:
+        st.caption("商品情報が入力されていません。")
+
+
 def render_contract_change_tabs():
     # 💡 【CSS調整】disabled入力の文字が薄くて読みにくいのを解消
     st.markdown("""
@@ -1577,9 +1619,7 @@ def render_contract_change_tabs():
                         items = cc_extract_items(row)
 
                         with st.expander(f"⏳ 【承認待ち】{_v('cust_name')}（{_v('cust_code')}） | 行: {row_id}"):
-                            df_items = cc_items_display_df(items)
-                            if not df_items.empty:
-                                st.dataframe(df_items, use_container_width=True, hide_index=True)
+                            cc_render_items_readonly(items, key_prefix=f"cc_m_view_{row_id}")
                             st.caption(f"増減金額: {_cc_format_yen(_v('amount_diff'))}")
 
                             with st.form(key=f"cc_mgr_edit_form_{row_id}"):
@@ -1691,9 +1731,7 @@ def render_contract_change_tabs():
                             o2_c1.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"cc_v_sname_{row_id}")
                             o2_c2.text_input("担当者", value=_v("applicant"), disabled=True, key=f"cc_v_app_{row_id}")
 
-                            df_items = cc_items_display_df(items)
-                            if not df_items.empty:
-                                st.dataframe(df_items, use_container_width=True, hide_index=True)
+                            cc_render_items_readonly(items, key_prefix=f"cc_v_view_{row_id}")
 
                             reason_val = _v("reason")
                             contact_val = _v("contact_person")
@@ -1833,9 +1871,7 @@ def render_contract_change_tabs():
                             c4.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"cc_chk_sname_{row_id}")
                             c5.text_input("担当者", value=_v("applicant"), disabled=True, key=f"cc_chk_app_{row_id}")
 
-                            df_items = cc_items_display_df(items)
-                            if not df_items.empty:
-                                st.dataframe(df_items, use_container_width=True, hide_index=True)
+                            cc_render_items_readonly(items, key_prefix=f"cc_chk_view_{row_id}")
 
                             c6, c7 = st.columns(2)
                             c6.text_input("処理者", value=op_user_val, disabled=True, key=f"cc_chk_op_{row_id}")
