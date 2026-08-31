@@ -270,6 +270,8 @@ def get_contract_products(cust_code):
     return products
 
 
+
+
 def _cc_hide_zero(val):
     """数値が0（または0扱いの文字列）なら空文字にする。それ以外はそのまま返す（契約内容変更・変更前欄の自動表示用）"""
     if val is None:
@@ -1274,7 +1276,6 @@ def render_contract_change_tabs():
             applicant = row1b_col2.text_input("担当者", value=st.session_state["user_name"], key=f"cc_app{rclear}")
 
             products = st.session_state[f"cc_products{rclear}"]
-            product_codes = list(dict.fromkeys([p["code"] for p in products]))
 
             st.write("---")
 
@@ -1288,8 +1289,8 @@ def render_contract_change_tabs():
                 def _make_before_cb(_n=n, _rclear=rclear):
                     def _cb():
                         _products = st.session_state.get(f"cc_products{_rclear}", [])
-                        _code = st.session_state.get(f"cc_before_code_{_n}{_rclear}", "")
-                        _match = next((p for p in _products if p["code"] == _code), None)
+                        _idx = st.session_state.get(f"cc_before_code_{_n}{_rclear}")
+                        _match = _products[_idx] if isinstance(_idx, int) and 0 <= _idx < len(_products) else None
                         if _match:
                             st.session_state[f"cc_before_price_{_n}{_rclear}"] = _cc_hide_zero(_match["price"])
                             st.session_state[f"cc_before_cycle_{_n}{_rclear}"] = _cc_hide_zero(_match["cycle"])
@@ -1308,10 +1309,12 @@ def render_contract_change_tabs():
                 b_row1 = st.columns(4)
                 b_row2 = st.columns(4)
 
-                before_code = b_row1[0].selectbox(
-                    "商品記号", [""] + product_codes,
+                before_idx = b_row1[0].selectbox(
+                    "商品記号", [None] + list(range(len(products))),
+                    format_func=lambda i: "" if i is None else products[i]["code"],
                     key=f"cc_before_code_{n}{rclear}", on_change=_make_before_cb(),
                 )
+                before_code = products[before_idx]["code"] if isinstance(before_idx, int) else ""
                 before_price = b_row1[2].text_input("単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
                 before_cycle = b_row1[3].text_input("周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
                 before_a = b_row2[0].text_input("A", key=f"cc_before_a_{n}{rclear}", disabled=True)
@@ -1327,14 +1330,16 @@ def render_contract_change_tabs():
                 a_row1 = st.columns(4)
                 a_row2 = st.columns(4)
 
-                after_code = a_row1[0].selectbox(
+                after_pick = a_row1[0].selectbox(
                     "商品記号",
-                    product_codes,
+                    list(range(len(products))),
                     index=None,
                     accept_new_options=True,
+                    format_func=lambda i: products[i]["code"] if isinstance(i, int) else str(i),
                     placeholder="選択 or 入力",
                     key=f"cc_after_code_{n}{rclear}",
-                ) or ""
+                )
+                after_code = products[after_pick]["code"] if isinstance(after_pick, int) else (after_pick or "")
                 after_price = a_row1[2].text_input("単価", key=f"cc_after_price_{n}{rclear}")
                 after_cycle = a_row1[3].text_input("周期", key=f"cc_after_cycle_{n}{rclear}")
                 after_a = a_row2[0].text_input("A", key=f"cc_after_a_{n}{rclear}")
