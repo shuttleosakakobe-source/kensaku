@@ -882,7 +882,7 @@ def render_route_change_tabs():
                             指定されていないセル（行・列）はテンプレート側の固定内容として一切触らない。
                             C1=加盟店名, A/B/D/E(+0)=加盟店コード/顧客名/責任者/処理者,
                             A/C/E(+2)=変更前ルート/変更後ルート/シャトルコード(顧客コード),
-                            B/C/E(+4)=変更前担当者/変更後担当者/提出者,
+                            A/C/E(+4)=変更前担当者/変更後担当者/提出者,
                             A/C(+6)=次回訪問日/変更理由, A/E(+8)=特記事項/連絡担当者"""
                             if not rec:
                                 rec = {k: "" for k in [
@@ -899,7 +899,7 @@ def render_route_change_tabs():
                                 {"offset": 2, "col": 1, "value": rec["route_before"]},
                                 {"offset": 2, "col": 3, "value": rec["route_after"]},
                                 {"offset": 2, "col": 5, "value": rec["cust_code"]},
-                                {"offset": 4, "col": 2, "value": rec["op_before_name"]},
+                                {"offset": 4, "col": 1, "value": rec["op_before_name"]},
                                 {"offset": 4, "col": 3, "value": rec["op_after_name"]},
                                 {"offset": 4, "col": 5, "value": rec["applicant"]},
                                 {"offset": 6, "col": 1, "value": rec["next_visit"]},
