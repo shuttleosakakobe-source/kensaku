@@ -305,7 +305,7 @@ def _cc_format_yen(amount):
         val = float(amount)
     except (TypeError, ValueError):
         return str(amount)
-    sign = "－" if val < 0 else ""
+    sign = "-" if val < 0 else ""
     return f"{sign}{abs(val):,.0f}円"
 
 
@@ -1421,11 +1421,11 @@ def render_contract_change_tabs():
 
                 st.write("---")
 
-            amount_diff = total_before - total_after
+            amount_diff = total_after - total_before
             m1, m2, m3 = st.columns(3)
             m1.metric("変更前 合計金額", f"{total_before:,.0f}")
             m2.metric("変更後 合計金額", f"{total_after:,.0f}")
-            m3.metric("増減金額（変更前－変更後）", _cc_format_yen(amount_diff))
+            m3.metric("増減金額（変更後－変更前）", _cc_format_yen(amount_diff))
 
             with st.form("cc_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
