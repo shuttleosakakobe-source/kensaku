@@ -864,9 +864,11 @@ def render_route_change_tabs():
                             operator = _f("process_user") or st.session_state["user_name"]
                             contact = _f("contact_person")
                             contact_disp = f"{contact} 様" if contact.strip() else ""
+                            raw_cname = _f("cust_name")
+                            cust_name_disp = f"{raw_cname} 様" if raw_cname.strip() else ""
 
                             return {
-                                "store_code": _f("store_code"), "cust_name": _f("cust_name"),
+                                "store_code": _f("store_code"), "cust_name": cust_name_disp,
                                 "manager": manager, "operator": operator,
                                 "route_before": _f("route_before"), "route_after": _f("route_after"),
                                 "cust_code": _f("cust_code"),
@@ -914,7 +916,7 @@ def render_route_change_tabs():
                         for page_idx, chunk in enumerate(chunks):
                             st.markdown(f"#### 📄 ページ {page_idx + 1} / {len(chunks)}")
 
-                            c1_value = selected_store
+                            c1_value = f"{selected_store} 様"
                             blocks = []
                             preview_records = []
                             page_row_ids = [int(idx) + 2 for idx in chunk.index]
