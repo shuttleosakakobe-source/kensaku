@@ -4,7 +4,7 @@
 変更前・変更後の2系統ではなく、抽出した商品情報の横に「変更数」を1つ入力する形にしている。
 契約数はA〜D週の内訳ではなく、契約内容変更の「契約数」と同じ考え方（0以外の納品数を採用）で
 1つにまとめた数値として表示する（周期は表示しない）。これを5商品分（商品①〜⑤）並べ、その後に
-次回訪問日・理由・特記事項・連絡担当者様を入力する。"""
+納品日・理由・特記事項・連絡担当者様を入力する。"""
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -32,7 +32,7 @@ DQ_DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qi
 # 納品数量変更：列インデックス（0始まり）
 # A タイムスタンプ, B 担当者(申請者), C 顧客コード, D 顧客名, E 加盟店, F 加盟店コード,
 # G〜 商品①〜⑤（1商品あたり4列＝商品記号/単価/契約数/変更数。下のDQ_ITEM_FIELDS順）,
-# （その後）次回訪問日, 理由, 特記事項, 連絡担当者様, サイン(ステータス/承認者名), 日時(承認日時), コメント(承認コメント/差戻し理由),
+# （その後）納品日, 理由, 特記事項, 連絡担当者様, サイン(ステータス/承認者名), 日時(承認日時), コメント(承認コメント/差戻し理由),
 # 処理日, 処理者, チェック日, チェック者, 印刷済
 DQ_ITEM_FIELDS = ["code", "price", "count", "change_qty"]
 DQ_ITEM_COUNT = 5
@@ -42,7 +42,7 @@ DQ_ITEMS_END_COL = DQ_ITEMS_START_COL + DQ_ITEM_COUNT * len(DQ_ITEM_FIELDS)  # �
 DQ_COL = {
     "timestamp": 0, "applicant": 1, "cust_code": 2, "cust_name": 3,
     "store_name": 4, "store_code": 5,
-    "next_visit": DQ_ITEMS_END_COL,
+    "delivery_date": DQ_ITEMS_END_COL,
     "reason": DQ_ITEMS_END_COL + 1,
     "comment": DQ_ITEMS_END_COL + 2,
     "contact_person": DQ_ITEMS_END_COL + 3,
@@ -287,8 +287,8 @@ def render_delivery_qty_change_tabs():
             with st.form("dq_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                dq_nvisit_val = st.date_input("次回訪問日", value=None, key=f"dq_nvisit{rclear}")
-                dq_nvisit = dq_nvisit_val.strftime("%Y/%m/%d") if dq_nvisit_val else ""
+                dq_delivery_date_val = st.date_input("納品日", value=None, key=f"dq_delivery_date{rclear}")
+                dq_delivery_date = dq_delivery_date_val.strftime("%Y/%m/%d") if dq_delivery_date_val else ""
                 dq_reason = st.text_input("理由", key=f"dq_reason{rclear}")
                 dq_comment = st.text_area("特記事項", key=f"dq_comment{rclear}")
                 dq_contact = st.text_input("連絡担当者様", key=f"dq_contact{rclear}")
@@ -305,7 +305,7 @@ def render_delivery_qty_change_tabs():
                         for item in items_data:
                             for f in DQ_ITEM_FIELDS:
                                 full_row.append(item[f])
-                        full_row += [dq_nvisit, dq_reason, dq_comment, dq_contact, "申請中", "", ""]
+                        full_row += [dq_delivery_date, dq_reason, dq_comment, dq_contact, "申請中", "", ""]
 
                         payload = {
                             "action": "SUBMIT_DELIVERY_QTY_CHANGE",
@@ -364,7 +364,7 @@ def render_delivery_qty_change_tabs():
 
                                 st.caption("商品内容は上の表の内容がそのまま再申請されます。商品自体を修正したい場合は新規申請からやり直してください。")
 
-                                edit_nvisit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"dq_re_nvisit_{row_id}")
+                                edit_delivery_date = st.text_input("納品日", value=_v("delivery_date"), key=f"dq_re_delivery_date_{row_id}")
                                 edit_reason = st.text_input("理由", value=_v("reason"), key=f"dq_re_reason_{row_id}")
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"dq_re_comment_{row_id}")
                                 edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"dq_re_contact_{row_id}")
@@ -384,7 +384,7 @@ def render_delivery_qty_change_tabs():
                                             _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                             edit_store_name, edit_store_code
                                         ] + item_values + [
-                                            edit_nvisit, edit_reason, edit_comment, edit_contact, "申請中", "", ""
+                                            edit_delivery_date, edit_reason, edit_comment, edit_contact, "申請中", "", ""
                                         ]
 
                                         payload = {
@@ -443,7 +443,7 @@ def render_delivery_qty_change_tabs():
                                 edit_sname = m2_1.text_input("加盟店", value=_v("store_name"), key=f"dq_m_sname_{row_id}")
                                 edit_app = m2_2.text_input("担当者", value=_v("applicant"), key=f"dq_m_app_{row_id}")
 
-                                edit_nvisit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"dq_m_nvisit_{row_id}")
+                                edit_delivery_date = st.text_input("納品日", value=_v("delivery_date"), key=f"dq_m_delivery_date_{row_id}")
                                 edit_reason = st.text_input("理由", value=_v("reason"), key=f"dq_m_reason_{row_id}")
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"dq_m_comment_{row_id}")
                                 edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"dq_m_contact_{row_id}")
@@ -466,7 +466,7 @@ def render_delivery_qty_change_tabs():
                                     updated_row = [
                                         _v("timestamp"), edit_app, edit_ccode, edit_cname,
                                         edit_sname, edit_scode
-                                    ] + item_values + [edit_nvisit, edit_reason, edit_comment, edit_contact]
+                                    ] + item_values + [edit_delivery_date, edit_reason, edit_comment, edit_contact]
 
                                     action_type = ""
                                     if btn_approve:
@@ -542,13 +542,13 @@ def render_delivery_qty_change_tabs():
 
                             dq_render_items_readonly(items, key_prefix=f"dq_v_view_{row_id}")
 
-                            nvisit_val = _v("next_visit")
+                            delivery_date_val = _v("delivery_date")
                             reason_val = _v("reason")
                             comment_val = _v("comment")
                             contact_val = _v("contact_person")
-                            if nvisit_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
-                                if nvisit_val.strip():
-                                    st.text_input("次回訪問日", value=nvisit_val, disabled=True, key=f"dq_v_nvisit_{row_id}")
+                            if delivery_date_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
+                                if delivery_date_val.strip():
+                                    st.text_input("納品日", value=delivery_date_val, disabled=True, key=f"dq_v_delivery_date_{row_id}")
                                 if reason_val.strip():
                                     st.text_input("理由", value=reason_val, disabled=True, key=f"dq_v_reason_{row_id}")
                                 if comment_val.strip():
@@ -688,14 +688,14 @@ def render_delivery_qty_change_tabs():
                             if checked_time_val:
                                 st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
 
-                            nvisit_val = _v("next_visit")
+                            delivery_date_val = _v("delivery_date")
                             reason_val = _v("reason")
                             comment_val = _v("comment")
                             contact_val = _v("contact_person")
-                            if nvisit_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
+                            if delivery_date_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
                                 st.write("---")
-                                if nvisit_val.strip():
-                                    st.text_input("次回訪問日", value=nvisit_val, disabled=True, key=f"dq_chk_nvisit_{row_id}")
+                                if delivery_date_val.strip():
+                                    st.text_input("納品日", value=delivery_date_val, disabled=True, key=f"dq_chk_delivery_date_{row_id}")
                                 if reason_val.strip():
                                     st.text_input("理由", value=reason_val, disabled=True, key=f"dq_chk_reason_{row_id}")
                                 if comment_val.strip():
