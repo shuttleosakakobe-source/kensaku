@@ -4,6 +4,7 @@ import streamlit as st
 from views.route_view import render_route_change_tabs
 from views.contract_view import render_contract_change_tabs
 from views.order_view import render_product_order_tabs
+from views.spot_route_view import render_spot_route_change_tabs
 
 def maintenance_admin_screen():
     """メンテナンス画面の入口。商品発注／ルート変更／契約内容変更をボタンで切り替えて、それぞれのタブ一式を表示する"""
@@ -20,13 +21,16 @@ def maintenance_admin_screen():
     #    画面切り替え時にまれにブラウザ側でDOM操作エラー(NotFoundError: removeChild)が
     #    起きることがあった。on_clickコールバックで状態更新を「再実行が始まる前」に
     #    済ませることで、st.rerun()を使わずに1回の再実行だけで済むようにした。
-    b_order, b_route, b_cc = st.columns(3)
+    b_order, b_route, b_sroute, b_cc = st.columns(4)
     b_order.button("📦 商品発注", use_container_width=True,
                    type="primary" if st.session_state["maint_mode"] == "order" else "secondary",
                    on_click=_set_maint_mode, args=("order",))
     b_route.button("🗺️ ルート変更", use_container_width=True,
                    type="primary" if st.session_state["maint_mode"] == "route" else "secondary",
                    on_click=_set_maint_mode, args=("route",))
+    b_sroute.button("🔄 単発ルート変更", use_container_width=True,
+                     type="primary" if st.session_state["maint_mode"] == "sroute" else "secondary",
+                     on_click=_set_maint_mode, args=("sroute",))
     b_cc.button("📋 契約内容変更", use_container_width=True,
                 type="primary" if st.session_state["maint_mode"] == "cc" else "secondary",
                 on_click=_set_maint_mode, args=("cc",))
@@ -37,6 +41,8 @@ def maintenance_admin_screen():
         render_product_order_tabs()
     elif st.session_state["maint_mode"] == "route":
         render_route_change_tabs()
+    elif st.session_state["maint_mode"] == "sroute":
+        render_spot_route_change_tabs()
     else:
         render_contract_change_tabs()
 
