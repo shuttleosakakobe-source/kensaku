@@ -6,7 +6,7 @@ import json
 from datetime import timezone, timedelta
 
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbyRJr8RPl64iOL2eC6e0A2p1XdoqL3mjJIy-YbgHuZjJL-PZjmOOz1Djc6ldJBFUPVrwQ/exec"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 # ご契約データ（顧客コードごとの契約週・曜日・担当者コードからルートコードを計算するための参照シート）
