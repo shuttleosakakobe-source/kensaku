@@ -12,19 +12,24 @@ def maintenance_admin_screen():
     if "maint_mode" not in st.session_state:
         st.session_state["maint_mode"] = "order"
 
+    def _set_maint_mode(mode):
+        st.session_state["maint_mode"] = mode
+
+    # 💡 ボタンのクリックはそれ自体で自動的に再実行(rerun)がかかるため、
+    #    ここでさらに st.rerun() を呼ぶと「再実行の中でもう一度再実行」が発生し、
+    #    画面切り替え時にまれにブラウザ側でDOM操作エラー(NotFoundError: removeChild)が
+    #    起きることがあった。on_clickコールバックで状態更新を「再実行が始まる前」に
+    #    済ませることで、st.rerun()を使わずに1回の再実行だけで済むようにした。
     b_order, b_route, b_cc = st.columns(3)
-    if b_order.button("📦 商品発注", use_container_width=True,
-                       type="primary" if st.session_state["maint_mode"] == "order" else "secondary"):
-        st.session_state["maint_mode"] = "order"
-        st.rerun()
-    if b_route.button("🗺️ ルート変更", use_container_width=True,
-                       type="primary" if st.session_state["maint_mode"] == "route" else "secondary"):
-        st.session_state["maint_mode"] = "route"
-        st.rerun()
-    if b_cc.button("📋 契約内容変更", use_container_width=True,
-                    type="primary" if st.session_state["maint_mode"] == "cc" else "secondary"):
-        st.session_state["maint_mode"] = "cc"
-        st.rerun()
+    b_order.button("📦 商品発注", use_container_width=True,
+                   type="primary" if st.session_state["maint_mode"] == "order" else "secondary",
+                   on_click=_set_maint_mode, args=("order",))
+    b_route.button("🗺️ ルート変更", use_container_width=True,
+                   type="primary" if st.session_state["maint_mode"] == "route" else "secondary",
+                   on_click=_set_maint_mode, args=("route",))
+    b_cc.button("📋 契約内容変更", use_container_width=True,
+                type="primary" if st.session_state["maint_mode"] == "cc" else "secondary",
+                on_click=_set_maint_mode, args=("cc",))
 
     st.write("---")
 
