@@ -9,6 +9,40 @@ from views.delivery_qty_view import render_delivery_qty_change_tabs
 
 def maintenance_admin_screen():
     """メンテナンス画面の入口。商品発注／ルート変更／契約内容変更をボタンで切り替えて、それぞれのタブ一式を表示する"""
+    # 💡 【文字サイズ調整】メンテナンス業務画面全体（商品発注／ルート変更／単発ルート変更／
+    #    納品数量変更／契約内容変更の全モード共通）の文字を大きくする。
+    #    ここ（画面の一番最初）で読み込むことで、以降どのモードに切り替えても効き続ける。
+    st.markdown("""
+        <style>
+        html, body, [class*="css"] {
+            font-size: 18px !important;
+        }
+        div[data-testid="stMarkdownContainer"] p,
+        div[data-testid="stMarkdownContainer"] li,
+        div[data-testid="stMarkdownContainer"] span,
+        div[data-testid="stWidgetLabel"] p,
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stTextArea"] textarea,
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stDateInput"] input,
+        div[data-testid="stSelectbox"] div[data-baseweb="select"] *,
+        div[data-testid="stCaptionContainer"] p,
+        div[data-testid="stExpander"] summary p,
+        div[data-testid="stExpander"] summary span,
+        button p,
+        div[data-testid="stTabs"] button p,
+        div[data-testid="stAlert"] p,
+        div[data-testid="stMetricValue"],
+        div[data-testid="stMetricLabel"],
+        div[data-testid="stDataFrame"] {
+            font-size: 1.15rem !important;
+        }
+        h1 { font-size: 2rem !important; }
+        h2 { font-size: 1.6rem !important; }
+        h3, h4 { font-size: 1.3rem !important; }
+        </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("#### 📦🗺️📋 メンテナンス業務")
 
     if "maint_mode" not in st.session_state:
