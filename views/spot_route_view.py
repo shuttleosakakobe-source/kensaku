@@ -141,7 +141,10 @@ def render_spot_route_change_tabs():
                             st.session_state[f"sr_sname{rclear}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
                             st.session_state[f"sr_cname{rclear}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
                             st.session_state[f"sr_scode{rclear}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
-                            st.session_state[f"sr_rbefore{rclear}"] = "、".join(route_codes)
+                            # 💡 変更前ルートが複数該当する場合はプルダウンで選ばせるため、
+                            #    候補リストをまるごと保存しておく（1件だけの場合は従来通り自動入力）
+                            st.session_state[f"sr_rbefore_opts{rclear}"] = route_codes
+                            st.session_state[f"sr_rbefore{rclear}"] = route_codes[0] if len(route_codes) == 1 else ""
 
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.3)
@@ -168,7 +171,16 @@ def render_spot_route_change_tabs():
             st.write("---")
             st.write("**🗺️ ルート情報**")
             row3_col1, row3_col2 = st.columns(2)
-            route_before = row3_col1.text_input("変更前ルート", key=f"sr_rbefore{rclear}", disabled=True)
+            sr_rbefore_opts = st.session_state.get(f"sr_rbefore_opts{rclear}", [])
+            if len(sr_rbefore_opts) > 1:
+                # 💡 変更前ルートの候補が複数ある場合は自動選択せず、プルダウンで選ばせる
+                route_before = row3_col1.selectbox(
+                    "変更前ルート（複数該当・対象を選択）",
+                    options=sr_rbefore_opts,
+                    key=f"sr_rbefore_select{rclear}"
+                )
+            else:
+                route_before = row3_col1.text_input("変更前ルート", key=f"sr_rbefore{rclear}", disabled=True)
             date_before_val = row3_col2.date_input("変更前日付", value=None, key=f"sr_dbefore{rclear}")
             date_before = date_before_val.strftime("%Y/%m/%d") if date_before_val else ""
 
