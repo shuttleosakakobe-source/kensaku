@@ -133,8 +133,10 @@ def render_delivery_qty_change_tabs():
         }
         div[data-testid="stTextInput"], div[data-testid="stTextArea"], div[data-testid="stSelectbox"],
         div[data-testid="stTextInput"] label, div[data-testid="stTextArea"] label, div[data-testid="stSelectbox"] label,
-        div[data-testid="stWidgetLabel"], div[data-testid="stWidgetLabel"] p {
+        div[data-testid="stWidgetLabel"], div[data-testid="stWidgetLabel"] p, div[data-testid="stWidgetLabel"] label {
             opacity: 1 !important;
+            color: #31333F !important;
+            -webkit-text-fill-color: #31333F !important;
         }
         div[data-testid="stSelectbox"] div[aria-disabled="true"],
         div[data-testid="stSelectbox"] div[aria-disabled="true"] * {
