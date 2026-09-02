@@ -1,12 +1,13 @@
 """メンテナンス業務（商品発注／ルート変更／契約内容変更）で共通して使う定数・ヘルパー関数。
 route_view.py / contract_view.py / order_view.py から読み込まれる。"""
+import streamlit as st
 import pandas as pd
 import requests
 import json
 from datetime import timezone, timedelta
 
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbyRJr8RPl64iOL2eC6e0A2p1XdoqL3mjJIy-YbgHuZjJL-PZjmOOz1Djc6ldJBFUPVrwQ/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 # ご契約データ（顧客コードごとの契約週・曜日・担当者コードからルートコードを計算するための参照シート）
@@ -61,6 +62,52 @@ def post_to_gas(payload):
         return response.json()
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@st.cache_data(ttl=60)
+def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
+    """あるモード（商品発注／ルート変更／単発ルート変更／納品数量変更／客中残訂正／契約内容変更）に、
+    誰かの対応待ちのデータが残っているかどうかを判定する（メンテナンス業務トップのボタンの
+    赤枠表示用）。以下のいずれかに該当すれば「処理が残っている」とみなす：
+    - TARGET側（TAB1・2用シート）：差戻し（要再修正・再申請）／申請中（要承認）／
+      承認済みだが未転記（要業務転記＝TAB3の対象）
+    - DEST側（TAB3・4用シート）：チェック未完了（要チェック＝TAB4の対象）／
+      チェック済みだが未印刷（要印刷＝TAB5の対象）
+    読み込みエラー時は「処理待ちなし」扱いとする（ボタン表示のためだけにトップ画面全体が
+    落ちないようにするため）。"""
+    try:
+        df_t = pd.read_csv(target_csv, dtype=str)
+        if not df_t.empty and len(df_t.columns) > status_col:
+            status_series = df_t.iloc[:, status_col].astype(str).str.strip()
+            if (status_series == "差戻し").any():
+                return True
+            if (status_series == "申請中").any():
+                return True
+            pending_transfer = (
+                (~df_t.iloc[:, status_col].isna()) &
+                (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+            )
+            if pending_transfer.any():
+                return True
+    except Exception:
+        pass
+
+    try:
+        df_d = pd.read_csv(dest_csv, dtype=str)
+        if not df_d.empty:
+            if len(df_d.columns) > check_col:
+                unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
+                if unchecked.any():
+                    return True
+            if len(df_d.columns) > print_col and len(df_d.columns) > check_col:
+                checked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() != ""
+                not_printed = df_d.iloc[:, print_col].fillna("").astype(str).str.strip() == ""
+                if (checked & not_printed).any():
+                    return True
+    except Exception:
+        pass
+
+    return False
 
 
 def _load_contract_df():
