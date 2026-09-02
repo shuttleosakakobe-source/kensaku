@@ -15,6 +15,7 @@ from views.customer_balance_view import (
 )
 from views.period_stop_view import render_period_stop_tabs, PS_COL, PS_TARGET_SHEET_CSV, PS_DEST_SHEET_CSV
 from views.other_view import render_other_maintenance_tabs, OT_COL, OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV
+from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV
 from views.maint_common import mode_has_pending_work
 
 # 商品発注は他モードと違い列インデックスの辞書（*_COL）を持たないため、生のインデックス
@@ -42,6 +43,8 @@ MODE_DEFS = [
      CC_COL["status_sign"], CC_COL["check_time"], CC_COL["print_time"]),
     ("ot", "📮 その他", OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV,
      OT_COL["status_sign"], OT_COL["check_time"], OT_COL["print_time"]),
+    ("cx", "🚫 解約", CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV,
+     CX_COL["status_sign"], CX_COL["check_time"], CX_COL["print_time"]),
 ]
 
 
@@ -142,6 +145,8 @@ def maintenance_admin_screen():
         render_period_stop_tabs()
     elif st.session_state["maint_mode"] == "ot":
         render_other_maintenance_tabs()
+    elif st.session_state["maint_mode"] == "cx":
+        render_cancel_tabs()
     else:
         render_contract_change_tabs()
 
