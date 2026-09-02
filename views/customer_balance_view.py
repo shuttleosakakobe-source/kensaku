@@ -178,7 +178,7 @@ def render_customer_balance_correction_tabs():
         "🔍 管理職チェック",
         "🚚 業務担当メンテナンス処理",
         "✅ メンテナンスチェック画面",
-        "🖨️ 加盟店別 印刷プレビュー",
+        "🖨️ 加盟店別 印刷",
     ])
 
     # ==========================================
@@ -733,7 +733,7 @@ def render_customer_balance_correction_tabs():
     # TAB 5: 加盟店別 印刷プレビュー
     # ==========================================
     with k_tab5:
-        st.subheader("🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）")
+        st.subheader("🖨️ 加盟店別 印刷")
 
         try:
             st.cache_data.clear()
