@@ -7,12 +7,13 @@
 納品日・理由・特記事項・連絡担当者様を入力する。"""
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime
 import time
 
 from views.maint_common import (
-    JST, CUSTOMER_MASTER_CSV,
-    post_to_gas,
+    JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
+    post_to_gas, build_print_pdf_url,
 )
 from views.contract_view import (
     get_contract_products, _cc_product_labels, _cc_hide_zero, _cc_sum4,
@@ -32,8 +33,10 @@ DQ_DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qi
 # 納品数量変更：列インデックス（0始まり）
 # A タイムスタンプ, B 担当者(申請者), C 顧客コード, D 顧客名, E 加盟店, F 加盟店コード,
 # G〜 商品①〜⑤（1商品あたり4列＝商品記号/単価/契約数/変更数。下のDQ_ITEM_FIELDS順）,
-# （その後）納品日, 理由, 特記事項, 連絡担当者様, サイン(ステータス/承認者名), 日時(承認日時), コメント(承認コメント/差戻し理由),
+# （その後）納品ルート, 納品日, 理由, 特記事項, 連絡担当者様, サイン(ステータス/承認者名), 日時(承認日時), コメント(承認コメント/差戻し理由),
 # 処理日, 処理者, チェック日, チェック者, 印刷済
+# 💡 「納品ルート」列は印刷テンプレート対応のため追加。Googleスプレッドシート側（TAB1・2用シート／
+#    TAB3・4用シート）にも、商品ブロックの直後・「納品日」列の直前に「納品ルート」列を挿入すること。
 DQ_ITEM_FIELDS = ["code", "price", "count", "change_qty"]
 DQ_ITEM_COUNT = 5
 DQ_ITEMS_START_COL = 6  # G列（0始まり）から商品①の「商品記号」が始まる
@@ -42,19 +45,27 @@ DQ_ITEMS_END_COL = DQ_ITEMS_START_COL + DQ_ITEM_COUNT * len(DQ_ITEM_FIELDS)  # �
 DQ_COL = {
     "timestamp": 0, "applicant": 1, "cust_code": 2, "cust_name": 3,
     "store_name": 4, "store_code": 5,
-    "delivery_date": DQ_ITEMS_END_COL,
-    "reason": DQ_ITEMS_END_COL + 1,
-    "comment": DQ_ITEMS_END_COL + 2,
-    "contact_person": DQ_ITEMS_END_COL + 3,
-    "status_sign": DQ_ITEMS_END_COL + 4,
-    "approval_time": DQ_ITEMS_END_COL + 5,
-    "approval_comment": DQ_ITEMS_END_COL + 6,
-    "process_time": DQ_ITEMS_END_COL + 7,
-    "process_user": DQ_ITEMS_END_COL + 8,
-    "check_time": DQ_ITEMS_END_COL + 9,
-    "check_user": DQ_ITEMS_END_COL + 10,
-    "print_time": DQ_ITEMS_END_COL + 11,
+    "route": DQ_ITEMS_END_COL,
+    "delivery_date": DQ_ITEMS_END_COL + 1,
+    "reason": DQ_ITEMS_END_COL + 2,
+    "comment": DQ_ITEMS_END_COL + 3,
+    "contact_person": DQ_ITEMS_END_COL + 4,
+    "status_sign": DQ_ITEMS_END_COL + 5,
+    "approval_time": DQ_ITEMS_END_COL + 6,
+    "approval_comment": DQ_ITEMS_END_COL + 7,
+    "process_time": DQ_ITEMS_END_COL + 8,
+    "process_user": DQ_ITEMS_END_COL + 9,
+    "check_time": DQ_ITEMS_END_COL + 10,
+    "check_user": DQ_ITEMS_END_COL + 11,
+    "print_time": DQ_ITEMS_END_COL + 12,
 }
+
+# 「納品数量変更」モードTAB5用：加盟店別 印刷フォーマットのスプレッドシート（同じブック内・別タブ）
+DQ_PRINT_SHEET_GID = "765708679"
+DQ_PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={DQ_PRINT_SHEET_GID}#gid={DQ_PRINT_SHEET_GID}"
+# 1ページに3件まで配置。各件の起点行（A列、店名/顧客名/責任者/処理者の行）：1件目=4, 2件目=21, 3件目=38
+# （実テンプレートをクリックして確認：ブロックの高さは17行で均一）
+DQ_PRINT_BASE_ROWS = [4, 21, 38]
 
 
 def dq_item_col(item_idx, field):
@@ -176,11 +187,12 @@ def render_delivery_qty_change_tabs():
     if "dq_searched_ccode" not in st.session_state:
         st.session_state["dq_searched_ccode"] = ""
 
-    d_tab1, d_tab2, d_tab3, d_tab4 = st.tabs([
+    d_tab1, d_tab2, d_tab3, d_tab4, d_tab5 = st.tabs([
         "📝 メンテナンス / 差戻し修正",
         "🔍 管理職チェック",
         "🚚 業務担当メンテナンス処理",
         "✅ メンテナンスチェック画面",
+        "🖨️ 加盟店別 印刷プレビュー",
     ])
 
     # ==========================================
@@ -289,6 +301,7 @@ def render_delivery_qty_change_tabs():
             with st.form("dq_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
+                dq_route = st.text_input("納品ルート", key=f"dq_route{rclear}")
                 dq_delivery_date_val = st.date_input("納品日", value=None, key=f"dq_delivery_date{rclear}")
                 dq_delivery_date = dq_delivery_date_val.strftime("%Y/%m/%d") if dq_delivery_date_val else ""
                 dq_reason = st.text_input("理由", key=f"dq_reason{rclear}")
@@ -307,7 +320,7 @@ def render_delivery_qty_change_tabs():
                         for item in items_data:
                             for f in DQ_ITEM_FIELDS:
                                 full_row.append(item[f])
-                        full_row += [dq_delivery_date, dq_reason, dq_comment, dq_contact, "申請中", "", ""]
+                        full_row += [dq_route, dq_delivery_date, dq_reason, dq_comment, dq_contact, "申請中", "", ""]
 
                         payload = {
                             "action": "SUBMIT_DELIVERY_QTY_CHANGE",
@@ -366,6 +379,7 @@ def render_delivery_qty_change_tabs():
 
                                 st.caption("商品内容は上の表の内容がそのまま再申請されます。商品自体を修正したい場合は新規申請からやり直してください。")
 
+                                edit_route = st.text_input("納品ルート", value=_v("route"), key=f"dq_re_route_{row_id}")
                                 edit_delivery_date = st.text_input("納品日", value=_v("delivery_date"), key=f"dq_re_delivery_date_{row_id}")
                                 edit_reason = st.text_input("理由", value=_v("reason"), key=f"dq_re_reason_{row_id}")
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"dq_re_comment_{row_id}")
@@ -386,7 +400,7 @@ def render_delivery_qty_change_tabs():
                                             _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                             edit_store_name, edit_store_code
                                         ] + item_values + [
-                                            edit_delivery_date, edit_reason, edit_comment, edit_contact, "申請中", "", ""
+                                            edit_route, edit_delivery_date, edit_reason, edit_comment, edit_contact, "申請中", "", ""
                                         ]
 
                                         payload = {
@@ -445,6 +459,7 @@ def render_delivery_qty_change_tabs():
                                 edit_sname = m2_1.text_input("加盟店", value=_v("store_name"), key=f"dq_m_sname_{row_id}")
                                 edit_app = m2_2.text_input("担当者", value=_v("applicant"), key=f"dq_m_app_{row_id}")
 
+                                edit_route = st.text_input("納品ルート", value=_v("route"), key=f"dq_m_route_{row_id}")
                                 edit_delivery_date = st.text_input("納品日", value=_v("delivery_date"), key=f"dq_m_delivery_date_{row_id}")
                                 edit_reason = st.text_input("理由", value=_v("reason"), key=f"dq_m_reason_{row_id}")
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"dq_m_comment_{row_id}")
@@ -468,7 +483,7 @@ def render_delivery_qty_change_tabs():
                                     updated_row = [
                                         _v("timestamp"), edit_app, edit_ccode, edit_cname,
                                         edit_sname, edit_scode
-                                    ] + item_values + [edit_delivery_date, edit_reason, edit_comment, edit_contact]
+                                    ] + item_values + [edit_route, edit_delivery_date, edit_reason, edit_comment, edit_contact]
 
                                     action_type = ""
                                     if btn_approve:
@@ -544,11 +559,14 @@ def render_delivery_qty_change_tabs():
 
                             dq_render_items_readonly(items, key_prefix=f"dq_v_view_{row_id}")
 
+                            route_val = _v("route")
                             delivery_date_val = _v("delivery_date")
                             reason_val = _v("reason")
                             comment_val = _v("comment")
                             contact_val = _v("contact_person")
-                            if delivery_date_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
+                            if route_val.strip() or delivery_date_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
+                                if route_val.strip():
+                                    st.text_input("納品ルート", value=route_val, disabled=True, key=f"dq_v_route_{row_id}")
                                 if delivery_date_val.strip():
                                     st.text_input("納品日", value=delivery_date_val, disabled=True, key=f"dq_v_delivery_date_{row_id}")
                                 if reason_val.strip():
@@ -690,12 +708,15 @@ def render_delivery_qty_change_tabs():
                             if checked_time_val:
                                 st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
 
+                            route_val = _v("route")
                             delivery_date_val = _v("delivery_date")
                             reason_val = _v("reason")
                             comment_val = _v("comment")
                             contact_val = _v("contact_person")
-                            if delivery_date_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
+                            if route_val.strip() or delivery_date_val.strip() or reason_val.strip() or comment_val.strip() or contact_val.strip():
                                 st.write("---")
+                                if route_val.strip():
+                                    st.text_input("納品ルート", value=route_val, disabled=True, key=f"dq_chk_route_{row_id}")
                                 if delivery_date_val.strip():
                                     st.text_input("納品日", value=delivery_date_val, disabled=True, key=f"dq_chk_delivery_date_{row_id}")
                                 if reason_val.strip():
@@ -750,6 +771,193 @@ def render_delivery_qty_change_tabs():
                                     st.toast(f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）", icon="↩️")
                                     time.sleep(1.5)
                                     st.rerun()
+
+        except Exception as e:
+            st.error(f"データ読み込みエラー: {e}")
+
+    # ==========================================
+    # TAB 5: 加盟店別 印刷プレビュー
+    # ==========================================
+    with d_tab5:
+        st.subheader("🖨️ 加盟店別 印刷プレビュー（スプレッドシート貼り付け・PDF印刷用）")
+
+        try:
+            st.cache_data.clear()
+            df_print = pd.read_csv(DQ_DEST_SHEET_CSV, dtype=str)
+
+            if df_print.empty:
+                st.info("現在、印刷対象のデータはありません。")
+            else:
+                # TAB4で「✅ チェック完了」になったデータだけを対象にする
+                if len(df_print.columns) > DQ_COL["check_time"]:
+                    checked_mask = df_print.iloc[:, DQ_COL["check_time"]].fillna("").astype(str).str.strip() != ""
+                    df_print = df_print[checked_mask]
+
+                # すでに印刷済み（印刷日時が入っている行）は印刷画面に出さない
+                if len(df_print.columns) > DQ_COL["print_time"]:
+                    not_printed_mask = df_print.iloc[:, DQ_COL["print_time"]].fillna("").astype(str).str.strip() == ""
+                    df_print = df_print[not_printed_mask]
+
+                if df_print.empty:
+                    st.info("印刷対象のデータがありません（TAB4でチェック未完了、またはすでに印刷済みです）。")
+                else:
+                    store_col_idx = DQ_COL["store_name"]
+                    df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
+                    stores = sorted(df_print["_store_name"].unique())
+
+                    selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="dq_print_store_select")
+
+                    if selected_store:
+                        store_df = df_print[df_print["_store_name"] == selected_store]
+                        total_records = len(store_df)
+
+                        st.info(f"🏪 加盟店: **{selected_store}** （未印刷のチェック完了済みデータ: {total_records} 件）※1ページに最大{len(DQ_PRINT_BASE_ROWS)}件まで配置されます。")
+
+                        def build_dq_record(r_row):
+                            """行データを、印刷フォーマットのラベルに沿って取り出す"""
+                            def _f(col_key):
+                                i = DQ_COL[col_key]
+                                return str(r_row.iloc[i]) if len(r_row) > i and pd.notna(r_row.iloc[i]) else ""
+
+                            manager = _f("status_sign") or "未確認"
+                            operator = _f("process_user") or st.session_state["user_name"]
+                            contact = _f("contact_person")
+                            contact_disp = f"{contact} 様" if contact.strip() else ""
+                            raw_cname = _f("cust_name")
+                            cust_name_disp = f"{raw_cname} 様" if raw_cname.strip() else ""
+
+                            return {
+                                "store_code": _f("store_code"), "cust_name": cust_name_disp,
+                                "manager": manager, "operator": operator,
+                                "applicant": _f("applicant"), "cust_code": _f("cust_code"),
+                                "route": _f("route"), "delivery_date": _f("delivery_date"),
+                                "reason": _f("reason"),
+                                "comment": _f("comment") or "特記事項なし",
+                                "contact_disp": contact_disp,
+                                "items": dq_extract_items(r_row),
+                            }
+
+                        def dq_cells_for_record(rec):
+                            """1件分のデータを、base_row行目を起点にした「行オフセット・列・値」のリストに変換する。
+                            指定されていないセル（行・列）はテンプレート側の固定内容として一切触らない。
+                            A/B/D/E(+0)=加盟店コード/顧客名(結合B:C)/責任者確認/処理者,
+                            A/B/C/D(+2)=商品①記号/変更前納品数(契約数)/単価/変更後納品数(変更数), E(+2)=シャトルコード,
+                            A/B/C/D(+4)=商品②, E(+4)=発注者(担当者),
+                            A/B/C/D(+6)=商品③, E(+6)=納品日,
+                            A/B/C/D(+8)=商品④, E(+8)=納品ルート,
+                            A/B/C/D(+10)=商品⑤, E(+10)=連絡担当者様,
+                            A(+12、A:E結合)=理由, A(+14、A:E結合)=特記事項"""
+                            empty_items = [{"code": "", "price": "", "count": "", "change_qty": ""} for _ in range(DQ_ITEM_COUNT)]
+                            if not rec:
+                                rec = {
+                                    "store_code": "", "cust_name": "", "manager": "", "operator": "",
+                                    "applicant": "", "cust_code": "", "route": "", "delivery_date": "",
+                                    "reason": "", "comment": "", "contact_disp": "", "items": empty_items,
+                                }
+
+                            cells = [
+                                {"offset": 0, "col": 1, "value": rec["store_code"]},
+                                {"offset": 0, "col": 2, "value": rec["cust_name"]},
+                                {"offset": 0, "col": 4, "value": rec["manager"]},
+                                {"offset": 0, "col": 5, "value": rec["operator"]},
+                                {"offset": 2, "col": 5, "value": rec["cust_code"]},
+                                {"offset": 4, "col": 5, "value": rec["applicant"]},
+                                {"offset": 6, "col": 5, "value": rec["delivery_date"]},
+                                {"offset": 8, "col": 5, "value": rec["route"]},
+                                {"offset": 10, "col": 5, "value": rec["contact_disp"]},
+                                {"offset": 12, "col": 1, "value": rec["reason"]},
+                                {"offset": 14, "col": 1, "value": rec["comment"]},
+                            ]
+                            item_offsets = [2, 4, 6, 8, 10]
+                            for n, item in enumerate(rec["items"]):
+                                off = item_offsets[n]
+                                cells.append({"offset": off, "col": 1, "value": item["code"]})
+                                cells.append({"offset": off, "col": 2, "value": item["count"]})
+                                cells.append({"offset": off, "col": 3, "value": item["price"]})
+                                cells.append({"offset": off, "col": 4, "value": item["change_qty"]})
+                            return cells
+
+                        chunk_size = len(DQ_PRINT_BASE_ROWS)
+                        chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
+
+                        for page_idx, chunk in enumerate(chunks):
+                            st.markdown(f"#### 📄 ページ {page_idx + 1} / {len(chunks)}")
+
+                            c1_value = f"{selected_store} 様"
+                            blocks = []
+                            preview_records = []
+                            page_row_ids = [int(idx) + 2 for idx in chunk.index]
+
+                            for slot, base_row in enumerate(DQ_PRINT_BASE_ROWS):
+                                rec = build_dq_record(chunk.iloc[slot]) if slot < len(chunk) else None
+                                if rec:
+                                    preview_records.append(rec)
+                                blocks.append({"start_row": base_row, "cells": dq_cells_for_record(rec)})
+
+                            with st.expander(f"プレビューを見る（{len(preview_records)} 件）"):
+                                for r_i, rec in enumerate(preview_records):
+                                    st.write(f"**[{r_i + 1}件目] 加盟店コード: {rec['store_code']} ／ 顧客名: {rec['cust_name']} ／ 責任者: {rec['manager']} ／ 処理者: {rec['operator']}**")
+                                    st.caption(f"シャトルコード: {rec['cust_code']} ｜ 発注者: {rec['applicant']} ｜ 納品日: {rec['delivery_date']} ｜ 納品ルート: {rec['route']}")
+                                    df_items = dq_items_display_df(rec["items"])
+                                    if not df_items.empty:
+                                        st.dataframe(df_items, use_container_width=True, hide_index=True)
+                                    st.caption(f"理由: {rec['reason']} ｜ 連絡担当者様: {rec['contact_disp']}")
+                                    st.caption(f"特記事項: {rec['comment']}")
+
+                            if st.button("📥 反映してPDFを作成する", key=f"dq_print_sync_btn_{page_idx}", type="primary"):
+                                payload = {
+                                    "action": "SYNC_PRINT_STORE_DATA",
+                                    "print_sheet_url": DQ_PRINT_SHEET_URL,
+                                    "store_name": selected_store,
+                                    "c1_value": c1_value,
+                                    "blocks": blocks,
+                                }
+                                with st.spinner("印刷用スプレッドシートへ反映しています..."):
+                                    res = post_to_gas(payload)
+
+                                if res.get("status") == "success":
+                                    print_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                    mark_payload = {
+                                        "action": "MARK_PRINTED",
+                                        "target_sheet_url": DQ_DEST_SHEET_URL,
+                                        "row_indices": page_row_ids,
+                                        "print_time": print_time,
+                                        "print_col": DQ_COL["print_time"] + 1,
+                                    }
+                                    mark_res = post_to_gas(mark_payload)
+                                    if mark_res.get("status") != "success":
+                                        st.warning(f"印刷済みマークの更新に失敗しました（反映自体は完了しています）: {mark_res.get('message')}")
+
+                                    st.toast("🎉 反映が完了しました。PDFを作成しています…", icon="✅")
+                                    try:
+                                        pdf_row_end = DQ_PRINT_BASE_ROWS[len(chunk) - 1] + 14 if len(chunk) > 0 else 18
+                                        with st.spinner("PDFを作成しています..."):
+                                            pdf_res = requests.get(
+                                                build_print_pdf_url(row_end=pdf_row_end, gid=DQ_PRINT_SHEET_GID),
+                                                timeout=30
+                                            )
+                                        content_type = pdf_res.headers.get("Content-Type", "")
+                                        if pdf_res.status_code == 200 and "pdf" in content_type.lower():
+                                            st.success("✅ PDFが作成できました。下のボタンからダウンロードしてください。")
+                                            st.download_button(
+                                                "📄 PDFをダウンロード",
+                                                data=pdf_res.content,
+                                                file_name=f"{selected_store}_dq_p{page_idx + 1}.pdf",
+                                                mime="application/pdf",
+                                                key=f"dq_pdf_dl_{page_idx}",
+                                            )
+                                        else:
+                                            st.warning(
+                                                "スプレッドシートへの反映は完了しましたが、アプリ上でのPDF取得に失敗しました"
+                                                "（共有設定などが原因の可能性があります）。"
+                                                f"[印刷用スプレッドシートを開く]({DQ_PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                            )
+                                    except Exception as pdf_e:
+                                        st.warning(f"PDF作成中にエラーが発生しました: {pdf_e}")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"反映に失敗しました: {res.get('message')}")
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
