@@ -13,6 +13,7 @@ from views.delivery_qty_view import render_delivery_qty_change_tabs, DQ_COL, DQ_
 from views.customer_balance_view import (
     render_customer_balance_correction_tabs, KZ_COL, KZ_TARGET_SHEET_CSV, KZ_DEST_SHEET_CSV,
 )
+from views.period_stop_view import render_period_stop_tabs, PS_COL, PS_TARGET_SHEET_CSV, PS_DEST_SHEET_CSV
 from views.maint_common import mode_has_pending_work
 
 # 商品発注は他モードと違い列インデックスの辞書（*_COL）を持たないため、生のインデックス
@@ -34,6 +35,8 @@ MODE_DEFS = [
      DQ_COL["status_sign"], DQ_COL["check_time"], DQ_COL["print_time"]),
     ("kz", "🧾 客中残訂正", KZ_TARGET_SHEET_CSV, KZ_DEST_SHEET_CSV,
      KZ_COL["status_sign"], KZ_COL["check_time"], KZ_COL["print_time"]),
+    ("ps", "🛑 期間ストップ", PS_TARGET_SHEET_CSV, PS_DEST_SHEET_CSV,
+     PS_COL["status_sign"], PS_COL["check_time"], PS_COL["print_time"]),
     ("cc", "📋 契約内容変更", CC_TARGET_SHEET_CSV, CC_DEST_SHEET_CSV,
      CC_COL["status_sign"], CC_COL["check_time"], CC_COL["print_time"]),
 ]
@@ -110,7 +113,7 @@ def maintenance_admin_screen():
     #    画面切り替え時にまれにブラウザ側でDOM操作エラー(NotFoundError: removeChild)が
     #    起きることがあった。on_clickコールバックで状態更新を「再実行が始まる前」に
     #    済ませることで、st.rerun()を使わずに1回の再実行だけで済むようにした。
-    mode_cols = st.columns(6)
+    mode_cols = st.columns(len(MODE_DEFS))
     for (mode_key, label, *_rest), col in zip(MODE_DEFS, mode_cols):
         with col.container(key=f"modebtn_{mode_key}"):
             st.button(
@@ -132,6 +135,8 @@ def maintenance_admin_screen():
         render_delivery_qty_change_tabs()
     elif st.session_state["maint_mode"] == "kz":
         render_customer_balance_correction_tabs()
+    elif st.session_state["maint_mode"] == "ps":
+        render_period_stop_tabs()
     else:
         render_contract_change_tabs()
 
