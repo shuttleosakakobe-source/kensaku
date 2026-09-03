@@ -111,8 +111,10 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
 
 
 
-# --- 権限ごとのタブ表示制御（暫定：シャトルアプリへの本格統合までのkensaku内蔵の仮運用） ---
+# --- 権限ごとのタブ表示制御 ---
 # 権限0＝全タブ表示、権限1＝TAB1・TAB2のみ、権限2＝TAB1のみ、権限3＝TAB3・4・5のみ
+# 権限の値は、ログイン時（app.py）にユーザーマスターシート（F列）から取得され
+# st.session_state["user_role"] にセットされているものをそのまま使う。
 ROLE_TAB_ACCESS = {
     "0": {1, 2, 3, 4, 5},
     "1": {1, 2},
@@ -124,8 +126,10 @@ RESTRICTED_TAB_MSG = "🔒 この機能は現在の権限では表示できま�
 
 
 def get_current_role():
-    """現在選択されている権限（暫定のロールセレクターで選ばれた値）を返す。未選択時は"0"（全権限）扱い。"""
-    return st.session_state.get("kensaku_role", "0")
+    """ログイン中のユーザーの権限（app.pyのログイン処理でユーザーマスターF列から
+    取得され st.session_state["user_role"] にセットされたもの）を返す。
+    未ログイン等で値が無い場合は安全側として"0"（全権限）扱いにする。"""
+    return st.session_state.get("user_role", "0")
 
 
 def tab_visible(tab_no):
