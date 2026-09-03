@@ -109,14 +109,88 @@ def render_period_stop_tabs():
     if "ps_searched_ccode" not in st.session_state:
         st.session_state["ps_searched_ccode"] = ""
 
+    def _tab6_body():
+        st.subheader("🔍 過去の申請検索")
+        st.caption("承認・処理が完了した過去の申請データを検索できます。")
+
+        _col6 = PS_COL
+
+        col_f1, col_f2, col_f3 = st.columns(3)
+        f_cust_code = col_f1.text_input("顧客コード", key="p_tab_search_cust_code")
+        f_applicant = col_f2.text_input("担当者名", key="p_tab_search_applicant")
+        f_date_type = col_f3.selectbox("期間の基準日", ["申請日", "処理日"], key="p_tab_search_date_type")
+
+        col_d1, col_d2 = st.columns(2)
+        f_date_from = col_d1.date_input("開始日", value=None, key="p_tab_search_date_from")
+        f_date_to = col_d2.date_input("終了日", value=None, key="p_tab_search_date_to")
+
+        if st.button("🔍 検索する", key="p_tab_search_btn"):
+            try:
+                st.cache_data.clear()
+                df_search = pd.read_csv(PS_DEST_SHEET_CSV, dtype=str)
+            except Exception as e:
+                st.error(f"データ取得エラー: {e}")
+                df_search = pd.DataFrame()
+
+            if df_search.empty:
+                st.info("対象データがありません。")
+            else:
+                mask = pd.Series(True, index=df_search.index)
+                idx_cust_code = _col6.get("cust_code")
+                idx_applicant = _col6.get("applicant")
+                idx_timestamp = _col6.get("timestamp")
+                idx_process_time = _col6.get("process_time")
+                idx_cust_name = _col6.get("cust_name")
+                idx_store_name = _col6.get("store_name")
+
+                if f_cust_code and idx_cust_code is not None and len(df_search.columns) > idx_cust_code:
+                    mask &= df_search.iloc[:, idx_cust_code].fillna("").astype(str).str.strip() == str(f_cust_code).strip()
+
+                if f_applicant and idx_applicant is not None and len(df_search.columns) > idx_applicant:
+                    mask &= df_search.iloc[:, idx_applicant].fillna("").astype(str).str.contains(str(f_applicant).strip(), na=False)
+
+                date_col_idx = idx_timestamp if f_date_type == "申請日" else idx_process_time
+                if (f_date_from or f_date_to) and date_col_idx is not None and len(df_search.columns) > date_col_idx:
+                    parsed_dates = pd.to_datetime(df_search.iloc[:, date_col_idx], errors="coerce")
+                    if f_date_from:
+                        mask &= parsed_dates >= pd.Timestamp(f_date_from)
+                    if f_date_to:
+                        mask &= parsed_dates <= (pd.Timestamp(f_date_to) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+
+                result_df = df_search[mask]
+
+                if result_df.empty:
+                    st.info("条件に一致するデータは見つかりませんでした。")
+                else:
+                    st.success(f"📋 検索結果: **{len(result_df)} 件**")
+                    for idx, row in result_df.iterrows():
+                        def _val(col_idx):
+                            if col_idx is None or len(row) <= col_idx or pd.isna(row.iloc[col_idx]):
+                                return ""
+                            return str(row.iloc[col_idx])
+
+                        cust_code_v = _val(idx_cust_code)
+                        cust_name_v = _val(idx_cust_name)
+                        store_name_v = _val(idx_store_name)
+                        applicant_v = _val(idx_applicant)
+                        timestamp_v = _val(idx_timestamp)
+                        process_time_v = _val(idx_process_time)
+
+                        expander_label = f"📌 【{store_name_v or '未設定'}】 {cust_name_v}（{cust_code_v}） | 申請日: {timestamp_v}"
+                        with st.expander(expander_label):
+                            st.write(f"**担当者名：** {applicant_v}")
+                            st.write(f"**処理日時：** {process_time_v}")
+                            st.dataframe(row.to_frame().T, use_container_width=True, hide_index=True)
+
     _p_tab_all_labels = [
         "📝 メンテナンス / 差戻し修正",
         "🔍 管理職チェック",
         "🚚 業務担当メンテナンス処理",
         "✅ メンテナンスチェック画面",
         "🖨️ 加盟店別 印刷",
+        "🔍 過去の申請検索",
     ]
-    _p_tab_visible_nums = [_n for _n in range(1, 6) if tab_visible(_n)]
+    _p_tab_visible_nums = [_n for _n in range(1, 7) if tab_visible(_n)]
     if not _p_tab_visible_nums:
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
@@ -812,3 +886,6 @@ def render_period_stop_tabs():
     if 5 in _tab_map:
         with _tab_map[5]:
             _tab5_body()
+    if 6 in _tab_map:
+        with _tab_map[6]:
+            _tab6_body()

@@ -113,13 +113,15 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
 
 # --- 権限ごとのタブ表示制御 ---
 # 権限0＝全タブ表示、権限1＝TAB1・TAB2のみ、権限2＝TAB1のみ、権限3＝TAB3・4・5のみ
+# TAB6（🔍 過去の申請検索）は、承認・処理が完了した過去データを検索するだけの
+# 読み取り専用機能のため、権限に関わらず全ユーザーに表示する。
 # 権限の値は、ログイン時（app.py）にユーザーマスターシート（F列）から取得され
 # st.session_state["user_role"] にセットされているものをそのまま使う。
 ROLE_TAB_ACCESS = {
-    "0": {1, 2, 3, 4, 5},
-    "1": {1, 2},
-    "2": {1},
-    "3": {3, 4, 5},
+    "0": {1, 2, 3, 4, 5, 6},
+    "1": {1, 2, 6},
+    "2": {1, 6},
+    "3": {3, 4, 5, 6},
 }
 
 RESTRICTED_TAB_MSG = "🔒 この機能は現在の権限では表示できません。"
@@ -139,10 +141,10 @@ def get_current_role():
 
 
 def tab_visible(tab_no):
-    """指定タブ番号（1〜5）が現在の権限で表示可能かどうかを返す。
+    """指定タブ番号（1〜6）が現在の権限で表示可能かどうかを返す。
     未知の権限値の場合は安全側（全タブ表示）にフォールバックする。"""
     role = str(get_current_role())
-    return tab_no in ROLE_TAB_ACCESS.get(role, {1, 2, 3, 4, 5})
+    return tab_no in ROLE_TAB_ACCESS.get(role, {1, 2, 3, 4, 5, 6})
 
 
 def _load_contract_df():
