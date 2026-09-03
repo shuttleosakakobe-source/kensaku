@@ -176,6 +176,7 @@ def render_delivery_qty_change_tabs():
         (f"dq_ccode{rclear}", ""), (f"dq_cname{rclear}", ""),
         (f"dq_scode{rclear}", ""), (f"dq_sname{rclear}", ""),
         (f"dq_products{rclear}", []),
+        (f"dq_past_results{rclear}", None),
     ]:
         if _key not in st.session_state:
             st.session_state[_key] = _default
@@ -321,6 +322,104 @@ def render_delivery_qty_change_tabs():
                         st.error(f"マスタ参照エラー: {e}")
                 else:
                     st.warning("顧客コードを入力してください。")
+
+            with st.expander("🕘 過去の申請から選ぶ（顧客情報・商品情報を反映）", expanded=False):
+                st.caption("過去に送った申請を検索し、顧客情報・商品情報をこのフォームに反映できます（納品ルート・納品日は反映されません。改めて入力してください）。")
+                col_p1, col_p2 = st.columns([4, 1])
+                past_ccode_input = col_p1.text_input(
+                    "顧客コードで検索", key=f"dq_past_ccode_search{rclear}"
+                )
+                btn_past_search = col_p2.button(
+                    "🔍 検索", use_container_width=True, key=f"dq_past_search_btn{rclear}"
+                )
+
+                if btn_past_search:
+                    if past_ccode_input:
+                        try:
+                            st.cache_data.clear()
+                            df_past = pd.read_csv(DQ_DEST_SHEET_CSV, dtype=str)
+                            idx_cc = DQ_COL["cust_code"]
+                            if not df_past.empty and len(df_past.columns) > idx_cc:
+                                st.session_state[f"dq_past_results{rclear}"] = df_past[
+                                    df_past.iloc[:, idx_cc].fillna("").astype(str).str.strip() == str(past_ccode_input).strip()
+                                ]
+                            else:
+                                st.session_state[f"dq_past_results{rclear}"] = df_past.iloc[0:0]
+                        except Exception as e:
+                            st.error(f"データ取得エラー: {e}")
+                            st.session_state[f"dq_past_results{rclear}"] = None
+                    else:
+                        st.warning("顧客コードを入力してください。")
+
+                past_results = st.session_state.get(f"dq_past_results{rclear}")
+                if past_results is not None:
+                    if past_results.empty:
+                        st.info("該当する過去の申請データが見つかりませんでした。")
+                    else:
+                        idx_ts = DQ_COL["timestamp"]
+                        idx_cc = DQ_COL["cust_code"]
+                        idx_cn = DQ_COL["cust_name"]
+                        idx_sn = DQ_COL["store_name"]
+                        idx_sc = DQ_COL["store_code"]
+
+                        def _pv(r, idx):
+                            return str(r.iloc[idx]) if len(r) > idx and pd.notna(r.iloc[idx]) else ""
+
+                        for p_idx, p_row in past_results.iloc[::-1].iterrows():
+                            p_ts = _pv(p_row, idx_ts)
+                            p_items = dq_extract_items(p_row)
+
+                            with st.expander(f"📄 申請日: {p_ts}　|　{_pv(p_row, idx_cn)}（{_pv(p_row, idx_cc)}）"):
+                                r1, r2, r3 = st.columns(3)
+                                r1.text_input("顧客コード", value=_pv(p_row, idx_cc), disabled=True, key=f"dq_past_view_ccode_{p_idx}{rclear}")
+                                r2.text_input("顧客名", value=_pv(p_row, idx_cn), disabled=True, key=f"dq_past_view_cname_{p_idx}{rclear}")
+                                r3.text_input("加盟店名", value=_pv(p_row, idx_sn), disabled=True, key=f"dq_past_view_sname_{p_idx}{rclear}")
+
+                                dq_render_items_readonly(p_items, key_prefix=f"dq_past_view_{p_idx}{rclear}")
+
+                                if st.button("🔄 この内容をフォームに反映", key=f"dq_past_apply_{p_idx}{rclear}"):
+                                    cc_val = _pv(p_row, idx_cc)
+                                    st.session_state[f"dq_ccode{rclear}"] = cc_val
+                                    st.session_state[f"dq_cname{rclear}"] = _pv(p_row, idx_cn)
+                                    st.session_state[f"dq_sname{rclear}"] = _pv(p_row, idx_sn)
+                                    st.session_state[f"dq_scode{rclear}"] = _pv(p_row, idx_sc)
+
+                                    fresh_products = get_contract_products(cc_val)
+                                    st.session_state[f"dq_products{rclear}"] = fresh_products
+
+                                    for n, it in enumerate(p_items):
+                                        if n >= DQ_ITEM_COUNT:
+                                            break
+                                        code = it["code"].strip()
+                                        if not code:
+                                            st.session_state[f"dq_code_{n}{rclear}"] = None
+                                            st.session_state[f"dq_price_{n}{rclear}"] = ""
+                                            st.session_state[f"dq_count_{n}{rclear}"] = ""
+                                            st.session_state[f"dq_change_qty_{n}{rclear}"] = ""
+                                            continue
+                                        match_idx = next(
+                                            (i for i, prod in enumerate(fresh_products) if prod.get("code") == code),
+                                            None
+                                        )
+                                        if match_idx is not None:
+                                            st.session_state[f"dq_code_{n}{rclear}"] = match_idx
+                                            st.session_state[f"dq_price_{n}{rclear}"] = _cc_hide_zero(fresh_products[match_idx]["price"])
+                                            st.session_state[f"dq_count_{n}{rclear}"] = _cc_sum4(
+                                                fresh_products[match_idx]["week_a"], fresh_products[match_idx]["week_b"],
+                                                fresh_products[match_idx]["week_c"], fresh_products[match_idx]["week_d"]
+                                            )
+                                        else:
+                                            # 現在のご契約データに同じ商品記号が見つからない場合
+                                            # （契約内容が変わった等）は、選択は空にし、当時の値を
+                                            # 参考としてそのまま表示する。
+                                            st.session_state[f"dq_code_{n}{rclear}"] = None
+                                            st.session_state[f"dq_price_{n}{rclear}"] = it["price"]
+                                            st.session_state[f"dq_count_{n}{rclear}"] = it["count"]
+                                        st.session_state[f"dq_change_qty_{n}{rclear}"] = it["change_qty"]
+
+                                    st.toast("過去の申請内容をフォームに反映しました（納品ルート・納品日は未入力です）", icon="✅")
+                                    time.sleep(0.3)
+                                    st.rerun()
 
             st.write("---")
             st.write("**📋 入力情報**")

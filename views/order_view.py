@@ -295,6 +295,88 @@ def render_product_order_tabs():
                 else:
                     st.warning("顧客コードを入力してください。")
 
+            with st.expander("🕘 過去の申請から選ぶ（顧客情報・商品情報を反映）", expanded=False):
+                st.caption("過去に送った申請を検索し、顧客情報・商品情報をこのフォームに反映できます（ルートコード・納品日は反映されません。改めて入力してください）。")
+                col_p1, col_p2 = st.columns([4, 1])
+                past_ccode_input = col_p1.text_input(
+                    "顧客コードで検索", key=f"past_ccode_search{clear_suffix}"
+                )
+                btn_past_search = col_p2.button(
+                    "🔍 検索", use_container_width=True, key=f"past_search_btn{clear_suffix}"
+                )
+
+                if btn_past_search:
+                    if past_ccode_input:
+                        try:
+                            st.cache_data.clear()
+                            df_past = pd.read_csv(DEST_SHEET_CSV, dtype=str)
+                            idx_cc = 2  # DEST_SHEET側：C列＝顧客コード
+                            if not df_past.empty and len(df_past.columns) > idx_cc:
+                                st.session_state[f"past_results{clear_suffix}"] = df_past[
+                                    df_past.iloc[:, idx_cc].fillna("").astype(str).str.strip() == str(past_ccode_input).strip()
+                                ]
+                            else:
+                                st.session_state[f"past_results{clear_suffix}"] = df_past.iloc[0:0]
+                        except Exception as e:
+                            st.error(f"データ取得エラー: {e}")
+                            st.session_state[f"past_results{clear_suffix}"] = None
+                    else:
+                        st.warning("顧客コードを入力してください。")
+
+                past_results = st.session_state.get(f"past_results{clear_suffix}")
+                if past_results is not None:
+                    if past_results.empty:
+                        st.info("該当する過去の申請データが見つかりませんでした。")
+                    else:
+                        # DEST_SHEET側の列位置（0始まり）：0=タイムスタンプ,1=申請者,2=顧客コード,
+                        # 3=顧客名,4=加盟店名,5=加盟店コード,6=納品日,7=ルートコード,8=納品者,
+                        # 9〜28=発注商品（5件×4列：商品コード/数量/単価/伝票出力）
+                        def _pv(r, idx):
+                            return str(r.iloc[idx]) if len(r) > idx and pd.notna(r.iloc[idx]) else ""
+
+                        for p_idx, p_row in past_results.iloc[::-1].iterrows():
+                            p_ts = _pv(p_row, 0)
+
+                            with st.expander(f"📄 申請日: {p_ts}　|　{_pv(p_row, 3)}（{_pv(p_row, 2)}）"):
+                                r1, r2, r3 = st.columns(3)
+                                r1.text_input("顧客コード", value=_pv(p_row, 2), disabled=True, key=f"past_view_ccode_{p_idx}{clear_suffix}")
+                                r2.text_input("顧客名", value=_pv(p_row, 3), disabled=True, key=f"past_view_cname_{p_idx}{clear_suffix}")
+                                r3.text_input("加盟店名", value=_pv(p_row, 4), disabled=True, key=f"past_view_sname_{p_idx}{clear_suffix}")
+
+                                st.write("**📦 発注商品**")
+                                any_item_shown = False
+                                for i in range(5):
+                                    base = 9 + i * 4
+                                    p_code_v = _pv(p_row, base)
+                                    if not p_code_v.strip():
+                                        continue
+                                    any_item_shown = True
+                                    ic1, ic2, ic3, ic4 = st.columns([3, 2, 2, 2])
+                                    ic1.text_input(f"商品コード {i+1}", value=p_code_v, disabled=True, key=f"past_view_p_{p_idx}_{i}{clear_suffix}")
+                                    ic2.text_input(f"数量 {i+1}", value=_pv(p_row, base + 1), disabled=True, key=f"past_view_q_{p_idx}_{i}{clear_suffix}")
+                                    ic3.text_input(f"単価 {i+1}", value=_pv(p_row, base + 2), disabled=True, key=f"past_view_pr_{p_idx}_{i}{clear_suffix}")
+                                    ic4.text_input(f"伝票出力 {i+1}", value=_pv(p_row, base + 3), disabled=True, key=f"past_view_flg_{p_idx}_{i}{clear_suffix}")
+                                if not any_item_shown:
+                                    st.caption("商品情報が入力されていません。")
+
+                                if st.button("🔄 この内容をフォームに反映", key=f"past_apply_{p_idx}{clear_suffix}"):
+                                    st.session_state[f"ccode{clear_suffix}"] = _pv(p_row, 2)
+                                    st.session_state[f"cname{clear_suffix}"] = _pv(p_row, 3)
+                                    st.session_state[f"sname{clear_suffix}"] = _pv(p_row, 4)
+                                    st.session_state[f"scode{clear_suffix}"] = _pv(p_row, 5)
+
+                                    for i in range(5):
+                                        base = 9 + i * 4
+                                        st.session_state[f"p_{i}{clear_suffix}"] = _pv(p_row, base)
+                                        st.session_state[f"q_{i}{clear_suffix}"] = _pv(p_row, base + 1)
+                                        st.session_state[f"pr_{i}{clear_suffix}"] = _pv(p_row, base + 2)
+                                        flg_v = _pv(p_row, base + 3)
+                                        st.session_state[f"flg_{i}{clear_suffix}"] = flg_v if flg_v in ("", "有", "無") else ""
+
+                                    st.toast("過去の申請内容をフォームに反映しました（ルートコード・納品日は未入力です）", icon="✅")
+                                    time.sleep(0.3)
+                                    st.rerun()
+
             st.write("---")
 
             with st.form("submit_form"):
