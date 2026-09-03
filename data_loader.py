@@ -5,9 +5,11 @@ import requests
 USER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=0"
 
 def load_sheet_data(gid="0"):
-    """ユーザーマスターのスプレッドシートからデータを取得"""
+    """ユーザーマスターのスプレッドシートからデータを取得
+    （dtype=strで読み込むことで、権限列（F列）などの数字だけの列がpandasに
+    よって数値型に変換され、"2"が"2.0"のような文字列になってしまうのを防ぐ）"""
     try:
-        df = pd.read_csv(USER_MASTER_CSV)
+        df = pd.read_csv(USER_MASTER_CSV, dtype=str)
         if df.empty:
             return None
         headers = df.columns.tolist()
