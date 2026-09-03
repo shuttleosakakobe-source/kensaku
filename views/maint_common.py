@@ -128,8 +128,14 @@ RESTRICTED_TAB_MSG = "🔒 この機能は現在の権限では表示できま�
 def get_current_role():
     """ログイン中のユーザーの権限（app.pyのログイン処理でユーザーマスターF列から
     取得され st.session_state["user_role"] にセットされたもの）を返す。
-    未ログイン等で値が無い場合は安全側として"0"（全権限）扱いにする。"""
-    return st.session_state.get("user_role", "0")
+    未ログイン等で値が無い場合は安全側として"0"（全権限）扱いにする。
+    シート側の読み込み方によっては数値列が"2.0"のような文字列になってしまう
+    ことがあるため、念のため前後の空白除去と末尾".0"の除去で正規化する。"""
+    role = st.session_state.get("user_role", "0")
+    role = str(role).strip()
+    if role.endswith(".0"):
+        role = role[:-2]
+    return role
 
 
 def tab_visible(tab_no):
