@@ -1,156 +1,156 @@
-"""メンテナンス業務（商品発注／ルート変更／契約内容変更）で共通して使う定数・ヘルパー関数。
-route_view.py / contract_view.py / order_view.py から読み込まれる。"""
+"""メンテナンス業務画面の入口。商品発注／ルート変更／契約内容変更をボタンで切り替える。"""
 import streamlit as st
-import pandas as pd
-import requests
-import json
-from datetime import timezone, timedelta
+
+from views.route_view import render_route_change_tabs, ROUTE_COL, ROUTE_TARGET_SHEET_CSV, ROUTE_DEST_SHEET_CSV
+from views.contract_view import render_contract_change_tabs, CC_COL, CC_TARGET_SHEET_CSV, CC_DEST_SHEET_CSV
+from views.order_view import (
+    render_product_order_tabs, TARGET_SHEET_CSV as ORDER_TARGET_SHEET_CSV,
+    DEST_SHEET_CSV as ORDER_DEST_SHEET_CSV,
+    CHECK_TIME_COL_IDX as ORDER_CHECK_TIME_COL_IDX, PRINT_TIME_COL_IDX as ORDER_PRINT_TIME_COL_IDX,
+)
+from views.spot_route_view import render_spot_route_change_tabs, SR_COL, SR_TARGET_SHEET_CSV, SR_DEST_SHEET_CSV
+from views.delivery_qty_view import render_delivery_qty_change_tabs, DQ_COL, DQ_TARGET_SHEET_CSV, DQ_DEST_SHEET_CSV
+from views.customer_balance_view import (
+    render_customer_balance_correction_tabs, KZ_COL, KZ_TARGET_SHEET_CSV, KZ_DEST_SHEET_CSV,
+)
+from views.period_stop_view import render_period_stop_tabs, PS_COL, PS_TARGET_SHEET_CSV, PS_DEST_SHEET_CSV
+from views.other_view import render_other_maintenance_tabs, OT_COL, OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV
+from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV
+from views.maint_common import mode_has_pending_work
+
+# 商品発注は他モードと違い列インデックスの辞書（*_COL）を持たないため、生のインデックス
+# （TARGET_SHEET側のステータス列は30列目固定）をここで直接指定する
+ORDER_STATUS_COL_IDX = 30
+
+# 💡 メンテナンス業務トップの6モードボタン：各モードに「対応待ちのデータ」が残っている場合は
+#    ボタンの枠を赤くして目立たせ、残っていない場合は通常の見た目（赤枠なし）に戻す。
+#    「対応待ち」の判定はモードごとの一連のワークフロー（差戻し／承認待ち／業務転記待ち／
+#    チェック待ち／印刷待ち）をまとめて見るmode_has_pending_work()で行う（60秒キャッシュ）。
+MODE_DEFS = [
+    ("order", "📦 商品発注", ORDER_TARGET_SHEET_CSV, ORDER_DEST_SHEET_CSV,
+     ORDER_STATUS_COL_IDX, ORDER_CHECK_TIME_COL_IDX, ORDER_PRINT_TIME_COL_IDX),
+    ("route", "🗺️ ルート変更", ROUTE_TARGET_SHEET_CSV, ROUTE_DEST_SHEET_CSV,
+     ROUTE_COL["status_sign"], ROUTE_COL["check_time"], ROUTE_COL["print_time"]),
+    ("sroute", "🔄 単発ルート変更", SR_TARGET_SHEET_CSV, SR_DEST_SHEET_CSV,
+     SR_COL["status_sign"], SR_COL["check_time"], SR_COL["print_time"]),
+    ("dq", "🔢 納品数量変更", DQ_TARGET_SHEET_CSV, DQ_DEST_SHEET_CSV,
+     DQ_COL["status_sign"], DQ_COL["check_time"], DQ_COL["print_time"]),
+    ("kz", "🧾 客中残訂正", KZ_TARGET_SHEET_CSV, KZ_DEST_SHEET_CSV,
+     KZ_COL["status_sign"], KZ_COL["check_time"], KZ_COL["print_time"]),
+    ("ps", "🛑 期間ストップ", PS_TARGET_SHEET_CSV, PS_DEST_SHEET_CSV,
+     PS_COL["status_sign"], PS_COL["check_time"], PS_COL["print_time"]),
+    ("cc", "📋 契約内容変更", CC_TARGET_SHEET_CSV, CC_DEST_SHEET_CSV,
+     CC_COL["status_sign"], CC_COL["check_time"], CC_COL["print_time"]),
+    ("ot", "📮 その他", OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV,
+     OT_COL["status_sign"], OT_COL["check_time"], OT_COL["print_time"]),
+    ("cx", "🚫 解約", CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV,
+     CX_COL["status_sign"], CX_COL["check_time"], CX_COL["print_time"]),
+]
 
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
-CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
+def maintenance_admin_screen():
+    """メンテナンス画面の入口。商品発注／ルート変更／契約内容変更をボタンで切り替えて、それぞれのタブ一式を表示する"""
+    # 💡 【文字サイズ調整】メンテナンス業務画面全体（商品発注／ルート変更／単発ルート変更／
+    #    納品数量変更／契約内容変更の全モード共通）の文字を大きくする。
+    #    ここ（画面の一番最初）で読み込むことで、以降どのモードに切り替えても効き続ける。
+    st.markdown("""
+        <style>
+        html, body, [class*="css"] {
+            font-size: 18px !important;
+        }
+        div[data-testid="stMarkdownContainer"] p,
+        div[data-testid="stMarkdownContainer"] li,
+        div[data-testid="stMarkdownContainer"] span,
+        div[data-testid="stWidgetLabel"] p,
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stTextArea"] textarea,
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stDateInput"] input,
+        div[data-testid="stSelectbox"] div[data-baseweb="select"] *,
+        div[data-testid="stCaptionContainer"] p,
+        div[data-testid="stExpander"] summary p,
+        div[data-testid="stExpander"] summary span,
+        button p,
+        div[data-testid="stTabs"] button p,
+        div[data-testid="stAlert"] p,
+        div[data-testid="stMetricValue"],
+        div[data-testid="stMetricLabel"],
+        div[data-testid="stDataFrame"] {
+            font-size: 1.15rem !important;
+        }
+        h1 { font-size: 2rem !important; }
+        h2 { font-size: 1.6rem !important; }
+        h3, h4 { font-size: 1.3rem !important; }
+        </style>
+    """, unsafe_allow_html=True)
 
-# ご契約データ（顧客コードごとの契約週・曜日・担当者コードからルートコードを計算するための参照シート）
-CONTRACT_DATA_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=2011677989"
+    st.markdown("#### 📦🗺️📋 メンテナンス業務")
 
-# ご契約データシートの列（0始まり）：顧客コード(A)=0、担当者コード(E)=4、担当者名(F)=5、曜日(G)=6、契約週M/N/O/P=12/13/14/15
-CONTRACT_COL_CUST_CODE = 0
-CONTRACT_WEEK_COLS = [12, 13, 14, 15]  # M, N, O, P → 週1, 週2, 週3, 週4
+    if "maint_mode" not in st.session_state:
+        st.session_state["maint_mode"] = "order"
 
-# TAB5用：加盟店別 印刷フォーマットのスプレッドシート（DEST_SHEET_URLとは別シート／gidが違う点に注意）
-PRINT_SHEET_ID = "1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI"
+    def _set_maint_mode(mode):
+        st.session_state["maint_mode"] = mode
 
+    # 💡 各モードに対応待ちのデータが残っているかどうかをまとめて判定
+    #    （読み込みに失敗したモードは「対応待ちなし」扱いにして、赤枠が出ないだけにする）
+    pending_modes = set()
+    for mode_key, _label, target_csv, dest_csv, status_col, check_col, print_col in MODE_DEFS:
+        try:
+            if mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
+                pending_modes.add(mode_key)
+        except Exception:
+            pass
 
-def build_print_pdf_url(row_end=46, col_end=5, gid=None):
-    """印刷フォーマットシートのA1〜(row_end, col_end)の範囲をPDFとして書き出すURLを作る
-    （row_end/col_endは0始まりの終端。col_end=5はA〜E列を含む。
-    gidは呼び出し側（商品発注はPRINT_SHEET_GID、ルート変更はROUTE_PRINT_SHEET_GID、
-    契約内容変更はCC_PRINT_SHEET_GID）が明示的に渡す）"""
-    params = {
-        "format": "pdf",
-        "gid": gid,
-        "size": "A4",
-        "portrait": "true",
-        "fitw": "true",
-        "top_margin": "0.4",
-        "bottom_margin": "0.4",
-        "left_margin": "0.4",
-        "right_margin": "0.4",
-        "sheetnames": "false",
-        "printtitle": "false",
-        "pagenumbers": "false",
-        "gridlines": "false",
-        "fzr": "false",
-        "horizontal_alignment": "CENTER",
-        "vertical_alignment": "TOP",
-        "r1": "0",
-        "c1": "0",
-        "r2": str(row_end),
-        "c2": str(col_end),
-    }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/export?{query}"
+    # 💡 対応待ちがあるモードのボタンだけ、枠を赤くするCSSを動的に追加する
+    #    （st.container(key=...)で各ボタンをラップし、そのラッパーに付くst-key-<key>クラスを
+    #    ピンポイントで狙う。対応待ちが無いモードは通常のボタンの見た目のまま＝赤枠は出さない）
+    if pending_modes:
+        pending_css = "\n".join(
+            f'div.st-key-modebtn_{m} button {{ '
+            f'border: 3px solid #e53935 !important; '
+            f'box-shadow: 0 0 0 1px #e53935 !important; }}'
+            for m in pending_modes
+        )
+        st.markdown(f"<style>{pending_css}</style>", unsafe_allow_html=True)
 
-# 日本時間（JST = UTC+9）のタイムゾーン定義
-JST = timezone(timedelta(hours=+9), 'JST')
-
-
-def post_to_gas(payload):
-    headers = {"Content-Type": "application/json"}
-    try:
-        response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers, timeout=30)
-        return response.json()
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@st.cache_data(ttl=60)
-def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
-    """あるモード（商品発注／ルート変更／単発ルート変更／納品数量変更／客中残訂正／契約内容変更）に、
-    誰かの対応待ちのデータが残っているかどうかを判定する（メンテナンス業務トップのボタンの
-    赤枠表示用）。以下のいずれかに該当すれば「処理が残っている」とみなす：
-    - TARGET側（TAB1・2用シート）：差戻し（要再修正・再申請）／申請中（要承認）／
-      承認済みだが未転記（要業務転記＝TAB3の対象）
-    - DEST側（TAB3・4用シート）：チェック未完了（要チェック＝TAB4の対象）／
-      チェック済みだが未印刷（要印刷＝TAB5の対象）
-    読み込みエラー時は「処理待ちなし」扱いとする（ボタン表示のためだけにトップ画面全体が
-    落ちないようにするため）。"""
-    try:
-        df_t = pd.read_csv(target_csv, dtype=str)
-        if not df_t.empty and len(df_t.columns) > status_col:
-            status_series = df_t.iloc[:, status_col].astype(str).str.strip()
-            if (status_series == "差戻し").any():
-                return True
-            if (status_series == "申請中").any():
-                return True
-            pending_transfer = (
-                (~df_t.iloc[:, status_col].isna()) &
-                (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+    # 💡 ボタンのクリックはそれ自体で自動的に再実行(rerun)がかかるため、
+    #    ここでさらに st.rerun() を呼ぶと「再実行の中でもう一度再実行」が発生し、
+    #    画面切り替え時にまれにブラウザ側でDOM操作エラー(NotFoundError: removeChild)が
+    #    起きることがあった。on_clickコールバックで状態更新を「再実行が始まる前」に
+    #    済ませることで、st.rerun()を使わずに1回の再実行だけで済むようにした。
+    mode_cols = st.columns(len(MODE_DEFS))
+    for (mode_key, label, *_rest), col in zip(MODE_DEFS, mode_cols):
+        with col.container(key=f"modebtn_{mode_key}"):
+            st.button(
+                label, use_container_width=True,
+                type="primary" if st.session_state["maint_mode"] == mode_key else "secondary",
+                on_click=_set_maint_mode, args=(mode_key,),
+                key=f"modebtn_click_{mode_key}",
             )
-            if pending_transfer.any():
-                return True
-    except Exception:
-        pass
 
-    try:
-        df_d = pd.read_csv(dest_csv, dtype=str)
-        if not df_d.empty:
-            if len(df_d.columns) > check_col:
-                unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
-                if unchecked.any():
-                    return True
-            if len(df_d.columns) > print_col and len(df_d.columns) > check_col:
-                checked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() != ""
-                not_printed = df_d.iloc[:, print_col].fillna("").astype(str).str.strip() == ""
-                if (checked & not_printed).any():
-                    return True
-    except Exception:
-        pass
+    st.write("---")
 
-    return False
+    if st.session_state["maint_mode"] == "order":
+        render_product_order_tabs()
+    elif st.session_state["maint_mode"] == "route":
+        render_route_change_tabs()
+    elif st.session_state["maint_mode"] == "sroute":
+        render_spot_route_change_tabs()
+    elif st.session_state["maint_mode"] == "dq":
+        render_delivery_qty_change_tabs()
+    elif st.session_state["maint_mode"] == "kz":
+        render_customer_balance_correction_tabs()
+    elif st.session_state["maint_mode"] == "ps":
+        render_period_stop_tabs()
+    elif st.session_state["maint_mode"] == "ot":
+        render_other_maintenance_tabs()
+    elif st.session_state["maint_mode"] == "cx":
+        render_cancel_tabs()
+    else:
+        render_contract_change_tabs()
 
-
-
-# --- 権限ごとのタブ表示制御 ---
-# 権限0＝全タブ表示、権限1＝TAB1・TAB2のみ、権限2＝TAB1のみ、権限3＝TAB3・4・5のみ
-# 権限の値は、ログイン時（app.py）にユーザーマスターシート（F列）から取得され
-# st.session_state["user_role"] にセットされているものをそのまま使う。
-ROLE_TAB_ACCESS = {
-    "0": {1, 2, 3, 4, 5},
-    "1": {1, 2},
-    "2": {1},
-    "3": {3, 4, 5},
-}
-
-RESTRICTED_TAB_MSG = "🔒 この機能は現在の権限では表示できません。"
-
-
-def get_current_role():
-    """ログイン中のユーザーの権限（app.pyのログイン処理でユーザーマスターF列から
-    取得され st.session_state["user_role"] にセットされたもの）を返す。
-    未ログイン等で値が無い場合は安全側として"0"（全権限）扱いにする。
-    シート側の読み込み方によっては数値列が"2.0"のような文字列になってしまう
-    ことがあるため、念のため前後の空白除去と末尾".0"の除去で正規化する。"""
-    role = st.session_state.get("user_role", "0")
-    role = str(role).strip()
-    if role.endswith(".0"):
-        role = role[:-2]
-    return role
-
-
-def tab_visible(tab_no):
-    """指定タブ番号（1〜5）が現在の権限で表示可能かどうかを返す。
-    未知の権限値の場合は安全側（全タブ表示）にフォールバックする。"""
-    role = str(get_current_role())
-    return tab_no in ROLE_TAB_ACCESS.get(role, {1, 2, 3, 4, 5})
-
-
-def _load_contract_df():
-    """ご契約データシートをキャッシュせず毎回読み込む（軽量な参照専用ヘルパー）"""
-    try:
-        df_contract = pd.read_csv(CONTRACT_DATA_CSV, dtype=str, storage_options={"User-Agent": "Mozilla/5.0"})
-    except Exception:
-        return None
-    if df_contract.empty:
-        return None
-    return df_contract
+# アプリ実行
+if __name__ == "__main__":
+    st.set_page_config(page_title="メンテナンス申請管理システム", layout="wide")
+    maintenance_admin_screen()
