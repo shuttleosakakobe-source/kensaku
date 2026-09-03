@@ -108,13 +108,20 @@ def render_other_maintenance_tabs():
     if "ot_searched_ccode" not in st.session_state:
         st.session_state["ot_searched_ccode"] = ""
 
-    o_tab1, o_tab2, o_tab3, o_tab4, o_tab5 = st.tabs([
+    _o_tab_all_labels = [
         "📝 メンテナンス / 差戻し修正",
         "🔍 管理職チェック",
         "🚚 業務担当メンテナンス処理",
         "✅ メンテナンスチェック画面",
         "🖨️ 加盟店別 印刷",
-    ])
+    ]
+    _o_tab_visible_nums = [_n for _n in range(1, 6) if tab_visible(_n)]
+    if not _o_tab_visible_nums:
+        st.info(RESTRICTED_TAB_MSG)
+        _tab_map = {}
+    else:
+        _o_tab_objs = st.tabs([_o_tab_all_labels[_n - 1] for _n in _o_tab_visible_nums])
+        _tab_map = dict(zip(_o_tab_visible_nums, _o_tab_objs))
 
     # ==========================================
     # TAB 1: 申請・差戻し対応
@@ -290,11 +297,9 @@ def render_other_maintenance_tabs():
     # ==========================================
     # TAB 2: 管理職チェック
     # ==========================================
-    with o_tab1:
-        if tab_visible(1):
+    if 1 in _tab_map:
+        with _tab_map[1]:
             _tab1_body()
-        else:
-            st.info(RESTRICTED_TAB_MSG)
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
         try:
@@ -382,11 +387,9 @@ def render_other_maintenance_tabs():
     # ==========================================
     # TAB 3: 業務担当メンテナンス処理
     # ==========================================
-    with o_tab2:
-        if tab_visible(2):
+    if 2 in _tab_map:
+        with _tab_map[2]:
             _tab2_body()
-        else:
-            st.info(RESTRICTED_TAB_MSG)
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
         try:
@@ -519,11 +522,9 @@ def render_other_maintenance_tabs():
     # ==========================================
     # TAB 4: メンテナンスチェック画面
     # ==========================================
-    with o_tab3:
-        if tab_visible(3):
+    if 3 in _tab_map:
+        with _tab_map[3]:
             _tab3_body()
-        else:
-            st.info(RESTRICTED_TAB_MSG)
     def _tab4_body():
         st.subheader("✅ メンテナンスチェック画面")
 
@@ -653,11 +654,9 @@ def render_other_maintenance_tabs():
     # ==========================================
     # TAB 5: 加盟店別 印刷
     # ==========================================
-    with o_tab4:
-        if tab_visible(4):
+    if 4 in _tab_map:
+        with _tab_map[4]:
             _tab4_body()
-        else:
-            st.info(RESTRICTED_TAB_MSG)
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
 
@@ -829,8 +828,6 @@ def render_other_maintenance_tabs():
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
-    with o_tab5:
-        if tab_visible(5):
+    if 5 in _tab_map:
+        with _tab_map[5]:
             _tab5_body()
-        else:
-            st.info(RESTRICTED_TAB_MSG)
