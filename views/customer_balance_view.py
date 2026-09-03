@@ -13,6 +13,8 @@ import time
 from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url,
+    tab_visible, RESTRICTED_TAB_MSG,
+
 )
 from views.contract_view import get_contract_products, _cc_product_labels
 
@@ -184,7 +186,7 @@ def render_customer_balance_correction_tabs():
     # ==========================================
     # TAB 1: 申請・差戻し対応
     # ==========================================
-    with k_tab1:
+    def _tab1_body():
         st.subheader("📝 メンテナンス / 差戻し修正")
         with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
@@ -390,7 +392,12 @@ def render_customer_balance_correction_tabs():
     # ==========================================
     # TAB 2: 管理職チェック
     # ==========================================
-    with k_tab2:
+    with k_tab1:
+        if tab_visible(1):
+            _tab1_body()
+        else:
+            st.info(RESTRICTED_TAB_MSG)
+    def _tab2_body():
         st.subheader("🔍 管理職チェック")
         try:
             st.cache_data.clear()
@@ -481,7 +488,12 @@ def render_customer_balance_correction_tabs():
     # ==========================================
     # TAB 3: 業務担当メンテナンス処理
     # ==========================================
-    with k_tab3:
+    with k_tab2:
+        if tab_visible(2):
+            _tab2_body()
+        else:
+            st.info(RESTRICTED_TAB_MSG)
+    def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
         try:
             st.cache_data.clear()
@@ -607,7 +619,12 @@ def render_customer_balance_correction_tabs():
     # ==========================================
     # TAB 4: メンテナンスチェック画面
     # ==========================================
-    with k_tab4:
+    with k_tab3:
+        if tab_visible(3):
+            _tab3_body()
+        else:
+            st.info(RESTRICTED_TAB_MSG)
+    def _tab4_body():
         st.subheader("✅ メンテナンスチェック画面")
 
         try:
@@ -732,7 +749,12 @@ def render_customer_balance_correction_tabs():
     # ==========================================
     # TAB 5: 加盟店別 印刷プレビュー
     # ==========================================
-    with k_tab5:
+    with k_tab4:
+        if tab_visible(4):
+            _tab4_body()
+        else:
+            st.info(RESTRICTED_TAB_MSG)
+    def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
 
         try:
@@ -911,3 +933,8 @@ def render_customer_balance_correction_tabs():
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
+    with k_tab5:
+        if tab_visible(5):
+            _tab5_body()
+        else:
+            st.info(RESTRICTED_TAB_MSG)
