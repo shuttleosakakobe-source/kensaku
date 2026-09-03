@@ -7,7 +7,7 @@ import json
 from datetime import timezone, timedelta
 
 
-GAS_URL = "https://script.google.com/macros/s/AKfycbwvdmyHj_VgN_Q8azYypr82zyOk8p-j2wObG1rtvGTbpkeMWtMPAmkKqmfb11xDM09Rtg/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbxi6ZG-8F6bq0T9k-yD5g6DVRY4hPdDB5spzwISOGUpZckvktjN-ISkWmZd3EdPXNx-qQ/exec"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
 
 # ご契約データ（顧客コードごとの契約週・曜日・担当者コードからルートコードを計算するための参照シート）
@@ -108,6 +108,31 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
         pass
 
     return False
+
+
+
+# --- 権限ごとのタブ表示制御（暫定：シャトルアプリへの本格統合までのkensaku内蔵の仮運用） ---
+# 権限0＝全タブ表示、権限1＝TAB1・TAB2のみ、権限2＝TAB1のみ、権限3＝TAB3・4・5のみ
+ROLE_TAB_ACCESS = {
+    "0": {1, 2, 3, 4, 5},
+    "1": {1, 2},
+    "2": {1},
+    "3": {3, 4, 5},
+}
+
+RESTRICTED_TAB_MSG = "🔒 この機能は現在の権限では表示できません。"
+
+
+def get_current_role():
+    """現在選択されている権限（暫定のロールセレクターで選ばれた値）を返す。未選択時は"0"（全権限）扱い。"""
+    return st.session_state.get("kensaku_role", "0")
+
+
+def tab_visible(tab_no):
+    """指定タブ番号（1〜5）が現在の権限で表示可能かどうかを返す。
+    未知の権限値の場合は安全側（全タブ表示）にフォールバックする。"""
+    role = str(get_current_role())
+    return tab_no in ROLE_TAB_ACCESS.get(role, {1, 2, 3, 4, 5})
 
 
 def _load_contract_df():
