@@ -1,7 +1,4 @@
-"""「その他のメンテナンス」モード（申請・承認・業務転記・チェック・印刷の5タブ）。
-顧客検索は他モードと同じ。商品や契約内容の入力は無く、種別（住所・電話番号変更／コメント／
-未収金・過入金変更／その他〈記述式〉のプルダウン）・内容・連絡担当者様・特記事項をまとめて
-1件分入力する、期間ストップに近いシンプルな構成。"""
+"""「商品発注」モード（申請・承認・業務転記・チェック・印刷の5タブ）。"""
 import streamlit as st
 import pandas as pd
 import requests
@@ -16,47 +13,28 @@ from views.maint_common import (
 )
 
 
-# ==========================================
-# 「その他のメンテナンス」モード用シート
-# ==========================================
-# TAB1・TAB2用（申請〜承認）
-OT_TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=1623118092#gid=1623118092"
-OT_TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv&gid=1623118092"
-# TAB3・TAB4用（転記〜チェック）
-OT_DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=1292519782#gid=1292519782"
-OT_DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv&gid=1292519782"
+TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
+TARGET_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/gviz/tq?tqx=out:csv"
+DEST_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=0#gid=0"
+DEST_SHEET_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv&gid=0"
+PRINT_SHEET_GID = "457221393"
+PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={PRINT_SHEET_GID}#gid={PRINT_SHEET_GID}"
 
-# その他のメンテナンス：プルダウンの選択肢（最後の「その他」を選んだ場合のみ記述式で内容を入力）
-OT_CATEGORY_OPTIONS = ["住所・電話番号変更", "コメント", "未収金・過入金変更", "その他"]
-
-# その他のメンテナンス：列インデックス（0始まり）
-# A タイムスタンプ, B 担当者(申請者), C 顧客コード, D 顧客名, E 加盟店, F 加盟店コード,
-# G 種別, H その他の内容(種別が「その他」の場合のみ), I 内容, J 連絡担当者様, K 特記事項,
-# L サイン(ステータス/承認者名), M 日時(承認日時), N コメント(承認コメント/差戻し理由),
-# O 処理日, P 処理者, Q チェック日, R チェック者, S 印刷済
-OT_COL = {
-    "timestamp": 0, "applicant": 1, "cust_code": 2, "cust_name": 3,
-    "store_name": 4, "store_code": 5,
-    "category": 6, "category_detail": 7, "content": 8,
-    "contact_person": 9, "comment": 10,
-    "status_sign": 11, "approval_time": 12, "approval_comment": 13,
-    "process_time": 14, "process_user": 15,
-    "check_time": 16, "check_user": 17,
-    "print_time": 18,
-}
-
-# 「その他のメンテナンス」モードTAB5用：加盟店別 印刷フォーマットのスプレッドシート（同じブック内・別タブ）
-OT_PRINT_SHEET_GID = "1519347246"
-OT_PRINT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{PRINT_SHEET_ID}/edit?gid={OT_PRINT_SHEET_GID}#gid={OT_PRINT_SHEET_GID}"
-# 1ページに5件まで配置。各件の起点行（A列、店名/顧客名/責任者/処理者の行）：
-# 1件目=4, 2件目=13, 3件目=22, 4件目=31, 5件目=40（実テンプレートをクリックして確認：ブロックの高さは9行で均一）
-OT_PRINT_BASE_ROWS = [4, 13, 22, 31, 40]
+# DEST_SHEET（実データ）側の管理列（0始まりのインデックス）
+OP_USER_COL_IDX = 34      # AI列：処理者（TAB3で転記した担当者）
+CHECK_TIME_COL_IDX = 35   # AJ列：チェック日時
+CHECK_USER_COL_IDX = 36   # AK列：チェック者
+PRINT_TIME_COL_IDX = 37   # AL列：印刷日時（TAB5で反映が完了したらここに日時が入る）
 
 
-def render_other_maintenance_tabs():
-    # 💡 【CSS調整】disabled入力の文字が薄くて読みにくいのを解消
+def render_product_order_tabs():
+    # 💡 【CSS調整】指定レイアウトに合わせた帳票・印刷用スタイル定義
     st.markdown("""
         <style>
+        /* 🔧 disabled/readonly文字が薄い問題の対策
+           Streamlitのバージョンによって disabled 属性ではなく readonly や aria-disabled で
+           表現される場合があり、:disabled だけでは効かないことがあるため、
+           入力欄そのものに常に濃い文字色を強制する（状態を問わず適用） */
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
         div[data-testid="stNumberInput"] input {
@@ -85,35 +63,112 @@ def render_other_maintenance_tabs():
         div[data-testid="stForm"] button[disabled] {
             display: none !important;
         }
+
+        /* 🖨️ 印刷/PDF出力時のレイアウト最適化（A4サイズ・3件1ページ） */
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+            }
+            header, footer, [data-testid="stSidebar"], .stButton, button, .no-print {
+                display: none !important;
+            }
+            .print-sheet {
+                page-break-after: always;
+                border: none !important;
+                padding: 0px !important;
+                margin: 0px !important;
+                background: white !important;
+                box-shadow: none !important;
+            }
+        }
+        
+        /* 画面上での帳票プレビュー枠 */
+        .print-sheet {
+            border: 1px solid #d6d6d6;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            font-family: monospace, sans-serif;
+        }
+        .sheet-block {
+            border: 1px solid #aaa;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #fafafa;
+            border-radius: 4px;
+        }
+        .block-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 3px;
+        }
+        .grid-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+        .grid-cell {
+            background: #fff;
+            border: 1px solid #ccc;
+            padding: 4px 6px;
+            border-radius: 3px;
+        }
+        .grid-cell span.lbl {
+            font-size: 9px;
+            color: #666;
+            display: block;
+        }
+        .grid-cell span.val {
+            font-weight: bold;
+            color: #111;
+        }
+        .memo-cell {
+            background: #fff;
+            border: 1px solid #ccc;
+            padding: 6px;
+            font-size: 11px;
+            margin-top: 4px;
+            border-radius: 3px;
+        }
         </style>
     """, unsafe_allow_html=True)
 
-    st.header("📮 その他のメンテナンス申請・承認・業務処理システム")
+    st.header("📦 メンテナンス申請・承認・業務処理システム")
 
     if "user_name" not in st.session_state:
         st.session_state["user_name"] = "眞田 隆司"
 
-    if "ot_form_clear_key" not in st.session_state:
-        st.session_state["ot_form_clear_key"] = 0
+    if "form_clear_key" not in st.session_state:
+        st.session_state["form_clear_key"] = 0
 
-    rclear = f"_{st.session_state['ot_form_clear_key']}"
+    clear_suffix = f"_{st.session_state['form_clear_key']}"
 
-    for _key, _default in [
-        (f"ot_ccode{rclear}", ""), (f"ot_cname{rclear}", ""),
-        (f"ot_scode{rclear}", ""), (f"ot_sname{rclear}", ""),
-    ]:
-        if _key not in st.session_state:
-            st.session_state[_key] = _default
+    if f"ccode{clear_suffix}" not in st.session_state:
+        st.session_state[f"ccode{clear_suffix}"] = ""
+    if f"cname{clear_suffix}" not in st.session_state:
+        st.session_state[f"cname{clear_suffix}"] = ""
+    if f"scode{clear_suffix}" not in st.session_state:
+        st.session_state[f"scode{clear_suffix}"] = ""
+    if f"sname{clear_suffix}" not in st.session_state:
+        st.session_state[f"sname{clear_suffix}"] = ""
 
-    if "ot_searched_ccode" not in st.session_state:
-        st.session_state["ot_searched_ccode"] = ""
+    if "searched_ccode" not in st.session_state:
+        st.session_state["searched_ccode"] = ""
 
-    o_tab1, o_tab2, o_tab3, o_tab4, o_tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📝 メンテナンス / 差戻し修正",
         "🔍 管理職チェック",
         "🚚 業務担当メンテナンス処理",
         "✅ メンテナンスチェック画面",
-        "🖨️ 加盟店別 印刷",
+        "🖨️ 加盟店別 印刷"
     ])
 
     # ==========================================
@@ -125,11 +180,11 @@ def render_other_maintenance_tabs():
 
             col_search_input, col_search_btn = st.columns([4, 1])
             cust_code_input = col_search_input.text_input(
-                "🔍 顧客コード入力",
-                value=st.session_state["ot_searched_ccode"],
-                key=f"ot_cust_code_search{rclear}"
+                "🔍 顧客コード入力", 
+                value=st.session_state["searched_ccode"], 
+                key=f"cust_code_search{clear_suffix}"
             )
-            btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary", key=f"ot_search_btn{rclear}")
+            btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary")
 
             if btn_search:
                 if cust_code_input:
@@ -143,12 +198,12 @@ def render_other_maintenance_tabs():
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
-                            st.session_state["ot_searched_ccode"] = str(cust_code_input)
-                            st.session_state[f"ot_ccode{rclear}"] = str(cust_code_input)
-                            st.session_state[f"ot_sname{rclear}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
-                            st.session_state[f"ot_cname{rclear}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
-                            st.session_state[f"ot_scode{rclear}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
-
+                            st.session_state["searched_ccode"] = str(cust_code_input)
+                            st.session_state[f"ccode{clear_suffix}"] = str(cust_code_input)
+                            st.session_state[f"sname{clear_suffix}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
+                            st.session_state[f"cname{clear_suffix}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
+                            st.session_state[f"scode{clear_suffix}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
+                            
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.3)
                             st.rerun()
@@ -160,57 +215,68 @@ def render_other_maintenance_tabs():
                     st.warning("顧客コードを入力してください。")
 
             st.write("---")
-            st.write("**📋 入力情報**")
 
-            row1_col1, row1_col2, row1_col3 = st.columns(3)
-            customer_code = row1_col1.text_input("顧客コード", key=f"ot_ccode{rclear}")
-            customer_name = row1_col2.text_input("顧客名", key=f"ot_cname{rclear}")
-            store_name = row1_col3.text_input("加盟店名", key=f"ot_sname{rclear}")
-
-            row1b_col1, row1b_col2 = st.columns(2)
-            store_code = row1b_col1.text_input("加盟店コード", key=f"ot_scode{rclear}")
-            applicant = row1b_col2.text_input("担当者", value=st.session_state["user_name"], key=f"ot_app{rclear}")
-
-            row2_col1, row2_col2 = st.columns(2)
-            ot_category = row2_col1.selectbox("種別", OT_CATEGORY_OPTIONS, key=f"ot_category{rclear}")
-            if ot_category == "その他":
-                ot_category_detail = row2_col2.text_input("その他の内容（種別が「その他」の場合に入力）", key=f"ot_category_detail{rclear}")
-            else:
-                ot_category_detail = ""
-
-            st.write("---")
-
-            with st.form("ot_submit_form"):
+            with st.form("submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                ot_content = st.text_area("内容", key=f"ot_content{rclear}")
-                ot_contact = st.text_input("連絡担当者様", key=f"ot_contact{rclear}")
-                ot_comment = st.text_area("特記事項", key=f"ot_comment{rclear}")
+                st.write("**📋 入力情報**")
+                
+                row1_col1, row1_col2, row1_col3 = st.columns(3)
+                customer_code = row1_col1.text_input("顧客コード", key=f"ccode{clear_suffix}")
+                customer_name = row1_col2.text_input("顧客名", key=f"cname{clear_suffix}")
+                store_code = row1_col3.text_input("加盟店コード", key=f"scode{clear_suffix}")
+
+                row2_col1, row2_col2, row2_col3 = st.columns(3)
+                store_name = row2_col1.text_input("加盟店名", key=f"sname{clear_suffix}")
+                route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
+                delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
+                delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
+
+                row3_col1, row3_col2, row3_col3 = st.columns(3)
+                delivery_person = row3_col1.text_input("納品者", value=st.session_state["user_name"], key=f"dperson{clear_suffix}")
+                applicant = row3_col2.text_input("申請者名", value=st.session_state["user_name"], key=f"app{clear_suffix}")
+
+                st.write("---")
+                st.write("**📦 発注商品（最大5件）**")
+                items_flat = []
+                for i in range(5):
+                    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+                    p_code = c1.text_input(f"商品コード {i+1}", key=f"p_{i}{clear_suffix}")
+                    qty = c2.text_input(f"数量 {i+1}", value="", key=f"q_{i}{clear_suffix}")
+                    price = c3.text_input(f"単価 {i+1}", value="", key=f"pr_{i}{clear_suffix}")
+                    print_flg = c4.selectbox(f"伝票出力 {i+1}", ["", "有", "無"], index=0, key=f"flg_{i}{clear_suffix}")
+                    
+                    if p_code.strip():
+                        items_flat.extend([p_code, qty, price, print_flg])
+                    else:
+                        items_flat.extend(["", "", "", ""])
+
+                st.write("---")
+                app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください", key=f"app_com{clear_suffix}")
 
                 btn_submit = st.form_submit_button("新規申請を送信", type="primary")
 
                 if btn_submit:
-                    if not customer_code.strip():
-                        st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                    if not route_code.strip() or not delivery_date:
+                        st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
                     else:
                         now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
-
+                        
                         full_row = [
-                            now_str, applicant, customer_code, customer_name, store_name, store_code,
-                            ot_category, ot_category_detail, ot_content, ot_contact, ot_comment,
-                            "申請中", "", ""
-                        ]
+                            now_str, applicant, customer_code, customer_name,
+                            store_name, store_code, delivery_date, route_code, delivery_person
+                        ] + items_flat + [app_comment, "申請中", "", ""]
 
                         payload = {
-                            "action": "SUBMIT_OTHER_MAINTENANCE_CHANGE",
-                            "target_sheet_url": OT_TARGET_SHEET_URL,
+                            "action": "SUBMIT_MAINTENANCE",
+                            "target_sheet_url": TARGET_SHEET_URL,
                             "full_row": full_row
                         }
                         res = post_to_gas(payload)
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
-                            st.session_state["ot_searched_ccode"] = ""
-                            st.session_state["ot_form_clear_key"] += 1
+                            st.session_state["searched_ccode"] = ""
+                            st.session_state["form_clear_key"] += 1
                             time.sleep(1)
                             st.rerun()
                         else:
@@ -220,60 +286,78 @@ def render_other_maintenance_tabs():
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
         try:
             st.cache_data.clear()
-            df = pd.read_csv(OT_TARGET_SHEET_CSV, dtype=str)
-            if not df.empty and len(df.columns) > OT_COL["status_sign"]:
-                rejected_df = df[df.iloc[:, OT_COL["status_sign"]].astype(str).str.strip() == "差戻し"]
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
+            if not df.empty and len(df.columns) >= 30:
+                rejected_df = df[df.iloc[:, 30].astype(str).str.strip() == "差戻し"]
                 if rejected_df.empty:
                     st.info("現在、差戻しデータはありません。")
                 else:
                     for idx, row in rejected_df.iloc[::-1].iterrows():
                         row_id = idx + 2
-
-                        def _v(col_key, r=row):
-                            i = OT_COL[col_key]
-                            return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
-
-                        rej_comment = _v("approval_comment")
-
-                        with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
-                            with st.form(key=f"ot_resubmit_form_{row_id}"):
+                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
+                        rej_comment = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else ""
+                        
+                        with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {rej_comment}"):
+                            with st.form(key=f"resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報修正**")
-
+                                
                                 r1_1, r1_2, r1_3 = st.columns(3)
-                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"ot_re_ccode_{row_id}")
-                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"ot_re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"ot_re_scode_{row_id}")
+                                edit_cust_code = r1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
 
-                                r2_1, r2_2 = st.columns(2)
-                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"ot_re_sname_{row_id}")
-                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"ot_re_app_{row_id}")
+                                r2_1, r2_2, r2_3 = st.columns(3)
+                                edit_store_name = r2_1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}")
+                                edit_route_code = r2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"re_rcode_{row_id}")
+                                edit_deliv_date = r2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"re_ddate_{row_id}")
 
-                                cur_category = _v("category")
-                                cat_index = OT_CATEGORY_OPTIONS.index(cur_category) if cur_category in OT_CATEGORY_OPTIONS else len(OT_CATEGORY_OPTIONS) - 1
-                                edit_category = st.selectbox("種別", OT_CATEGORY_OPTIONS, index=cat_index, key=f"ot_re_category_{row_id}")
-                                edit_category_detail = st.text_input("その他の内容（種別が「その他」の場合のみ入力）", value=_v("category_detail"), key=f"ot_re_category_detail_{row_id}")
-                                edit_content = st.text_area("内容", value=_v("content"), key=f"ot_re_content_{row_id}")
-                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"ot_re_contact_{row_id}")
-                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"ot_re_comment_{row_id}")
+                                r3_1, r3_2, r3_3 = st.columns(3)
+                                edit_deliv_person = r3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"re_dperson_{row_id}")
+                                edit_applicant = r3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"re_app_{row_id}")
+
+                                st.write("---")
+                                st.write("**📦 発注商品修正**")
+                                edit_items = []
+                                for i in range(5):
+                                    base_idx = 9 + (i * 4)
+                                    p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
+
+                                    r1, r2, r3, r4 = st.columns([3, 2, 2, 2])
+                                    p_in = r1.text_input(f"商品コード {i+1}", value=p_val, key=f"re_p_{row_id}_{i}")
+                                    q_in = r2.text_input(f"数量 {i+1}", value=q_val, key=f"re_q_{row_id}_{i}")
+                                    pr_in = r3.text_input(f"単価 {i+1}", value=pr_val, key=f"re_pr_{row_id}_{i}")
+                                    
+                                    opts = ["", "有", "無"]
+                                    flg_idx = opts.index(flg_val) if flg_val in opts else 0
+                                    flg_in = r4.selectbox(f"伝票出力 {i+1}", opts, index=flg_idx, key=f"re_flg_{row_id}_{i}")
+
+                                    if p_in.strip():
+                                        edit_items.extend([p_in, q_in, pr_in, flg_in])
+                                    else:
+                                        edit_items.extend(["", "", "", ""])
+
+                                st.write("---")
+                                edit_app_comment = st.text_area("申請コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"re_com_{row_id}")
 
                                 btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
 
                                 if btn_resubmit:
-                                    if not edit_cust_code.strip():
-                                        st.error("⚠️ 「顧客コード」は必須項目です。")
+                                    if not edit_route_code.strip() or not edit_deliv_date.strip():
+                                        st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。")
                                     else:
                                         updated_row = [
-                                            _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code,
-                                            edit_category, edit_category_detail, edit_content, edit_contact, edit_comment,
-                                            "申請中", "", ""
-                                        ]
+                                            str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
+                                            edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
+                                        ] + edit_items + [edit_app_comment, "申請中", "", ""]
 
                                         payload = {
-                                            "action": "RESUBMIT_OTHER_MAINTENANCE_CHANGE",
-                                            "target_sheet_url": OT_TARGET_SHEET_URL,
+                                            "action": "RESUBMIT_MAINTENANCE",
+                                            "target_sheet_url": TARGET_SHEET_URL,
                                             "row_index": row_id,
                                             "updated_row": updated_row
                                         }
@@ -288,9 +372,9 @@ def render_other_maintenance_tabs():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 2: 管理職チェック
+    # TAB 2: 管理職承認
     # ==========================================
-    with o_tab1:
+    with tab1:
         if tab_visible(1):
             _tab1_body()
         else:
@@ -299,44 +383,66 @@ def render_other_maintenance_tabs():
         st.subheader("🔍 管理職チェック")
         try:
             st.cache_data.clear()
-            df = pd.read_csv(OT_TARGET_SHEET_CSV, dtype=str)
-            if not df.empty and len(df.columns) > OT_COL["status_sign"]:
-                pending_df = df[df.iloc[:, OT_COL["status_sign"]].astype(str).str.strip() == "申請中"]
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
+            if not df.empty and len(df.columns) >= 30:
+                pending_df = df[df.iloc[:, 30].astype(str).str.strip() == "申請中"]
                 if pending_df.empty:
                     st.info("現在、未承認の申請はありません。")
                 else:
                     st.warning(f"承認待ちデータ: **{len(pending_df)} 件**")
                     for idx, row in pending_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
+                        cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
 
-                        def _v(col_key, r=row):
-                            i = OT_COL[col_key]
-                            return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
-
-                        with st.expander(f"⏳ 【承認待ち】{_v('cust_name')}（{_v('cust_code')}） | 行: {row_id}"):
-                            with st.form(key=f"ot_mgr_edit_form_{row_id}"):
+                        with st.expander(f"⏳ 【承認待ち】{cust_name}（{cust_code}） | 行: {row_id}"):
+                            with st.form(key=f"mgr_edit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報（修正可能）**")
-
+                                
                                 m1_1, m1_2, m1_3 = st.columns(3)
-                                edit_ccode = m1_1.text_input("顧客コード", value=_v("cust_code"), key=f"ot_m_ccode_{row_id}")
-                                edit_cname = m1_2.text_input("顧客名", value=_v("cust_name"), key=f"ot_m_cname_{row_id}")
-                                edit_scode = m1_3.text_input("加盟店コード", value=_v("store_code"), key=f"ot_m_scode_{row_id}")
+                                edit_ccode = m1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"m_ccode_{row_id}")
+                                edit_cname = m1_2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"m_cname_{row_id}")
+                                edit_scode = m1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"m_scode_{row_id}")
 
-                                m2_1, m2_2 = st.columns(2)
-                                edit_sname = m2_1.text_input("加盟店", value=_v("store_name"), key=f"ot_m_sname_{row_id}")
-                                edit_app = m2_2.text_input("担当者", value=_v("applicant"), key=f"ot_m_app_{row_id}")
+                                m2_1, m2_2, m2_3 = st.columns(3)
+                                edit_sname = m2_1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"m_sname_{row_id}")
+                                edit_rcode = m2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"m_rcode_{row_id}")
+                                edit_ddate = m2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"m_ddate_{row_id}")
 
-                                cur_category = _v("category")
-                                cat_index = OT_CATEGORY_OPTIONS.index(cur_category) if cur_category in OT_CATEGORY_OPTIONS else len(OT_CATEGORY_OPTIONS) - 1
-                                edit_category = st.selectbox("種別", OT_CATEGORY_OPTIONS, index=cat_index, key=f"ot_m_category_{row_id}")
-                                edit_category_detail = st.text_input("その他の内容（種別が「その他」の場合のみ入力）", value=_v("category_detail"), key=f"ot_m_category_detail_{row_id}")
-                                edit_content = st.text_area("内容", value=_v("content"), key=f"ot_m_content_{row_id}")
-                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"ot_m_contact_{row_id}")
-                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"ot_m_comment_{row_id}")
-                                mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"ot_mgr_com_{row_id}")
+                                m3_1, m3_2, m3_3 = st.columns(3)
+                                edit_dperson = m3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"m_dperson_{row_id}")
+                                edit_app = m3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"m_app_{row_id}")
 
+                                st.write("---")
+                                st.write("**📦 発注商品（修正可能）**")
+                                edit_items = []
+                                for i in range(5):
+                                    base_idx = 9 + (i * 4)
+                                    p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
+
+                                    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+                                    p_in = c1.text_input(f"商品コード {i+1}", value=p_val, key=f"m_p_{row_id}_{i}")
+                                    q_in = c2.text_input(f"数量 {i+1}", value=q_val, key=f"m_q_{row_id}_{i}")
+                                    pr_in = c3.text_input(f"単価 {i+1}", value=pr_val, key=f"m_pr_{row_id}_{i}")
+                                    
+                                    opts = ["", "有", "無"]
+                                    flg_idx = opts.index(flg_val) if flg_val in opts else 0
+                                    flg_in = c4.selectbox(f"伝票出力 {i+1}", opts, index=flg_idx, key=f"m_flg_{row_id}_{i}")
+
+                                    if p_in.strip():
+                                        edit_items.extend([p_in, q_in, pr_in, flg_in])
+                                    else:
+                                        edit_items.extend(["", "", "", ""])
+
+                                st.write("---")
+                                edit_app_comment = st.text_area("申請者コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"m_app_com_{row_id}")
+                                mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"mgr_com_{row_id}")
+                                
                                 col_app, col_rej, col_del = st.columns(3)
                                 btn_approve = col_app.form_submit_button("✅ 承認（変更内容を反映）", type="primary", use_container_width=True)
                                 btn_reject = col_rej.form_submit_button("↩️ 差戻し", use_container_width=True)
@@ -347,25 +453,24 @@ def render_other_maintenance_tabs():
 
                                 if btn_approve or btn_reject or btn_delete:
                                     updated_row = [
-                                        _v("timestamp"), edit_app, edit_ccode, edit_cname,
-                                        edit_sname, edit_scode,
-                                        edit_category, edit_category_detail, edit_content, edit_contact, edit_comment
-                                    ]
+                                        str(row.iloc[0]), edit_app, edit_ccode, edit_cname,
+                                        edit_sname, edit_scode, edit_ddate, edit_rcode, edit_dperson
+                                    ] + edit_items + [edit_app_comment]
 
                                     action_type = ""
                                     if btn_approve:
-                                        action_type = "APPROVE_OTHER_MAINTENANCE_CHANGE"
+                                        action_type = "APPROVE_MAINTENANCE"
                                         updated_row.extend([mgr_name, now_str, mgr_comment])
                                     elif btn_reject:
-                                        action_type = "REJECT_OTHER_MAINTENANCE_CHANGE"
+                                        action_type = "REJECT_MAINTENANCE"
                                         updated_row.extend(["差戻し", now_str, mgr_comment])
                                     elif btn_delete:
-                                        action_type = "DELETE_OTHER_MAINTENANCE_CHANGE"
+                                        action_type = "DELETE_MAINTENANCE"
                                         updated_row.extend(["削除", now_str, mgr_comment])
 
                                     payload = {
                                         "action": action_type,
-                                        "target_sheet_url": OT_TARGET_SHEET_URL,
+                                        "target_sheet_url": TARGET_SHEET_URL,
                                         "row_index": row_id,
                                         "updated_row": updated_row
                                     }
@@ -380,9 +485,9 @@ def render_other_maintenance_tabs():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 3: 業務担当メンテナンス処理
+    # TAB 3: 業務担当
     # ==========================================
-    with o_tab2:
+    with tab2:
         if tab_visible(2):
             _tab2_body()
         else:
@@ -391,69 +496,86 @@ def render_other_maintenance_tabs():
         st.subheader("🚚 業務担当メンテナンス処理")
         try:
             st.cache_data.clear()
-            df = pd.read_csv(OT_TARGET_SHEET_CSV, dtype=str)
+            df = pd.read_csv(TARGET_SHEET_CSV, dtype=str)
 
-            if df.empty or len(df.columns) <= OT_COL["status_sign"]:
+            if df.empty or len(df.columns) < 31:
                 st.info("現在、処理可能なデータはありません。")
             else:
-                status_series = df.iloc[:, OT_COL["status_sign"]].astype(str).str.strip()
+                ac_series = df.iloc[:, 30].astype(str).str.strip()
                 approved_df = df[
-                    (~df.iloc[:, OT_COL["status_sign"]].isna()) &
-                    (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+                    (~df.iloc[:, 30].isna()) & 
+                    (~ac_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
                 ]
 
                 if approved_df.empty:
                     st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
                 else:
                     st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
+                    
+                    sort_by_date = st.checkbox("📅 納品日の早い順（昇順）で並び替える", value=False, key="t3_sort_date")
 
-                    for idx, row in approved_df.iloc[::-1].iterrows():
+                    if sort_by_date:
+                        approved_df = approved_df.copy()
+                        approved_df["_sort_date"] = pd.to_datetime(approved_df.iloc[:, 6], errors="coerce")
+                        approved_df = approved_df.sort_values(by="_sort_date", ascending=True, na_position="last")
+
+                    iterator = approved_df.iterrows() if sort_by_date else approved_df.iloc[::-1].iterrows()
+
+                    for idx, row in iterator:
                         row_id = idx + 2
+                        timestamp = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
+                        cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
+                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
+                        mgr_name = str(row.iloc[30]) if pd.notna(row.iloc[30]) else ""
+                        deliv_date_str = str(row.iloc[6]) if pd.notna(row.iloc[6]) else "未設定"
 
-                        def _v(col_key, r=row):
-                            i = OT_COL[col_key]
-                            return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+                        expander_label = f"🟢【納品日: {deliv_date_str}】{cust_name}（{cust_code}） | 承認者: {mgr_name}"
 
-                        mgr_name = _v("status_sign")
-
-                        with st.expander(f"🟢【{_v('cust_name')}（{_v('cust_code')}）】 承認者: {mgr_name}"):
+                        with st.expander(expander_label):
                             st.write("**📋 申請内容**")
-
+                            
                             o1_c1, o1_c2, o1_c3 = st.columns(3)
-                            o1_c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"ot_v_ccode_{row_id}")
-                            o1_c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"ot_v_cname_{row_id}")
-                            o1_c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"ot_v_scode_{row_id}")
+                            o1_c1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"v_ccode_{row_id}")
+                            o1_c2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"v_cname_{row_id}")
+                            o1_c3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", disabled=True, key=f"v_scode_{row_id}")
 
-                            o2_c1, o2_c2 = st.columns(2)
-                            o2_c1.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"ot_v_sname_{row_id}")
-                            o2_c2.text_input("担当者", value=_v("applicant"), disabled=True, key=f"ot_v_app_{row_id}")
+                            o2_c1, o2_c2, o2_c3 = st.columns(3)
+                            o2_c1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", disabled=True, key=f"v_sname_{row_id}")
+                            o2_c2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", disabled=True, key=f"v_rcode_{row_id}")
+                            o2_c3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", disabled=True, key=f"v_ddate_{row_id}")
 
-                            category_val = _v("category")
-                            category_detail_val = _v("category_detail")
-                            category_disp_val = f"{category_val}（{category_detail_val}）" if category_val == "その他" and category_detail_val.strip() else category_val
-
-                            o3_c1, o3_c2 = st.columns(2)
-                            o3_c1.text_input("種別", value=category_disp_val, disabled=True, key=f"ot_v_category_{row_id}")
-                            o3_c2.text_input("担当者", value=_v("applicant"), disabled=True, key=f"ot_v_app2_{row_id}")
-
-                            content_val = _v("content")
-                            contact_val = _v("contact_person")
-                            comment_val = _v("comment")
-                            if content_val.strip() or contact_val.strip() or comment_val.strip():
-                                st.write("---")
-                                if content_val.strip():
-                                    st.text_area("内容", value=content_val, disabled=True, key=f"ot_v_content_{row_id}")
-                                if contact_val.strip():
-                                    st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"ot_v_contact_{row_id}")
-                                if comment_val.strip():
-                                    st.text_area("特記事項", value=comment_val, disabled=True, key=f"ot_v_comment_{row_id}")
+                            o3_c1, o3_c2, o3_c3 = st.columns(3)
+                            o3_c1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", disabled=True, key=f"v_dperson_{row_id}")
+                            o3_c2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", disabled=True, key=f"v_app_{row_id}")
+                            o3_c3.text_input("承認者", value=mgr_name, disabled=True, key=f"v_mgr_{row_id}")
 
                             st.write("---")
-                            with st.form(key=f"ot_transfer_form_{row_id}"):
+                            st.write("**📦 発注商品**")
+                            for i in range(5):
+                                base_idx = 9 + (i * 4)
+                                p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+                                if p_val.strip():
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
+                                    
+                                    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+                                    c1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"v_p_{row_id}_{i}")
+                                    c2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"v_q_{row_id}_{i}")
+                                    c3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"v_pr_{row_id}_{i}")
+                                    c4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"v_flg_{row_id}_{i}")
+
+                            app_com_val = str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else ""
+                            if app_com_val.strip():
+                                st.text_area("申請者コメント", value=app_com_val, disabled=True, key=f"v_com_{row_id}")
+
+                            st.write("---")
+                            with st.form(key=f"transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                                op_reject_reason = st.text_input("⚠️ 差戻し理由（※業務側で不備がある場合のみ入力）", key=f"ot_op_rej_reason_{row_id}")
-
+                                op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
+                                op_reject_reason = st.text_input("⚠️ 差戻し理由（※業務側で不備がある場合のみ入力）", key=f"op_rej_reason_{row_id}")
+                                
                                 col_trans, col_rej = st.columns(2)
                                 btn_transfer = col_trans.form_submit_button("📋 別シートへ出力・転記", type="primary", use_container_width=True)
                                 btn_op_reject = col_rej.form_submit_button("↩️ 申請者へ差戻し", use_container_width=True)
@@ -462,19 +584,17 @@ def render_other_maintenance_tabs():
                                 op_user = st.session_state["user_name"]
 
                                 if btn_transfer:
-                                    clean_base_row = [
-                                        "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
-                                        for i in range(OT_COL["status_sign"] + 3)
-                                    ]
-                                    transfer_row = clean_base_row + [action_time, op_user]
+                                    clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
+                                    transfer_row = clean_base_row + [action_time, op_user, op_memo]
 
                                     payload = {
-                                        "action": "TRANSFER_OTHER_MAINTENANCE_TO_OPERATOR",
-                                        "target_sheet_url": OT_TARGET_SHEET_URL,
-                                        "dest_sheet_url": OT_DEST_SHEET_URL,
+                                        "action": "TRANSFER_TO_OPERATOR",
+                                        "target_sheet_url": TARGET_SHEET_URL,
+                                        "dest_sheet_url": DEST_SHEET_URL,
                                         "row_index": row_id,
                                         "transfer_row": transfer_row,
-                                        "status_col": OT_COL["status_sign"] + 1,
+                                        "op_user": op_user,
+                                        "action_time": action_time
                                     }
 
                                     with st.spinner("業務シートへ転記中..."):
@@ -484,22 +604,20 @@ def render_other_maintenance_tabs():
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
                                             st.rerun()
-                                        else:
-                                            st.error(f"転記失敗: {res.get('message')}")
 
+                                        else:
+                                            st.error(f"処理に失敗しました: {res.get('message')}")
                                 elif btn_op_reject:
                                     if not op_reject_reason.strip():
                                         st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
                                     else:
-                                        base_data = [
-                                            "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
-                                            for i in range(OT_COL["status_sign"])
-                                        ]
+                                        clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
+                                        base_data = clean_base_row[:29]
                                         final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
 
                                         payload = {
-                                            "action": "REJECT_OTHER_MAINTENANCE_CHANGE",
-                                            "target_sheet_url": OT_TARGET_SHEET_URL,
+                                            "action": "REJECT_MAINTENANCE",
+                                            "target_sheet_url": TARGET_SHEET_URL,
                                             "row_index": row_id,
                                             "updated_row": final_reject_row
                                         }
@@ -517,9 +635,9 @@ def render_other_maintenance_tabs():
             st.error(f"データ取得エラー: {e}")
 
     # ==========================================
-    # TAB 4: メンテナンスチェック画面
+    # TAB 4: メンテナンスチェック画面（書き換え・修正済み部分）
     # ==========================================
-    with o_tab3:
+    with tab3:
         if tab_visible(3):
             _tab3_body()
         else:
@@ -529,15 +647,15 @@ def render_other_maintenance_tabs():
 
         try:
             st.cache_data.clear()
-            df_dest = pd.read_csv(OT_DEST_SHEET_CSV, dtype=str)
+            df_dest = pd.read_csv(DEST_SHEET_CSV, dtype=str)
 
             if df_dest.empty:
                 st.info("現在、チェック対象のデータ（転記済みデータ）はありません。")
             else:
-                show_checked = st.checkbox("✅ チェック済みのデータも表示する", value=False, key="ot_chk_show_checked")
+                show_checked = st.checkbox("✅ チェック済みのデータも表示する", value=False, key="chk_show_checked")
 
-                if not show_checked and len(df_dest.columns) > OT_COL["check_time"]:
-                    unchecked_mask = df_dest.iloc[:, OT_COL["check_time"]].fillna("").astype(str).str.strip() == ""
+                if not show_checked and len(df_dest.columns) > CHECK_TIME_COL_IDX:
+                    unchecked_mask = df_dest.iloc[:, CHECK_TIME_COL_IDX].fillna("").astype(str).str.strip() == ""
                     df_dest = df_dest[unchecked_mask]
 
                 if df_dest.empty:
@@ -545,67 +663,89 @@ def render_other_maintenance_tabs():
                 else:
                     st.success(f"📋 チェック対象データ: **{len(df_dest)} 件**")
 
-                for idx, row in df_dest.iterrows():
+                col_sort1, col_sort2 = st.columns([3, 1])
+                sort_store = col_sort1.checkbox("🏪 加盟店別（店舗名）で並び替える", value=False, key="chk_sort_store")
+                sort_order = col_sort2.selectbox("並び順", ["昇順 (あ〜わ)", "降順 (わ〜あ)"], index=0, key="chk_sort_order", label_visibility="collapsed")
+
+                df_display = df_dest.copy()
+                if sort_store:
+                    store_col_idx = 4
+                    if len(df_display.columns) > store_col_idx:
+                        is_ascending = (sort_order == "昇順 (あ〜わ)")
+                        df_display["_sort_store"] = df_display.iloc[:, store_col_idx].fillna("")
+                        df_display = df_display.sort_values(by="_sort_store", ascending=is_ascending)
+
+                iterator_chk = df_display.iterrows()
+
+                for idx, row in iterator_chk:
                     row_id = idx + 2
+                    cust_name = str(row.iloc[3]) if len(row) > 3 and pd.notna(row.iloc[3]) else ""
+                    store_name = str(row.iloc[4]) if len(row) > 4 and pd.notna(row.iloc[4]) else ""
+                    cust_code = str(row.iloc[2]) if len(row) > 2 and pd.notna(row.iloc[2]) else ""
+                    deliv_date = str(row.iloc[6]) if len(row) > 6 and pd.notna(row.iloc[6]) else ""
+                    
+                    delivery_person_val = str(row.iloc[8]) if len(row) > 8 and pd.notna(row.iloc[8]) else ""
+                    mgr_name_val = str(row.iloc[30]) if len(row) > 30 and pd.notna(row.iloc[30]) else "不明"
+                    op_user_val = str(row.iloc[OP_USER_COL_IDX]) if len(row) > OP_USER_COL_IDX and pd.notna(row.iloc[OP_USER_COL_IDX]) else "不明"
 
-                    def _v(col_key, r=row):
-                        i = OT_COL[col_key]
-                        return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+                    checked_time_val = str(row.iloc[CHECK_TIME_COL_IDX]) if len(row) > CHECK_TIME_COL_IDX and pd.notna(row.iloc[CHECK_TIME_COL_IDX]) else ""
+                    checked_user_val = str(row.iloc[CHECK_USER_COL_IDX]) if len(row) > CHECK_USER_COL_IDX and pd.notna(row.iloc[CHECK_USER_COL_IDX]) else ""
 
-                    mgr_name_val = _v("status_sign") or "不明"
-                    op_user_val = _v("process_user") or "不明"
-                    checked_time_val = _v("check_time")
-                    checked_user_val = _v("check_user")
-
-                    expander_label = f"📌 {_v('cust_name')}（{_v('cust_code')}） | 加盟店: {_v('store_name') or '未設定'}"
+                    expander_label = f"📌 【加盟店: {store_name or '未設定'}】 顧客名: {cust_name}（{cust_code}） | 納品日: {deliv_date}"
                     if checked_time_val:
-                        expander_label += " ✅【チェック済み】"
+                        expander_label += f" ✅【チェック済み】"
 
                     with st.expander(expander_label):
-                        with st.form(key=f"ot_check_form_{row_id}"):
+                        with st.form(key=f"check_form_{row_id}"):
                             st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                             st.write("**📋 登録内容詳細**")
                             c1, c2, c3 = st.columns(3)
-                            c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"ot_chk_ccode_{row_id}")
-                            c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"ot_chk_cname_{row_id}")
-                            c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"ot_chk_scode_{row_id}")
+                            c1.text_input("顧客コード", value=cust_code, disabled=True, key=f"chk_ccode_{row_id}")
+                            c2.text_input("顧客名", value=cust_name, disabled=True, key=f"chk_cname_{row_id}")
+                            c3.text_input("加盟店コード", value=str(row.iloc[5]) if len(row) > 5 and pd.notna(row.iloc[5]) else "", disabled=True, key=f"chk_scode_{row_id}")
 
-                            c4, c5 = st.columns(2)
-                            c4.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"ot_chk_sname_{row_id}")
-                            c5.text_input("担当者", value=_v("applicant"), disabled=True, key=f"ot_chk_app_{row_id}")
+                            c4, c5, c6 = st.columns(3)
+                            c4.text_input("加盟店名", value=store_name, disabled=True, key=f"chk_sname_{row_id}")
+                            c5.text_input("ルートコード", value=str(row.iloc[7]) if len(row) > 7 and pd.notna(row.iloc[7]) else "", disabled=True, key=f"chk_rcode_{row_id}")
+                            c6.text_input("納品日", value=deliv_date, disabled=True, key=f"chk_ddate_{row_id}")
 
-                            category_val = _v("category")
-                            category_detail_val = _v("category_detail")
-                            category_disp_val = f"{category_val}（{category_detail_val}）" if category_val == "その他" and category_detail_val.strip() else category_val
-
-                            c6, c7 = st.columns(2)
-                            c6.text_input("種別", value=category_disp_val, disabled=True, key=f"ot_chk_category_{row_id}")
-                            c7.text_input("処理者", value=op_user_val, disabled=True, key=f"ot_chk_op_{row_id}")
-
-                            c8, c9 = st.columns(2)
-                            c8.text_input("承認者", value=mgr_name_val, disabled=True, key=f"ot_chk_mgr_{row_id}")
+                            c7, c8, c9 = st.columns(3)
+                            c7.text_input("納品者", value=delivery_person_val, disabled=True, key=f"chk_dperson_{row_id}")
+                            c8.text_input("承認者", value=mgr_name_val, disabled=True, key=f"chk_mgr_{row_id}")
+                            c9.text_input("処理者", value=op_user_val, disabled=True, key=f"chk_op_{row_id}")
 
                             if checked_time_val:
                                 st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
 
-                            content_val = _v("content")
-                            contact_val = _v("contact_person")
-                            comment_val = _v("comment")
-                            if content_val.strip() or contact_val.strip() or comment_val.strip():
-                                st.write("---")
-                                if content_val.strip():
-                                    st.text_area("内容", value=content_val, disabled=True, key=f"ot_chk_content_{row_id}")
-                                if contact_val.strip():
-                                    st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"ot_chk_contact_{row_id}")
-                                if comment_val.strip():
-                                    st.text_area("特記事項", value=comment_val, disabled=True, key=f"ot_chk_comment_{row_id}")
+                            st.write("---")
+                            st.write("**📦 登録商品明細**")
+                            has_item = False
+                            for i in range(5):
+                                base_idx = 9 + (i * 4)
+                                p_val = str(row.iloc[base_idx]) if base_idx < len(row) and pd.notna(row.iloc[base_idx]) else ""
+                                if p_val.strip():
+                                    has_item = True
+                                    q_val = str(row.iloc[base_idx+1]) if base_idx+1 < len(row) and pd.notna(row.iloc[base_idx+1]) else ""
+                                    pr_val = str(row.iloc[base_idx+2]) if base_idx+2 < len(row) and pd.notna(row.iloc[base_idx+2]) else ""
+                                    flg_val = str(row.iloc[base_idx+3]) if base_idx+3 < len(row) and pd.notna(row.iloc[base_idx+3]) else ""
+                                    
+                                    ic1, ic2, ic3, ic4 = st.columns([3, 2, 2, 2])
+                                    ic1.text_input(f"商品コード {i+1}", value=p_val, disabled=True, key=f"chk_p_{row_id}_{i}")
+                                    ic2.text_input(f"数量 {i+1}", value=q_val, disabled=True, key=f"chk_q_{row_id}_{i}")
+                                    ic3.text_input(f"単価 {i+1}", value=pr_val, disabled=True, key=f"chk_pr_{row_id}_{i}")
+                                    ic4.text_input(f"伝票出力 {i+1}", value=flg_val, disabled=True, key=f"chk_flg_{row_id}_{i}")
+                            
+                            if not has_item:
+                                st.info("登録されている商品明細はありません。")
 
                             st.write("---")
+                            chk_memo = st.text_input("チェック用メモ / 特記事項", key=f"chk_memo_{row_id}")
+                            
                             st.write("⚠️ **差戻しを行う場合の設定**")
                             r_col1, r_col2 = st.columns(2)
-                            reject_target = r_col1.selectbox("差戻し先を選択", ["業務担当", "申請者"], key=f"ot_chk_rej_target_{row_id}")
-                            reject_reason = r_col2.text_input("差戻し理由", key=f"ot_chk_rej_reason_{row_id}")
+                            reject_target = r_col1.selectbox("差戻し先を選択", ["業務担当", "申請者"], key=f"chk_rej_target_{row_id}")
+                            reject_reason = r_col2.text_input("差戻し理由", key=f"chk_rej_reason_{row_id}")
 
                             col_ok, col_ng = st.columns(2)
                             btn_checked_ok = col_ok.form_submit_button("✅ チェック完了（確認済み）", type="primary", use_container_width=True)
@@ -616,16 +756,18 @@ def render_other_maintenance_tabs():
                                 checker_name = st.session_state["user_name"]
 
                                 clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
-                                while len(clean_base_row) < OT_COL["check_user"] + 1:
+                                while len(clean_base_row) < CHECK_USER_COL_IDX + 1:
                                     clean_base_row.append("")
 
-                                clean_base_row[OT_COL["check_time"]] = check_time
-                                clean_base_row[OT_COL["check_user"]] = checker_name
-                                # ※ print_time列（印刷済）はここでは触らない。既存の値を保持する。
+                                clean_base_row[CHECK_TIME_COL_IDX] = check_time
+                                clean_base_row[CHECK_USER_COL_IDX] = checker_name
+                                # ※ PRINT_TIME_COL_IDX（AL列）はここでは触らない。
+                                #   clean_base_row はAK列までしか埋めていないため、GASへのupdated_rowも
+                                #   AK列までしか含まれず、既存のAL列（印刷日時）は上書きされず保持される。
 
                                 payload = {
-                                    "action": "UPDATE_OTHER_MAINTENANCE_CHECK",
-                                    "target_sheet_url": OT_DEST_SHEET_URL,
+                                    "action": "UPDATE_MAINTENANCE_CHECK",
+                                    "target_sheet_url": DEST_SHEET_URL,
                                     "row_index": row_id,
                                     "updated_row": clean_base_row
                                 }
@@ -651,9 +793,9 @@ def render_other_maintenance_tabs():
             st.error(f"データ読み込みエラー: {e}")
 
     # ==========================================
-    # TAB 5: 加盟店別 印刷
+    # TAB 5: 加盟店別 印刷プレビュー画面
     # ==========================================
-    with o_tab4:
+    with tab4:
         if tab_visible(4):
             _tab4_body()
         else:
@@ -663,119 +805,123 @@ def render_other_maintenance_tabs():
 
         try:
             st.cache_data.clear()
-            df_print = pd.read_csv(OT_DEST_SHEET_CSV, dtype=str)
+            df_print = pd.read_csv(DEST_SHEET_CSV, dtype=str)
 
             if df_print.empty:
                 st.info("現在、印刷対象のデータはありません。")
             else:
-                # TAB4で「✅ チェック完了」になったデータだけを対象にする
-                if len(df_print.columns) > OT_COL["check_time"]:
-                    checked_mask = df_print.iloc[:, OT_COL["check_time"]].fillna("").astype(str).str.strip() != ""
+                # TAB4で「✅ チェック完了」になったデータ（AJ列にチェック日時が入っている行）だけを対象にする
+                if len(df_print.columns) > CHECK_TIME_COL_IDX:
+                    checked_mask = df_print.iloc[:, CHECK_TIME_COL_IDX].fillna("").astype(str).str.strip() != ""
                     df_print = df_print[checked_mask]
 
-                # すでに印刷済み（印刷日時が入っている行）は印刷画面に出さない
-                if len(df_print.columns) > OT_COL["print_time"]:
-                    not_printed_mask = df_print.iloc[:, OT_COL["print_time"]].fillna("").astype(str).str.strip() == ""
+                # すでに印刷済み（AL列に印刷日時が入っている行）は印刷画面に出さない
+                if len(df_print.columns) > PRINT_TIME_COL_IDX:
+                    not_printed_mask = df_print.iloc[:, PRINT_TIME_COL_IDX].fillna("").astype(str).str.strip() == ""
                     df_print = df_print[not_printed_mask]
 
                 if df_print.empty:
                     st.info("印刷対象のデータがありません（TAB4でチェック未完了、またはすでに印刷済みです）。")
                 else:
-                    store_col_idx = OT_COL["store_name"]
+                    store_col_idx = 4
                     df_print["_store_name"] = df_print.iloc[:, store_col_idx].fillna("未設定の加盟店")
                     stores = sorted(df_print["_store_name"].unique())
 
-                    selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="ot_print_store_select")
+                    selected_store = st.selectbox("🖨️ 印刷する加盟店を選択してください", stores, key="print_store_select_v2")
 
                     if selected_store:
+                        # ※ 行番号（row_id = 元のインデックス + 2）をMARK_PRINTEDで使うため、
+                        #   ここでは reset_index しない（他のTABと同じ row_id の考え方）
                         store_df = df_print[df_print["_store_name"] == selected_store]
                         total_records = len(store_df)
 
-                        st.info(f"🏪 加盟店: **{selected_store}** （未印刷のチェック完了済みデータ: {total_records} 件）※1ページに最大{len(OT_PRINT_BASE_ROWS)}件まで配置されます。")
+                        st.info(f"🏪 加盟店: **{selected_store}** （未印刷のチェック完了済みデータ: {total_records} 件）※1ページに最大3件まで配置されます。")
 
-                        def build_ot_record(r_row):
+                        def build_record(r_row):
                             """行データを、印刷フォーマットのラベルに沿って取り出す"""
-                            def _f(col_key):
-                                i = OT_COL[col_key]
-                                return str(r_row.iloc[i]) if len(r_row) > i and pd.notna(r_row.iloc[i]) else ""
+                            store_code = str(r_row.iloc[5]) if len(r_row) > 5 and pd.notna(r_row.iloc[5]) else ""
+                            raw_cname = str(r_row.iloc[3]) if len(r_row) > 3 and pd.notna(r_row.iloc[3]) else ""
+                            cust_name = f"{raw_cname} 様" if raw_cname.strip() else ""
 
-                            manager = _f("status_sign") or "未確認"
-                            operator = _f("process_user") or st.session_state["user_name"]
-                            contact = _f("contact_person")
-                            contact_disp = f"{contact} 様" if contact.strip() else ""
-                            raw_cname = _f("cust_name")
-                            cust_name_disp = f"{raw_cname} 様" if raw_cname.strip() else ""
+                            manager = str(r_row.iloc[30]) if len(r_row) > 30 and pd.notna(r_row.iloc[30]) else "未確認"
+                            operator = str(r_row.iloc[OP_USER_COL_IDX]) if len(r_row) > OP_USER_COL_IDX and pd.notna(r_row.iloc[OP_USER_COL_IDX]) else st.session_state["user_name"]
 
-                            category = _f("category")
-                            category_detail = _f("category_detail")
-                            if category == "その他" and category_detail.strip():
-                                category_disp = f"その他（{category_detail}）"
-                            else:
-                                category_disp = category or "未設定"
+                            cust_code = str(r_row.iloc[2]) if len(r_row) > 2 and pd.notna(r_row.iloc[2]) else ""
+                            applicant = str(r_row.iloc[1]) if len(r_row) > 1 and pd.notna(r_row.iloc[1]) else ""
+                            delivery_person = str(r_row.iloc[8]) if len(r_row) > 8 and pd.notna(r_row.iloc[8]) else ""
+                            delivery_date = str(r_row.iloc[6]) if len(r_row) > 6 and pd.notna(r_row.iloc[6]) else ""
+                            route_code = str(r_row.iloc[7]) if len(r_row) > 7 and pd.notna(r_row.iloc[7]) else ""
+
+                            special_note = str(r_row.iloc[29]) if len(r_row) > 29 and pd.notna(r_row.iloc[29]) else "特記事項なし"
+
+                            items = []
+                            for pi in range(5):
+                                b_idx = 9 + (pi * 4)
+                                p_code = str(r_row.iloc[b_idx]) if b_idx < len(r_row) and pd.notna(r_row.iloc[b_idx]) else ""
+                                p_qty = str(r_row.iloc[b_idx + 1]) if b_idx + 1 < len(r_row) and pd.notna(r_row.iloc[b_idx + 1]) else ""
+                                p_price = str(r_row.iloc[b_idx + 2]) if b_idx + 2 < len(r_row) and pd.notna(r_row.iloc[b_idx + 2]) else ""
+                                p_flg = str(r_row.iloc[b_idx + 3]) if b_idx + 3 < len(r_row) and pd.notna(r_row.iloc[b_idx + 3]) else ""
+                                items.append((p_code, p_qty, p_price, p_flg))
 
                             return {
-                                "store_code": _f("store_code"), "cust_name": cust_name_disp,
+                                "store_code": store_code, "cust_name": cust_name,
                                 "manager": manager, "operator": operator,
-                                "cust_code": _f("cust_code"), "applicant": _f("applicant"),
-                                "category_disp": category_disp,
-                                "content": _f("content") or "特になし",
-                                "comment": _f("comment") or "特記事項なし",
-                                "contact_disp": contact_disp,
+                                "cust_code": cust_code, "applicant": applicant,
+                                "delivery_person": delivery_person, "delivery_date": delivery_date,
+                                "route_code": route_code, "special_note": special_note,
+                                "items": items,
                             }
 
-                        def ot_cells_for_record(rec):
-                            """1件分のデータを、base_row行目を起点にした「行オフセット・列・値」のリストに変換する。
-                            指定されていないセル（行・列）はテンプレート側の固定内容として一切触らない。
-                            A/B/D/E(+0)=加盟店コード/顧客名(結合B:C)/責任者確認/処理者,
-                            A(+2、A:B結合)=種別, C(+2)=提出者, D(+2)=連絡担当者様, E(+2)=シャトルコード,
-                            A(+4、A:E結合)=内容, A(+6、A:E結合)=特記事項"""
+                        def matrix_for_record(rec):
+                            """1件分のデータを、base_row行目を起点にした行データに変換する。
+                            0行目=A/B/D/E(加盟店コード/顧客名/責任者/処理者)、2行おきに商品明細5件、
+                            12行目=特記事項。
+                            ※1,3,5,7,9,11行目はテンプレート側の固定見出し（商品記号・発注数・単価・伝票出力等）
+                            なので、ここでは一切含めない＝GAS側でも触らないようにして、印刷のたびに
+                            見出しが消えてしまう不具合を防ぐ。"""
+                            blank = ["", "", "", "", ""]
                             if not rec:
-                                rec = {k: "" for k in [
-                                    "store_code", "cust_name", "manager", "operator",
-                                    "cust_code", "applicant", "category_disp", "content",
-                                    "comment", "contact_disp",
-                                ]}
-                            return [
-                                {"offset": 0, "col": 1, "value": rec["store_code"]},
-                                {"offset": 0, "col": 2, "value": rec["cust_name"]},
-                                {"offset": 0, "col": 4, "value": rec["manager"]},
-                                {"offset": 0, "col": 5, "value": rec["operator"]},
-                                {"offset": 2, "col": 1, "value": rec["category_disp"]},
-                                {"offset": 2, "col": 3, "value": rec["applicant"]},
-                                {"offset": 2, "col": 4, "value": rec["contact_disp"]},
-                                {"offset": 2, "col": 5, "value": rec["cust_code"]},
-                                {"offset": 4, "col": 1, "value": rec["content"]},
-                                {"offset": 6, "col": 1, "value": rec["comment"]},
-                            ]
+                                rows = {0: blank[:], 2: blank[:], 4: blank[:], 6: blank[:], 8: blank[:], 10: blank[:], 12: blank[:]}
+                            else:
+                                extra_e = [rec["cust_code"], rec["applicant"], rec["delivery_person"], rec["delivery_date"], rec["route_code"]]
+                                rows = {0: [rec["store_code"], rec["cust_name"], "", rec["manager"], rec["operator"]]}
+                                for i_item, item_row in enumerate([2, 4, 6, 8, 10]):
+                                    p_code, p_qty, p_price, p_flg = rec["items"][i_item]
+                                    rows[item_row] = [p_code, p_qty, p_price, p_flg, extra_e[i_item]]
+                                rows[12] = [rec["special_note"], "", "", "", ""]
+                            return [{"offset": off, "values": vals} for off, vals in sorted(rows.items())]
 
-                        chunk_size = len(OT_PRINT_BASE_ROWS)
+                        chunk_size = 3
                         chunks = [store_df.iloc[i:i + chunk_size] for i in range(0, total_records, chunk_size)]
 
                         for page_idx, chunk in enumerate(chunks):
                             st.markdown(f"#### 📄 ページ {page_idx + 1} / {len(chunks)}")
 
+                            # C1＝加盟店名＋「 様」、A4〜A16／A19〜A31／A34〜A46＝1〜3件目（base_row = 4, 19, 34）
                             c1_value = f"{selected_store} 様"
                             blocks = []
                             preview_records = []
-                            page_row_ids = [int(idx) + 2 for idx in chunk.index]
+                            page_row_ids = [int(idx) + 2 for idx in chunk.index]  # 印刷済みマーク用の実際の行番号
 
-                            for slot, base_row in enumerate(OT_PRINT_BASE_ROWS):
-                                rec = build_ot_record(chunk.iloc[slot]) if slot < len(chunk) else None
+                            for slot in range(3):
+                                base_row = 4 + slot * 15
+                                rec = build_record(chunk.iloc[slot]) if slot < len(chunk) else None
                                 if rec:
                                     preview_records.append(rec)
-                                blocks.append({"start_row": base_row, "cells": ot_cells_for_record(rec)})
+                                blocks.append({"start_row": base_row, "rows": matrix_for_record(rec)})
 
                             with st.expander(f"プレビューを見る（{len(preview_records)} 件）"):
                                 for r_i, rec in enumerate(preview_records):
                                     st.write(f"**[{r_i + 1}件目] 加盟店コード: {rec['store_code']} ／ 顧客名: {rec['cust_name']} ／ 責任者: {rec['manager']} ／ 処理者: {rec['operator']}**")
-                                    st.caption(f"種別: {rec['category_disp']} ｜ 提出者: {rec['applicant']} ｜ 連絡担当者様: {rec['contact_disp']} ｜ シャトルコード: {rec['cust_code']}")
-                                    st.caption(f"内容: {rec['content']}")
-                                    st.caption(f"特記事項: {rec['comment']}")
+                                    items_df = pd.DataFrame(rec["items"], columns=["商品記号", "発注数", "単価", "伝票出力"])
+                                    st.dataframe(items_df, use_container_width=True, hide_index=True)
+                                    st.caption(f"顧客コード: {rec['cust_code']} ｜ 申請者: {rec['applicant']} ｜ 納品者: {rec['delivery_person']} ｜ 納品日: {rec['delivery_date']} ｜ ルートコード: {rec['route_code']}")
+                                    st.caption(f"特記事項: {rec['special_note']}")
 
-                            if st.button("📥 反映してPDFを作成する", key=f"ot_print_sync_btn_{page_idx}", type="primary"):
+                            if st.button("📥 反映してPDFを作成する", key=f"print_sync_btn_{page_idx}", type="primary"):
                                 payload = {
                                     "action": "SYNC_PRINT_STORE_DATA",
-                                    "print_sheet_url": OT_PRINT_SHEET_URL,
+                                    "print_sheet_url": PRINT_SHEET_URL,
                                     "store_name": selected_store,
                                     "c1_value": c1_value,
                                     "blocks": blocks,
@@ -784,13 +930,14 @@ def render_other_maintenance_tabs():
                                     res = post_to_gas(payload)
 
                                 if res.get("status") == "success":
+                                    # 印刷済みマーク（AL列＝印刷日時）を付けて、以後この印刷画面に出てこないようにする
                                     print_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
                                     mark_payload = {
                                         "action": "MARK_PRINTED",
-                                        "target_sheet_url": OT_DEST_SHEET_URL,
+                                        "target_sheet_url": DEST_SHEET_URL,
                                         "row_indices": page_row_ids,
                                         "print_time": print_time,
-                                        "print_col": OT_COL["print_time"] + 1,
+                                        "print_col": PRINT_TIME_COL_IDX + 1,
                                     }
                                     mark_res = post_to_gas(mark_payload)
                                     if mark_res.get("status") != "success":
@@ -798,38 +945,40 @@ def render_other_maintenance_tabs():
 
                                     st.toast("🎉 反映が完了しました。PDFを作成しています…", icon="✅")
                                     try:
-                                        pdf_row_end = OT_PRINT_BASE_ROWS[len(chunk) - 1] + 6 if len(chunk) > 0 else 10
+                                        # このページの実件数分（1件なら1〜16行目、2件なら1〜31行目…）だけをPDF化する。
+                                        # 空のブロックまで印刷されないよう、件数に応じて末尾行を切り詰める。
+                                        pdf_row_end = 1 + len(chunk) * 15
                                         with st.spinner("PDFを作成しています..."):
-                                            pdf_res = requests.get(
-                                                build_print_pdf_url(row_end=pdf_row_end, gid=OT_PRINT_SHEET_GID),
-                                                timeout=30
-                                            )
+                                            pdf_res = requests.get(build_print_pdf_url(row_end=pdf_row_end, gid=PRINT_SHEET_GID), timeout=30)
                                         content_type = pdf_res.headers.get("Content-Type", "")
                                         if pdf_res.status_code == 200 and "pdf" in content_type.lower():
                                             st.success("✅ PDFが作成できました。下のボタンからダウンロードしてください。")
                                             st.download_button(
                                                 "📄 PDFをダウンロード",
                                                 data=pdf_res.content,
-                                                file_name=f"{selected_store}_other_maintenance_p{page_idx + 1}.pdf",
+                                                file_name=f"{selected_store}_p{page_idx + 1}.pdf",
                                                 mime="application/pdf",
-                                                key=f"ot_pdf_dl_{page_idx}",
+                                                key=f"pdf_dl_{page_idx}",
                                             )
                                         else:
                                             st.warning(
                                                 "スプレッドシートへの反映は完了しましたが、アプリ上でのPDF取得に失敗しました"
                                                 "（共有設定などが原因の可能性があります）。"
-                                                f"[印刷用スプレッドシートを開く]({OT_PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                                f"[印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
                                             )
-                                    except Exception as pdf_e:
-                                        st.warning(f"PDF作成中にエラーが発生しました: {pdf_e}")
-                                    time.sleep(1)
-                                    st.rerun()
+                                    except Exception as pdf_err:
+                                        st.warning(
+                                            f"スプレッドシートへの反映は完了しましたが、PDF取得中にエラーが発生しました: {pdf_err}　"
+                                            f"[印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                        )
                                 else:
                                     st.error(f"反映に失敗しました: {res.get('message')}")
 
+                            st.write("---")
+
         except Exception as e:
-            st.error(f"データ読み込みエラー: {e}")
-    with o_tab5:
+            st.error(f"印刷データの読み込みエラー: {e}")
+    with tab5:
         if tab_visible(5):
             _tab5_body()
         else:
