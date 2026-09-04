@@ -9,9 +9,11 @@ from datetime import timezone, timedelta
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbwvdmyHj_VgN_Q8azYypr82zyOk8p-j2wObG1rtvGTbpkeMWtMPAmkKqmfb11xDM09Rtg/exec"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=127347205"
+CUSTOMER_MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/edit?gid=127347205#gid=127347205"
 
 # ご契約データ（顧客コードごとの契約週・曜日・担当者コードからルートコードを計算するための参照シート）
 CONTRACT_DATA_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=2011677989"
+CONTRACT_DATA_SHEET_URL = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/edit?gid=2011677989#gid=2011677989"
 
 # ご契約データシートの列（0始まり）：顧客コード(A)=0、担当者コード(E)=4、担当者名(F)=5、曜日(G)=6、契約週M/N/O/P=12/13/14/15
 CONTRACT_COL_CUST_CODE = 0

@@ -11,6 +11,8 @@ from data_loader import load_sheet_data
 from views.main_view import main_screen
 from views.navi_view import route_navigation_screen
 from views.maint_view import maintenance_admin_screen
+from views.maint_common import get_current_role
+from views.customer_contract_data_view import customer_contract_data_screen
 
 # --- 1. ページ基本設定 ---
 st.set_page_config(
@@ -41,9 +43,14 @@ if st.session_state.login_status:
             st.session_state.logout_requested = True
             st.rerun()
         st.write("---")
+        menu_items = ["📦 メンテナンス申請・承認", "🏠 メイン画面", "🗺️ ナビ画面"]
+        # 🗂️ 顧客・契約データ管理（Excel貼り付けによる一括更新）は権限3（および全権限=0）のみ表示
+        if get_current_role() in ("0", "3"):
+            menu_items.append("🗂️ 顧客・契約データ管理")
+
         page = st.radio(
             "メニュー切り替え",
-            ["📦 メンテナンス申請・承認", "🏠 メイン画面", "🗺️ ナビ画面"],
+            menu_items,
             index=0
         )
         if page == "📦 メンテナンス申請・承認":
@@ -52,11 +59,15 @@ if st.session_state.login_status:
             st.session_state.current_page = "main"
         elif page == "🗺️ ナビ画面":
             st.session_state.current_page = "navi"
+        elif page == "🗂️ 顧客・契約データ管理":
+            st.session_state.current_page = "cust_contract_data"
 
     if st.session_state.current_page in ["navi", "nav"]:
         route_navigation_screen()
     elif st.session_state.current_page == "maint_admin":
         maintenance_admin_screen()
+    elif st.session_state.current_page == "cust_contract_data":
+        customer_contract_data_screen()
     else:
         main_screen()
 else:
