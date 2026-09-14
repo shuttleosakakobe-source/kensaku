@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from views.maint_common import (
-    post_to_gas, get_current_role,
+    post_to_gas, get_current_role, read_csv_cached,
     CUSTOMER_MASTER_SHEET_URL, CONTRACT_DATA_SHEET_URL,
 )
 
@@ -84,7 +84,7 @@ def _render_replace_section(label, action_name, target_sheet_url, state_key):
         if res.get("status") == "success":
             st.success(f"✅ {label}を反映しました。")
             st.session_state[f"{state_key}_confirm"] = False
-            st.cache_data.clear()
+            read_csv_cached.clear()
             st.rerun()
         else:
             st.error(f"❌ 反映に失敗しました（データは変更されていません）: {res.get('message')}")

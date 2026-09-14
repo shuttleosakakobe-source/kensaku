@@ -66,6 +66,17 @@ def post_to_gas(payload):
         return {"status": "error", "message": str(e)}
 
 
+@st.cache_data(ttl=15)
+def read_csv_cached(url, **kwargs):
+    """Google SheetsのCSVをキャッシュ付きで読み込む共通ヘルパー。
+    同じURLへの読み込みが短時間に何度も走らないよう、既定で15秒キャッシュする
+    （各画面が毎回 st.cache_data.clear() でアプリ全体のキャッシュを巻き添えにして
+    いたのを、この関数専用のキャッシュに置き換えることで解消する）。
+    承認・差戻し・削除・転記など自分の操作の直後で確実に最新データが欲しい場合は、
+    read_csv_cached.clear() を呼んでからこの関数を呼び出す。"""
+    return pd.read_csv(url, dtype=str, **kwargs)
+
+
 @st.cache_data(ttl=60)
 def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
     """あるモード（商品発注／ルート変更／単発ルート変更／納品数量変更／客中残訂正／契約内容変更）に、
@@ -150,9 +161,9 @@ def tab_visible(tab_no):
 
 
 def _load_contract_df():
-    """ご契約データシートをキャッシュせず毎回読み込む（軽量な参照専用ヘルパー）"""
+    """ご契約データシートを読み込む（read_csv_cachedにより短時間キャッシュされる）"""
     try:
-        df_contract = pd.read_csv(CONTRACT_DATA_CSV, dtype=str, storage_options={"User-Agent": "Mozilla/5.0"})
+        df_contract = read_csv_cached(CONTRACT_DATA_CSV, storage_options={"User-Agent": "Mozilla/5.0"})
     except Exception:
         return None
     if df_contract.empty:

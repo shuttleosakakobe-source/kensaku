@@ -10,7 +10,7 @@ import time
 
 from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
-    post_to_gas, build_print_pdf_url,
+    post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
 
 )
@@ -129,8 +129,8 @@ def render_spot_route_change_tabs():
 
         if st.button("🔍 検索する", key="s_tab_search_btn"):
             try:
-                st.cache_data.clear()
-                df_search = pd.read_csv(SR_DEST_SHEET_CSV, dtype=str)
+                read_csv_cached.clear()
+                df_search = read_csv_cached(SR_DEST_SHEET_CSV)
             except Exception as e:
                 st.error(f"データ取得エラー: {e}")
                 df_search = pd.DataFrame()
@@ -219,9 +219,8 @@ def render_spot_route_change_tabs():
             if btn_search:
                 if cust_code_input:
                     try:
-                        df_master = pd.read_csv(
+                        df_master = read_csv_cached(
                             CUSTOMER_MASTER_CSV,
-                            dtype=str,
                             storage_options={"User-Agent": "Mozilla/5.0"}
                         )
                         matched = df_master[df_master.iloc[:, 1].astype(str).str.strip() == str(cust_code_input).strip()]
@@ -325,8 +324,8 @@ def render_spot_route_change_tabs():
         st.write("---")
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
         try:
-            st.cache_data.clear()
-            df = pd.read_csv(SR_TARGET_SHEET_CSV, dtype=str)
+            read_csv_cached.clear()
+            df = read_csv_cached(SR_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > SR_COL["status_sign"]:
                 rejected_df = df[df.iloc[:, SR_COL["status_sign"]].astype(str).str.strip() == "差戻し"]
                 if rejected_df.empty:
@@ -408,8 +407,8 @@ def render_spot_route_change_tabs():
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
         try:
-            st.cache_data.clear()
-            df = pd.read_csv(SR_TARGET_SHEET_CSV, dtype=str)
+            read_csv_cached.clear()
+            df = read_csv_cached(SR_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > SR_COL["status_sign"]:
                 pending_df = df[df.iloc[:, SR_COL["status_sign"]].astype(str).str.strip() == "申請中"]
                 if pending_df.empty:
@@ -505,8 +504,8 @@ def render_spot_route_change_tabs():
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
         try:
-            st.cache_data.clear()
-            df = pd.read_csv(SR_TARGET_SHEET_CSV, dtype=str)
+            read_csv_cached.clear()
+            df = read_csv_cached(SR_TARGET_SHEET_CSV)
 
             if df.empty or len(df.columns) <= SR_COL["status_sign"]:
                 st.info("現在、処理可能なデータはありません。")
@@ -598,7 +597,7 @@ def render_spot_route_change_tabs():
                                     with st.spinner("業務シートへ転記中..."):
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
-                                            st.cache_data.clear()
+                                            read_csv_cached.clear()
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
                                             st.rerun()
@@ -624,7 +623,7 @@ def render_spot_route_change_tabs():
 
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
-                                            st.cache_data.clear()
+                                            read_csv_cached.clear()
                                             st.toast("申請を差し戻しました。", icon="↩️")
                                             time.sleep(1)
                                             st.rerun()
@@ -644,8 +643,8 @@ def render_spot_route_change_tabs():
         st.subheader("✅ メンテナンスチェック画面")
 
         try:
-            st.cache_data.clear()
-            df_dest = pd.read_csv(SR_DEST_SHEET_CSV, dtype=str)
+            read_csv_cached.clear()
+            df_dest = read_csv_cached(SR_DEST_SHEET_CSV)
 
             if df_dest.empty:
                 st.info("現在、チェック対象のデータ（転記済みデータ）はありません。")
@@ -748,7 +747,7 @@ def render_spot_route_change_tabs():
 
                                 res = post_to_gas(payload)
                                 if res.get("status") == "success":
-                                    st.cache_data.clear()
+                                    read_csv_cached.clear()
                                     st.toast(f"行 {row_id} のメンテナンスチェックを完了しました！", icon="✅")
                                     time.sleep(1)
                                     st.rerun()
@@ -776,8 +775,8 @@ def render_spot_route_change_tabs():
         st.subheader("🖨️ 加盟店別 印刷")
 
         try:
-            st.cache_data.clear()
-            df_print = pd.read_csv(SR_DEST_SHEET_CSV, dtype=str)
+            read_csv_cached.clear()
+            df_print = read_csv_cached(SR_DEST_SHEET_CSV)
 
             if df_print.empty:
                 st.info("現在、印刷対象のデータはありません。")
