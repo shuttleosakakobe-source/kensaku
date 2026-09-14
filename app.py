@@ -8,11 +8,7 @@ import streamlit as st
 import os
 from utils import inject_pwa_blocker, set_login_storage, check_session_storage
 from data_loader import load_sheet_data
-from views.main_view import main_screen
-from views.navi_view import route_navigation_screen
 from views.maint_view import maintenance_admin_screen
-from views.maint_common import get_current_role
-from views.customer_contract_data_view import customer_contract_data_screen
 
 # --- 1. ページ基本設定 ---
 st.set_page_config(
@@ -24,7 +20,6 @@ st.set_page_config(
 # --- 2. セッション状態の初期化 ---
 if 'login_status' not in st.session_state: st.session_state.login_status = False
 if 'logout_requested' not in st.session_state: st.session_state.logout_requested = False
-if 'current_page' not in st.session_state: st.session_state.current_page = "maint_admin"
 if 'selected_route_nodes' not in st.session_state: st.session_state.selected_route_nodes = [{"名前": "📌 現在地", "住所": "現在地"}]
 if 'moved_to_bottom_names' not in st.session_state: st.session_state.moved_to_bottom_names = []
 if 'needs_alert' not in st.session_state: st.session_state.needs_alert = False
@@ -33,7 +28,10 @@ if 'needs_alert' not in st.session_state: st.session_state.needs_alert = False
 if not st.session_state.login_status and not st.session_state.logout_requested:
     check_session_storage()
 
-# --- 4. 画面ルーティング制御 ---
+# --- 4. 画面表示 ---
+# 💡 サイドバーのメニュー切り替えは廃止。ログイン後はメンテナンス業務画面（メインの
+#    ボタン行から、商品発注／ルート変更などの各モードに加えてナビ画面・顧客契約データ
+#    管理にも入れる）を直接表示する。サイドバーはログイン情報とログアウトのみに使う。
 if st.session_state.login_status:
     with st.sidebar:
         st.write(f"👤 ログイン中: **{st.session_state.get('user_name', '担当者')}**")
@@ -42,34 +40,8 @@ if st.session_state.login_status:
             st.session_state.login_status = False
             st.session_state.logout_requested = True
             st.rerun()
-        st.write("---")
-        menu_items = ["📦 メンテナンス申請・承認", "🏠 メイン画面", "🗺️ ナビ画面"]
-        # 🗂️ 顧客・契約データ管理（Excel貼り付けによる一括更新）は権限3（および全権限=0）のみ表示
-        if get_current_role() in ("0", "3"):
-            menu_items.append("🗂️ 顧客・契約データ管理")
 
-        page = st.radio(
-            "メニュー切り替え",
-            menu_items,
-            index=0
-        )
-        if page == "📦 メンテナンス申請・承認":
-            st.session_state.current_page = "maint_admin"
-        elif page == "🏠 メイン画面":
-            st.session_state.current_page = "main"
-        elif page == "🗺️ ナビ画面":
-            st.session_state.current_page = "navi"
-        elif page == "🗂️ 顧客・契約データ管理":
-            st.session_state.current_page = "cust_contract_data"
-
-    if st.session_state.current_page in ["navi", "nav"]:
-        route_navigation_screen()
-    elif st.session_state.current_page == "maint_admin":
-        maintenance_admin_screen()
-    elif st.session_state.current_page == "cust_contract_data":
-        customer_contract_data_screen()
-    else:
-        main_screen()
+    maintenance_admin_screen()
 else:
     # --- 🔑 ログイン画面 ---
     inject_pwa_blocker() 
@@ -107,8 +79,7 @@ else:
                     st.session_state.user_code = user_found["email"]
                     st.session_state.login_status = True
                     st.session_state.logout_requested = False
-                    st.session_state.current_page = "maint_admin"
-                    
+
                     set_login_storage(
                         st.session_state.user_name,
                         "",
@@ -127,7 +98,6 @@ else:
                     st.session_state.user_code = u_email
                     st.session_state.login_status = True
                     st.session_state.logout_requested = False
-                    st.session_state.current_page = "maint_admin"
                     st.rerun()
                 else:
                     st.error("マスターデータの読み込みに失敗しました。シートの共有設定（アクセス権限）を確認してください。")

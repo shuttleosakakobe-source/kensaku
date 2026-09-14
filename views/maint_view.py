@@ -16,7 +16,9 @@ from views.customer_balance_view import (
 from views.period_stop_view import render_period_stop_tabs, PS_COL, PS_TARGET_SHEET_CSV, PS_DEST_SHEET_CSV
 from views.other_view import render_other_maintenance_tabs, OT_COL, OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV
 from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV
-from views.maint_common import mode_has_pending_work
+from views.maint_common import mode_has_pending_work, get_current_role
+from views.navi_view import route_navigation_screen
+from views.customer_contract_data_view import customer_contract_data_screen
 
 # 商品発注は他モードと違い列インデックスの辞書（*_COL）を持たないため、生のインデックス
 # （TARGET_SHEET側のステータス列は30列目固定）をここで直接指定する
@@ -119,8 +121,17 @@ def maintenance_admin_screen():
     #    画面切り替え時にまれにブラウザ側でDOM操作エラー(NotFoundError: removeChild)が
     #    起きることがあった。on_clickコールバックで状態更新を「再実行が始まる前」に
     #    済ませることで、st.rerun()を使わずに1回の再実行だけで済むようにした。
-    mode_cols = st.columns(len(MODE_DEFS))
-    for (mode_key, label, *_rest), col in zip(MODE_DEFS, mode_cols):
+    # 💡 メンテナンス業務の9モードに加えて、以前はサイドバーにあった「🗺️ ナビ画面」と
+    #    （権限0・3のみ）「🗂️ 顧客・契約データ管理」も、同じボタン行に並べて
+    #    このメイン画面だけで全ての操作に入れるようにする（サイドバーのメニューは廃止）。
+    extra_buttons = [("navi", "🗺️ ナビ画面")]
+    if get_current_role() in ("0", "3"):
+        extra_buttons.append(("cust_contract", "🗂️ 顧客・契約データ管理"))
+
+    all_buttons = [(mode_key, label) for mode_key, label, *_rest in MODE_DEFS] + extra_buttons
+
+    mode_cols = st.columns(len(all_buttons))
+    for (mode_key, label), col in zip(all_buttons, mode_cols):
         with col.container(key=f"modebtn_{mode_key}"):
             st.button(
                 label, use_container_width=True,
@@ -147,6 +158,12 @@ def maintenance_admin_screen():
         render_other_maintenance_tabs()
     elif st.session_state["maint_mode"] == "cx":
         render_cancel_tabs()
+    elif st.session_state["maint_mode"] == "cc":
+        render_contract_change_tabs()
+    elif st.session_state["maint_mode"] == "navi":
+        route_navigation_screen()
+    elif st.session_state["maint_mode"] == "cust_contract":
+        customer_contract_data_screen()
     else:
         render_contract_change_tabs()
 

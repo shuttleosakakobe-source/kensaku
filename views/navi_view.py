@@ -6,7 +6,7 @@ def route_navigation_screen():
     st.markdown("### 🗺️ ルートナビゲーション")
     
     if st.button("⬅️ メイン画面に戻る"):
-        st.session_state.current_page = "main"
+        st.session_state["maint_mode"] = "order"
         st.rerun()
 
     u_url = st.session_state.get('user_url', '')
