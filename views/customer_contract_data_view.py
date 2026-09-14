@@ -91,24 +91,51 @@ def _render_replace_section(label, action_name, target_sheet_url, state_key):
 
 
 def customer_contract_data_screen():
-    """権限3（および権限0＝全権限）専用：顧客データ・契約データの一括アップロード更新画面。"""
+    """権限3（および権限0＝全権限）専用：顧客データ・契約データの一括アップロード更新画面。
+    メンテナンス業務画面と同じく、まずボタンで対象データを選び、押したものだけ
+    入力画面（ファイルアップロード欄）を表示する（誤って即座に破壊的操作画面が
+    開かないようにするため）。"""
     role = get_current_role()
     if role not in ("0", "3"):
         st.error("🔒 この機能は現在の権限では表示できません。")
         st.stop()
 
     st.markdown("#### 🗂️ 顧客データ・契約データ 一括更新")
-    st.caption("Excel/CSVファイルをアップロードするだけで、顧客マスター／ご契約データシートを一括更新できます。")
+    st.caption("更新したいデータを選択すると、アップロード画面が表示されます。")
     st.write("---")
 
-    tab_customer, tab_contract = st.tabs(["👤 顧客データ", "📄 契約データ"])
+    if "cust_contract_mode" not in st.session_state:
+        st.session_state["cust_contract_mode"] = None
 
-    with tab_customer:
+    def _set_mode(mode):
+        st.session_state["cust_contract_mode"] = mode
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.button(
+            "👤 顧客データ", use_container_width=True,
+            type="primary" if st.session_state["cust_contract_mode"] == "customer" else "secondary",
+            on_click=_set_mode, args=("customer",),
+            key="cust_contract_mode_btn_customer",
+        )
+    with col2:
+        st.button(
+            "📄 契約データ", use_container_width=True,
+            type="primary" if st.session_state["cust_contract_mode"] == "contract" else "secondary",
+            on_click=_set_mode, args=("contract",),
+            key="cust_contract_mode_btn_contract",
+        )
+
+    st.write("---")
+
+    mode = st.session_state["cust_contract_mode"]
+    if mode == "customer":
         _render_replace_section(
             "顧客マスター", "REPLACE_CUSTOMER_MASTER", CUSTOMER_MASTER_SHEET_URL, "cust_import",
         )
-
-    with tab_contract:
+    elif mode == "contract":
         _render_replace_section(
             "ご契約データ", "REPLACE_CONTRACT_DATA", CONTRACT_DATA_SHEET_URL, "contract_import",
         )
+    else:
+        st.info("上のボタンから更新したいデータを選択してください。")
