@@ -9,8 +9,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     CONTRACT_COL_CUST_CODE, CONTRACT_WEEK_COLS,
     post_to_gas, build_print_pdf_url, _load_contract_df, read_csv_cached,
-    tab_visible, RESTRICTED_TAB_MSG,
-
+    tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code,
 )
 
 
@@ -343,11 +342,20 @@ def render_route_change_tabs():
 
             st.write("---")
 
+            # 💡 変更後ルートが担当表に登場する日付を「次回訪問日」の候補にする
+            #    （同じルートが数週間おきに巡回するため、複数の日付が候補になることがある）。
+            rt_visit_date_options = get_route_dates_for_code(route_after)
+
             with st.form("rt_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                next_visit_val = st.date_input("次回訪問日", value=None, key=f"rt_nvisit{rclear}")
-                next_visit = next_visit_val.strftime("%Y/%m/%d") if next_visit_val else ""
+                if rt_visit_date_options:
+                    next_visit = st.selectbox(
+                        "次回訪問日（担当表から選択）", rt_visit_date_options, key=f"rt_nvisit_sel{rclear}",
+                    )
+                else:
+                    next_visit_val = st.date_input("次回訪問日", value=None, key=f"rt_nvisit{rclear}")
+                    next_visit = next_visit_val.strftime("%Y/%m/%d") if next_visit_val else ""
 
                 st.write("---")
                 rt_comment = st.text_area("コメント", placeholder="連絡事項や補足説明があれば入力してください", key=f"rt_com{rclear}")

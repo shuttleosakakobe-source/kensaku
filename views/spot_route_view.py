@@ -11,8 +11,7 @@ import time
 from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
-    tab_visible, RESTRICTED_TAB_MSG,
-
+    tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code,
 )
 from views.route_view import get_route_lookup
 
@@ -279,8 +278,17 @@ def render_spot_route_change_tabs():
 
             row4_col1, row4_col2 = st.columns(2)
             route_after = row4_col1.text_input("変更後ルート", key=f"sr_rafter{rclear}")
-            date_after_val = row4_col2.date_input("変更後日付", value=None, key=f"sr_dafter{rclear}")
-            date_after = date_after_val.strftime("%Y/%m/%d") if date_after_val else ""
+
+            # 💡 変更後ルートが担当表に登場する日付を「変更後日付」の候補にする
+            #    （同じルートが数週間おきに巡回するため、複数の日付が候補になることがある）。
+            sr_date_after_options = get_route_dates_for_code(route_after)
+            if sr_date_after_options:
+                date_after = row4_col2.selectbox(
+                    "変更後日付（担当表から選択）", sr_date_after_options, key=f"sr_dafter_sel{rclear}",
+                )
+            else:
+                date_after_val = row4_col2.date_input("変更後日付", value=None, key=f"sr_dafter{rclear}")
+                date_after = date_after_val.strftime("%Y/%m/%d") if date_after_val else ""
 
             st.write("---")
 

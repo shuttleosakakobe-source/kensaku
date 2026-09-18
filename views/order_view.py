@@ -10,7 +10,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
-    ai_check_order_anomaly, check_route_roster_match,
+    ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
 )
 
 
@@ -410,28 +410,38 @@ def render_product_order_tabs():
                                     st.rerun()
 
             st.write("---")
+            st.write("**📋 入力情報**")
+
+            row1_col1, row1_col2, row1_col3 = st.columns(3)
+            customer_code = row1_col1.text_input("顧客コード", key=f"ccode{clear_suffix}")
+            customer_name = row1_col2.text_input("顧客名", key=f"cname{clear_suffix}")
+            store_code = row1_col3.text_input("加盟店コード", key=f"scode{clear_suffix}")
+
+            row2_col1, row2_col2, row2_col3 = st.columns(3)
+            store_name = row2_col1.text_input("加盟店名", key=f"sname{clear_suffix}")
+            # 💡 ルートコードはフォームの外に出す（st.form内のウィジェットは送信時まで
+            #    rerunされないため、ここに置かないと「納品日」の候補をルートコードの
+            #    入力にあわせてリアルタイムに切り替えられない）。
+            route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
+
+            route_date_options = get_route_dates_for_code(route_code)
+            if route_date_options:
+                delivery_date = row2_col3.selectbox(
+                    "納品日（担当表から選択）", route_date_options, key=f"ddate_sel{clear_suffix}",
+                )
+            else:
+                delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
+                delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
+
+            row3_col1, row3_col2, row3_col3 = st.columns(3)
+            delivery_person = row3_col1.text_input("納品者", value=st.session_state["user_name"], key=f"dperson{clear_suffix}")
+            applicant = row3_col2.text_input("申請者名", value=st.session_state["user_name"], key=f"app{clear_suffix}")
+
+            st.write("---")
 
             with st.form("submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                st.write("**📋 入力情報**")
-                
-                row1_col1, row1_col2, row1_col3 = st.columns(3)
-                customer_code = row1_col1.text_input("顧客コード", key=f"ccode{clear_suffix}")
-                customer_name = row1_col2.text_input("顧客名", key=f"cname{clear_suffix}")
-                store_code = row1_col3.text_input("加盟店コード", key=f"scode{clear_suffix}")
-
-                row2_col1, row2_col2, row2_col3 = st.columns(3)
-                store_name = row2_col1.text_input("加盟店名", key=f"sname{clear_suffix}")
-                route_code = row2_col2.text_input("ルートコード", value="", key=f"rcode{clear_suffix}")
-                delivery_date_val = row2_col3.date_input("納品日", value=None, key=f"ddate{clear_suffix}")
-                delivery_date = delivery_date_val.strftime("%Y/%m/%d") if delivery_date_val else ""
-
-                row3_col1, row3_col2, row3_col3 = st.columns(3)
-                delivery_person = row3_col1.text_input("納品者", value=st.session_state["user_name"], key=f"dperson{clear_suffix}")
-                applicant = row3_col2.text_input("申請者名", value=st.session_state["user_name"], key=f"app{clear_suffix}")
-
-                st.write("---")
                 st.write("**📦 発注商品（最大5件）**")
                 items_flat = []
                 for i in range(5):

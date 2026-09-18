@@ -6,7 +6,7 @@ import requests
 import json
 import os
 import re
-from datetime import timezone, timedelta
+from datetime import timezone, timedelta, datetime, date
 
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbwvdmyHj_VgN_Q8azYypr82zyOk8p-j2wObG1rtvGTbpkeMWtMPAmkKqmfb11xDM09Rtg/exec"
@@ -206,6 +206,57 @@ def check_route_roster_match(delivery_date_str, route_code, staff_name):
         return False, f"担当表では{delivery_date_str}の{staff_name}さんのルートは「{sheet_route}」です（申請は「{route_code}」）"
 
     return None, f"担当表に{delivery_date_str}のデータが見つかりません"
+
+
+def get_route_dates_for_code(route_code):
+    """ルート担当表（ROUTE_ROSTER_CSV）から、指定したルートコードが登場する日付を
+    すべて探して返す。申請入力時に、ルートコードを入力したら「納品日」「次回訪問日」
+    「変更後日付」をプルダウンで選べるようにするために使う。
+    ルートは数週間おきに巡回するため、同じコードが複数の日付に登場することがある
+    （例: 「14008」が10/1にも10/29にも出てくる）。その場合は見つかった日付を全て返す。
+    担当表には月日しか書かれていないため、今日以降で一番近い月日になるよう年を
+    補ってから YYYY/MM/DD 形式の文字列にする。
+    戻り値: 日付文字列のリスト（古い順）。コード未入力・見つからない・読み込めない
+    場合は空リスト（呼び出し側では、空ならプルダウンではなく通常の日付入力に戻す）。"""
+    route_code = str(route_code).strip()
+    if not route_code:
+        return []
+    try:
+        df = read_csv_cached(ROUTE_ROSTER_CSV, header=None)
+    except Exception:
+        return []
+    if df.empty or len(df) < 2:
+        return []
+
+    today = datetime.now(JST).date()
+    found_dates = set()
+
+    for row_idx in range(1, len(df)):
+        row = df.iloc[row_idx]
+        matched = any(
+            pd.notna(row.iloc[col_idx]) and str(row.iloc[col_idx]).strip() == route_code
+            for col_idx in range(ROUTE_ROSTER_STAFF_COL_START, len(row))
+        )
+        if not matched:
+            continue
+
+        parsed = pd.to_datetime(str(row.iloc[0]), errors="coerce")
+        if pd.isna(parsed):
+            continue
+
+        # 年の補完：今日より前になってしまう月日は来年扱いにする
+        try:
+            candidate = date(today.year, parsed.month, parsed.day)
+        except ValueError:
+            continue
+        if candidate < today:
+            try:
+                candidate = date(today.year + 1, parsed.month, parsed.day)
+            except ValueError:
+                continue
+        found_dates.add(candidate)
+
+    return [d.strftime("%Y/%m/%d") for d in sorted(found_dates)]
 
 
 @st.cache_data(ttl=60)
