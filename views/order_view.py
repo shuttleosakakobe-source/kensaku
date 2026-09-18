@@ -340,7 +340,6 @@ def render_product_order_tabs():
                 if btn_past_search:
                     if past_ccode_input:
                         try:
-                            read_csv_cached.clear()
                             df_past = read_csv_cached(DEST_SHEET_CSV)
                             idx_cc = 2  # DEST_SHEET側：C列＝顧客コード
                             if not df_past.empty and len(df_past.columns) > idx_cc:
@@ -490,7 +489,6 @@ def render_product_order_tabs():
         st.write("---")
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) >= 30:
                 rejected_df = df[df.iloc[:, 30].astype(str).str.strip() == "差戻し"]
@@ -585,7 +583,6 @@ def render_product_order_tabs():
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) >= 30:
                 pending_df = df[df.iloc[:, 30].astype(str).str.strip() == "申請中"]
@@ -793,7 +790,6 @@ def render_product_order_tabs():
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(TARGET_SHEET_CSV)
 
             if df.empty or len(df.columns) < 31:
@@ -942,7 +938,6 @@ def render_product_order_tabs():
         st.subheader("✅ メンテナンスチェック画面")
 
         try:
-            read_csv_cached.clear()
             df_dest = read_csv_cached(DEST_SHEET_CSV)
 
             if df_dest.empty:
@@ -1098,7 +1093,6 @@ def render_product_order_tabs():
         st.subheader("🖨️ 加盟店別 印刷")
 
         try:
-            read_csv_cached.clear()
             df_print = read_csv_cached(DEST_SHEET_CSV)
 
             if df_print.empty:

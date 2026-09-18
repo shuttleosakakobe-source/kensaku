@@ -299,7 +299,6 @@ def render_other_maintenance_tabs():
         st.write("---")
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(OT_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > OT_COL["status_sign"]:
                 rejected_df = df[df.iloc[:, OT_COL["status_sign"]].astype(str).str.strip() == "差戻し"]
@@ -376,7 +375,6 @@ def render_other_maintenance_tabs():
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(OT_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > OT_COL["status_sign"]:
                 pending_df = df[df.iloc[:, OT_COL["status_sign"]].astype(str).str.strip() == "申請中"]
@@ -466,7 +464,6 @@ def render_other_maintenance_tabs():
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(OT_TARGET_SHEET_CSV)
 
             if df.empty or len(df.columns) <= OT_COL["status_sign"]:
@@ -602,7 +599,6 @@ def render_other_maintenance_tabs():
         st.subheader("✅ メンテナンスチェック画面")
 
         try:
-            read_csv_cached.clear()
             df_dest = read_csv_cached(OT_DEST_SHEET_CSV)
 
             if df_dest.empty:
@@ -734,7 +730,6 @@ def render_other_maintenance_tabs():
         st.subheader("🖨️ 加盟店別 印刷")
 
         try:
-            read_csv_cached.clear()
             df_print = read_csv_cached(OT_DEST_SHEET_CSV)
 
             if df_print.empty:

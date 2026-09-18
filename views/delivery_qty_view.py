@@ -335,7 +335,6 @@ def render_delivery_qty_change_tabs():
                 if btn_past_search:
                     if past_ccode_input:
                         try:
-                            read_csv_cached.clear()
                             df_past = read_csv_cached(DQ_DEST_SHEET_CSV)
                             idx_cc = DQ_COL["cust_code"]
                             if not df_past.empty and len(df_past.columns) > idx_cc:
@@ -521,7 +520,6 @@ def render_delivery_qty_change_tabs():
         st.write("---")
         st.subheader("⚠️ 差戻し・再修正が必要なデータ")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(DQ_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > DQ_COL["status_sign"]:
                 rejected_df = df[df.iloc[:, DQ_COL["status_sign"]].astype(str).str.strip() == "差戻し"]
@@ -609,7 +607,6 @@ def render_delivery_qty_change_tabs():
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(DQ_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > DQ_COL["status_sign"]:
                 pending_df = df[df.iloc[:, DQ_COL["status_sign"]].astype(str).str.strip() == "申請中"]
@@ -705,7 +702,6 @@ def render_delivery_qty_change_tabs():
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
         try:
-            read_csv_cached.clear()
             df = read_csv_cached(DQ_TARGET_SHEET_CSV)
 
             if df.empty or len(df.columns) <= DQ_COL["status_sign"]:
@@ -841,7 +837,6 @@ def render_delivery_qty_change_tabs():
         st.subheader("✅ メンテナンスチェック画面")
 
         try:
-            read_csv_cached.clear()
             df_dest = read_csv_cached(DQ_DEST_SHEET_CSV)
 
             if df_dest.empty:
@@ -975,7 +970,6 @@ def render_delivery_qty_change_tabs():
         st.subheader("🖨️ 加盟店別 印刷")
 
         try:
-            read_csv_cached.clear()
             df_print = read_csv_cached(DQ_DEST_SHEET_CSV)
 
             if df_print.empty:
