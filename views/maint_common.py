@@ -4,6 +4,8 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import os
+import re
 from datetime import timezone, timedelta
 
 
@@ -75,6 +77,77 @@ def read_csv_cached(url, **kwargs):
     承認・差戻し・削除・転記など自分の操作の直後で確実に最新データが欲しい場合は、
     read_csv_cached.clear() を呼んでからこの関数を呼び出す。"""
     return pd.read_csv(url, dtype=str, **kwargs)
+
+
+def get_anthropic_client():
+    """Streamlit CloudのSecrets（st.secrets["ANTHROPIC_API_KEY"]）または環境変数
+    ANTHROPIC_API_KEY からAPIキーを読み込み、Anthropicクライアントを返す。
+    キーが設定されていない・anthropicパッケージが無い場合はNoneを返し、
+    呼び出し側でAIチェック機能を静かに無効化できるようにする
+    （＝キー未設定でもアプリ全体は今まで通り動く）。"""
+    api_key = None
+    try:
+        api_key = st.secrets.get("ANTHROPIC_API_KEY")
+    except Exception:
+        pass
+    if not api_key:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    try:
+        import anthropic
+        return anthropic.Anthropic(api_key=api_key)
+    except Exception:
+        return None
+
+
+def ai_check_order_anomaly(cust_code, cust_name, items, past_items_list):
+    """商品発注の申請内容をAIでチェックし、異常（数量・単価の急激な変化や桁間違いなど）が
+    無いかを判定する。
+    items: 今回の申請の商品リスト [{"code":..., "qty":..., "price":...}, ...]
+    past_items_list: 同じ顧客の過去の発注履歴（新しい順、最大5件）のリスト
+    戻り値: {"checked": bool, "has_anomaly": bool, "reason": str}
+    - checked=False（APIキー未設定など）の場合は has_anomaly=False とし、
+      これまで通り人がチェックする（AI機能が無効なだけで、動作は変わらない）。
+    - APIは呼べたが失敗した場合は、安全側に倒して has_anomaly=True とし、
+      必ず人の目を通す（＝エラー時に誤って自動承認しない）。"""
+    client = get_anthropic_client()
+    if client is None:
+        return {"checked": False, "has_anomaly": False, "reason": ""}
+
+    prompt = (
+        "あなたは配送業務システムの商品発注申請をチェックするアシスタントです。\n"
+        "以下の今回の申請内容を、同じ顧客の過去の発注履歴と比較し、"
+        "数量や単価に大きな異常（急激な増減、桁の間違いと思われる値など）が無いか確認してください。\n\n"
+        f"【今回の申請】\n顧客: {cust_name}（{cust_code}）\n商品: {items}\n\n"
+        f"【過去の発注履歴（新しい順、最大5件）】\n{past_items_list}\n\n"
+        "異常があれば has_anomaly を true にし、reason に日本語で簡潔な理由（1〜2文）を書いてください。"
+        "異常が無ければ has_anomaly は false、reason は空文字にしてください。"
+        "過去の履歴が無い場合は、判断材料が無いため has_anomaly は false としてください。"
+        "他の説明文は一切含めず、必ず次のJSON形式のみで回答してください:\n"
+        '{"has_anomaly": true または false, "reason": "..."}'
+    )
+
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.MULTILINE).strip()
+        result = json.loads(text)
+        return {
+            "checked": True,
+            "has_anomaly": bool(result.get("has_anomaly")),
+            "reason": str(result.get("reason", "")),
+        }
+    except Exception as e:
+        return {
+            "checked": True,
+            "has_anomaly": True,
+            "reason": f"AIチェックでエラーが発生したため、念のため内容をご確認ください（{e}）",
+        }
 
 
 @st.cache_data(ttl=60)

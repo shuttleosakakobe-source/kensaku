@@ -4,12 +4,13 @@ import pandas as pd
 import requests
 from datetime import datetime
 import time
+import hashlib
 
 from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
-
+    ai_check_order_anomaly,
 )
 
 
@@ -25,6 +26,38 @@ OP_USER_COL_IDX = 34      # AI列：処理者（TAB3で転記した担当者）
 CHECK_TIME_COL_IDX = 35   # AJ列：チェック日時
 CHECK_USER_COL_IDX = 36   # AK列：チェック者
 PRINT_TIME_COL_IDX = 37   # AL列：印刷日時（TAB5で反映が完了したらここに日時が入る）
+
+
+def _get_past_order_items_for_ai(cust_code):
+    """管理職チェックのAIチェック用に、同じ顧客の過去の発注履歴（DEST_SHEET側＝
+    業務転記済みの実データ）を新しい順に最大5件取得する。商品行が無い履歴は除く。"""
+    try:
+        df_dest = read_csv_cached(DEST_SHEET_CSV)
+    except Exception:
+        return []
+    if df_dest.empty or len(df_dest.columns) < 29:
+        return []
+
+    matched = df_dest[df_dest.iloc[:, 2].astype(str).str.strip() == str(cust_code).strip()]
+    if matched.empty:
+        return []
+
+    past_list = []
+    for _, r in matched.iloc[::-1].iterrows():
+        items = []
+        for i in range(5):
+            base = 9 + i * 4
+            code = str(r.iloc[base]) if pd.notna(r.iloc[base]) else ""
+            if not code.strip():
+                continue
+            qty = str(r.iloc[base + 1]) if pd.notna(r.iloc[base + 1]) else ""
+            price = str(r.iloc[base + 2]) if pd.notna(r.iloc[base + 2]) else ""
+            items.append({"code": code, "qty": qty, "price": price})
+        if items:
+            past_list.append({"date": str(r.iloc[0]) if pd.notna(r.iloc[0]) else "", "items": items})
+        if len(past_list) >= 5:
+            break
+    return past_list
 
 
 def render_product_order_tabs():
@@ -550,12 +583,82 @@ def render_product_order_tabs():
                     st.info("現在、未承認の申請はありません。")
                 else:
                     st.warning(f"承認待ちデータ: **{len(pending_df)} 件**")
+
+                    # 💡 AIチェック：各申請の内容を過去の発注履歴と比較し、異常が無ければ
+                    #    その場で自動承認する（APIキー未設定時は checked=False になり、
+                    #    今まで通り人がチェックする挙動に自動でフォールバックする）。
+                    #    Streamlitは何か操作があるたびにスクリプト全体を再実行するため、
+                    #    同じ内容を毎回AIに問い合わせないよう、行の中身のハッシュを
+                    #    セッションに記録してこのタブを開いている間はキャッシュする。
+                    if "ai_checked_row_sigs" not in st.session_state:
+                        st.session_state["ai_checked_row_sigs"] = {}
+
+                    auto_approved_count = 0
+                    now_str_ai = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+
                     for idx, row in pending_df.iloc[::-1].iterrows():
                         row_id = idx + 2
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
                         cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
 
+                        row_raw = "|".join(
+                            str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
+                            for i in range(30)
+                        )
+                        ai_sig = f"{row_id}_{hashlib.md5(row_raw.encode('utf-8')).hexdigest()}"
+
+                        if ai_sig not in st.session_state["ai_checked_row_sigs"]:
+                            ai_items = []
+                            for i in range(5):
+                                base_idx = 9 + i * 4
+                                code = str(row.iloc[base_idx]) if pd.notna(row.iloc[base_idx]) else ""
+                                if code.strip():
+                                    qty = str(row.iloc[base_idx + 1]) if pd.notna(row.iloc[base_idx + 1]) else ""
+                                    price = str(row.iloc[base_idx + 2]) if pd.notna(row.iloc[base_idx + 2]) else ""
+                                    ai_items.append({"code": code, "qty": qty, "price": price})
+                            ai_past_items = _get_past_order_items_for_ai(cust_code)
+                            ai_result = ai_check_order_anomaly(cust_code, cust_name, ai_items, ai_past_items)
+                            st.session_state["ai_checked_row_sigs"][ai_sig] = ai_result
+                        else:
+                            ai_result = st.session_state["ai_checked_row_sigs"][ai_sig]
+
+                        if ai_result["checked"] and not ai_result["has_anomaly"]:
+                            ai_updated_row = [
+                                str(row.iloc[0]) if pd.notna(row.iloc[0]) else "",
+                                str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
+                                cust_code, cust_name,
+                                str(row.iloc[4]) if pd.notna(row.iloc[4]) else "",
+                                str(row.iloc[5]) if pd.notna(row.iloc[5]) else "",
+                                str(row.iloc[6]) if pd.notna(row.iloc[6]) else "",
+                                str(row.iloc[7]) if pd.notna(row.iloc[7]) else "",
+                                str(row.iloc[8]) if pd.notna(row.iloc[8]) else "",
+                            ]
+                            for i in range(5):
+                                base_idx = 9 + i * 4
+                                for off in range(4):
+                                    col_i = base_idx + off
+                                    v = row.iloc[col_i] if col_i < len(row) else None
+                                    ai_updated_row.append(str(v) if pd.notna(v) else "")
+                            ai_updated_row.append(str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "")
+                            ai_updated_row.extend([
+                                "🤖 AI自動承認", now_str_ai,
+                                "AIチェックの結果、異常が見つからなかったため自動承認されました。",
+                            ])
+
+                            ai_res = post_to_gas({
+                                "action": "APPROVE_MAINTENANCE",
+                                "target_sheet_url": TARGET_SHEET_URL,
+                                "row_index": row_id,
+                                "updated_row": ai_updated_row,
+                            })
+                            if ai_res.get("status") == "success":
+                                auto_approved_count += 1
+                                continue
+                            # 自動承認に失敗した場合は、下の通常フローで人の確認に回す
+
                         with st.expander(f"⏳ 【承認待ち】{cust_name}（{cust_code}） | 行: {row_id}"):
+                            if ai_result["checked"] and ai_result["has_anomaly"]:
+                                st.warning(f"🤖 AIチェック: {ai_result['reason']}")
                             with st.form(key=f"mgr_edit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -641,6 +744,12 @@ def render_product_order_tabs():
                                         st.rerun()
                                     else:
                                         st.error(f"処理に失敗しました: {res.get('message')}")
+
+                    if auto_approved_count > 0:
+                        read_csv_cached.clear()
+                        st.toast(f"🤖 AIチェックにより {auto_approved_count} 件を自動承認しました", icon="🤖")
+                        time.sleep(1)
+                        st.rerun()
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
