@@ -57,38 +57,38 @@ def get_route_lookup(cust_code):
     週番号＋G列(曜日種別・そのまま) + E列(担当者コード・3桁ゼロ埋め) でルートコードを作る。
     担当者名はE列(担当者コード)に対応するF列(担当者名)から取得する。
     ご契約データは商品ごとに複数行あるため、同じ顧客コードの行を全て見て、
-    ルートコード・担当者コード・担当者名とも重複を除いて返す。"""
+    ルートコード・担当者コードのペアを重複を除いて返す
+    （1顧客が複数ルート・複数担当者を持つ場合は複数件返る。呼び出し側で
+    複数行表示するために、ルートコードと担当者を対応付けたまま返す）。
+    戻り値: [{"route_code": ..., "staff_code": ..., "staff_name": ...}, ...]"""
     if not cust_code or not str(cust_code).strip():
-        return [], [], []
+        return []
     df_contract = _load_contract_df()
     if df_contract is None:
-        return [], [], []
+        return []
 
     matched = df_contract[
         df_contract.iloc[:, CONTRACT_COL_CUST_CODE].astype(str).str.strip() == str(cust_code).strip()
     ]
     if matched.empty:
-        return [], [], []
+        return []
 
-    route_codes = []
-    staff_codes = []
-    staff_names = []
+    results = []
+    seen_codes = set()
     for _, c_row in matched.iterrows():
         weekday = str(c_row.iloc[CONTRACT_COL_WEEKDAY]).strip() if pd.notna(c_row.iloc[CONTRACT_COL_WEEKDAY]) else ""
         staff_code = str(c_row.iloc[CONTRACT_COL_STAFF_CODE]).strip() if pd.notna(c_row.iloc[CONTRACT_COL_STAFF_CODE]) else ""
         staff_name = str(c_row.iloc[CONTRACT_COL_STAFF_NAME]).strip() if len(c_row) > CONTRACT_COL_STAFF_NAME and pd.notna(c_row.iloc[CONTRACT_COL_STAFF_NAME]) else ""
-        if staff_code and staff_code not in staff_codes:
-            staff_codes.append(staff_code)
-            staff_names.append(staff_name)
         for week_num, col_idx in enumerate(CONTRACT_WEEK_COLS, start=1):
             if col_idx >= len(c_row):
                 continue
             week_val = c_row.iloc[col_idx]
             if pd.notna(week_val) and str(week_val).strip() not in ("", "0"):
                 code = f"{week_num}{weekday}{staff_code.zfill(3)}"
-                if code not in route_codes:
-                    route_codes.append(code)
-    return route_codes, staff_codes, staff_names
+                if code not in seen_codes:
+                    seen_codes.add(code)
+                    results.append({"route_code": code, "staff_code": staff_code, "staff_name": staff_name})
+    return results
 
 
 def get_staff_name_by_code(staff_code):
@@ -163,7 +163,7 @@ def render_route_change_tabs():
     for _key, _default in [
         (f"rt_ccode{rclear}", ""), (f"rt_cname{rclear}", ""),
         (f"rt_scode{rclear}", ""), (f"rt_sname{rclear}", ""),
-        (f"rt_rbefore{rclear}", ""), (f"rt_obefore_code{rclear}", ""), (f"rt_obefore_name{rclear}", ""),
+        (f"rt_rbefore_pairs{rclear}", []),
         (f"rt_oafter_code{rclear}", ""), (f"rt_oafter_name{rclear}", ""),
     ]:
         if _key not in st.session_state:
@@ -287,16 +287,17 @@ def render_route_change_tabs():
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
-                            route_codes, staff_codes, staff_names = get_route_lookup(cust_code_input)
+                            route_pairs = get_route_lookup(cust_code_input)
 
                             st.session_state["route_searched_ccode"] = str(cust_code_input)
                             st.session_state[f"rt_ccode{rclear}"] = str(cust_code_input)
                             st.session_state[f"rt_sname{rclear}"] = str(last_row.iloc[0]) if pd.notna(last_row.iloc[0]) else ""
                             st.session_state[f"rt_cname{rclear}"] = str(last_row.iloc[2]) if pd.notna(last_row.iloc[2]) else ""
                             st.session_state[f"rt_scode{rclear}"] = str(last_row.iloc[4]) if pd.notna(last_row.iloc[4]) else ""
-                            st.session_state[f"rt_rbefore{rclear}"] = "、".join(route_codes)
-                            st.session_state[f"rt_obefore_code{rclear}"] = "、".join(staff_codes)
-                            st.session_state[f"rt_obefore_name{rclear}"] = "、".join([n for n in staff_names if n])
+                            # 💡 顧客に複数のルート・担当者がある場合、以前は「、」区切りで
+                            #    1行にまとめて表示していたが、見づらいため1件ずつ複数行で
+                            #    表示するようにする（ペアのリストをそのまま保存しておく）。
+                            st.session_state[f"rt_rbefore_pairs{rclear}"] = route_pairs
 
                             st.toast("顧客情報を取得しました！", icon="✅")
                             time.sleep(0.3)
@@ -322,10 +323,38 @@ def render_route_change_tabs():
 
             st.write("---")
             st.write("**🗺️ ルート情報**")
-            row3_col1, row3_col2, row3_col3 = st.columns(3)
-            route_before = row3_col1.text_input("変更前ルート", key=f"rt_rbefore{rclear}", disabled=True)
-            op_before_code = row3_col2.text_input("変更前担当者コード", key=f"rt_obefore_code{rclear}", disabled=True)
-            op_before_name = row3_col3.text_input("変更前担当者", key=f"rt_obefore_name{rclear}", disabled=True)
+
+            # 💡 顧客コード検索で複数のルート・担当者が見つかった場合は、1行にまとめず
+            #    ルートごとに行を分けて表示する（担当表が複数あるお客様向け）。
+            route_pairs = st.session_state.get(f"rt_rbefore_pairs{rclear}", [])
+            if route_pairs:
+                if len(route_pairs) > 1:
+                    st.caption(f"🗺️ 変更前ルートが{len(route_pairs)}件見つかりました。")
+                for _i, _pair in enumerate(route_pairs):
+                    rp_col1, rp_col2, rp_col3 = st.columns(3)
+                    rp_col1.text_input(
+                        "変更前ルート", value=_pair["route_code"], disabled=True,
+                        key=f"rt_rbefore_{_i}{rclear}",
+                    )
+                    rp_col2.text_input(
+                        "変更前担当者コード", value=_pair["staff_code"], disabled=True,
+                        key=f"rt_obefore_code_{_i}{rclear}",
+                    )
+                    rp_col3.text_input(
+                        "変更前担当者", value=_pair["staff_name"], disabled=True,
+                        key=f"rt_obefore_name_{_i}{rclear}",
+                    )
+            else:
+                rp_col1, rp_col2, rp_col3 = st.columns(3)
+                rp_col1.text_input("変更前ルート", value="", disabled=True, key=f"rt_rbefore_empty{rclear}")
+                rp_col2.text_input("変更前担当者コード", value="", disabled=True, key=f"rt_obefore_code_empty{rclear}")
+                rp_col3.text_input("変更前担当者", value="", disabled=True, key=f"rt_obefore_name_empty{rclear}")
+
+            # 💡 GAS側に送る「変更前ルート」等は従来通り1つの列に入れる必要があるため、
+            #    表示は複数行に分けつつ、送信データは「、」区切りの1つの文字列にまとめる。
+            route_before = "、".join(p["route_code"] for p in route_pairs)
+            op_before_code = "、".join(p["staff_code"] for p in route_pairs)
+            op_before_name = "、".join(p["staff_name"] for p in route_pairs if p["staff_name"])
 
             def _on_rt_oafter_code_change(_rclear=rclear):
                 code_val = st.session_state.get(f"rt_oafter_code{_rclear}", "").strip()

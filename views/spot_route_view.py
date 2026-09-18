@@ -226,7 +226,7 @@ def render_spot_route_change_tabs():
 
                         if not matched.empty:
                             last_row = matched.iloc[-1]
-                            route_codes, _staff_codes, _staff_names = get_route_lookup(cust_code_input)
+                            route_codes = [p["route_code"] for p in get_route_lookup(cust_code_input)]
 
                             st.session_state["spot_route_searched_ccode"] = str(cust_code_input)
                             st.session_state[f"sr_ccode{rclear}"] = str(cust_code_input)
