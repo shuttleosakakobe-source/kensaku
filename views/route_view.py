@@ -324,56 +324,72 @@ def render_route_change_tabs():
             st.write("---")
             st.write("**🗺️ ルート情報**")
 
-            # 💡 顧客コード検索で複数のルート・担当者が見つかった場合は、1行にまとめず
-            #    ルートごとに行を分けて表示する（担当表が複数あるお客様向け）。
+            # 💡 顧客コード検索で複数のルートが見つかった場合、変更前ルートと変更後ルートを
+            #    ルートごとに同じ行に並べる（どの変更前ルートに対する変更後ルートかが
+            #    分かるように）。担当者は多くの場合ルートが複数あっても同じ1人なので、
+            #    ルートごとに繰り返さず、下にまとめて1行だけ表示する。
             route_pairs = st.session_state.get(f"rt_rbefore_pairs{rclear}", [])
+            route_after_list = []
             if route_pairs:
                 if len(route_pairs) > 1:
-                    st.caption(f"🗺️ 変更前ルートが{len(route_pairs)}件見つかりました。")
+                    st.caption(f"🗺️ 変更前ルートが{len(route_pairs)}件見つかりました。ルートごとに変更後ルートを入力してください。")
                 for _i, _pair in enumerate(route_pairs):
-                    rp_col1, rp_col2, rp_col3 = st.columns(3)
+                    rp_col1, rp_col2 = st.columns(2)
                     rp_col1.text_input(
                         "変更前ルート", value=_pair["route_code"], disabled=True,
                         key=f"rt_rbefore_{_i}{rclear}",
                     )
-                    rp_col2.text_input(
-                        "変更前担当者コード", value=_pair["staff_code"], disabled=True,
-                        key=f"rt_obefore_code_{_i}{rclear}",
+                    _rafter_val = rp_col2.text_input(
+                        "変更後ルート", value="", key=f"rt_rafter_{_i}{rclear}",
                     )
-                    rp_col3.text_input(
-                        "変更前担当者", value=_pair["staff_name"], disabled=True,
-                        key=f"rt_obefore_name_{_i}{rclear}",
-                    )
+                    route_after_list.append(_rafter_val)
             else:
-                rp_col1, rp_col2, rp_col3 = st.columns(3)
+                rp_col1, rp_col2 = st.columns(2)
                 rp_col1.text_input("変更前ルート", value="", disabled=True, key=f"rt_rbefore_empty{rclear}")
-                rp_col2.text_input("変更前担当者コード", value="", disabled=True, key=f"rt_obefore_code_empty{rclear}")
-                rp_col3.text_input("変更前担当者", value="", disabled=True, key=f"rt_obefore_name_empty{rclear}")
+                _rafter_val = rp_col2.text_input("変更後ルート", value="", key=f"rt_rafter_empty{rclear}")
+                route_after_list.append(_rafter_val)
 
-            # 💡 GAS側に送る「変更前ルート」等は従来通り1つの列に入れる必要があるため、
-            #    表示は複数行に分けつつ、送信データは「、」区切りの1つの文字列にまとめる。
+            # 💡 GAS側に送る「変更前ルート」「変更後ルート」は従来通り1つの列に入れる必要が
+            #    あるため、表示はルートごとに分けつつ、送信データは「、」区切りの
+            #    1つの文字列にまとめる（対応関係は入力順で保たれる）。
             route_before = "、".join(p["route_code"] for p in route_pairs)
-            op_before_code = "、".join(p["staff_code"] for p in route_pairs)
-            op_before_name = "、".join(p["staff_name"] for p in route_pairs if p["staff_name"])
+            route_after = "、".join(v for v in route_after_list if v.strip())
+
+            # 💡 担当者（変更前）は重複を除いて1行にまとめる。通常は同じ顧客の複数ルートでも
+            #    担当者は同じ1人なので、ルートごとに繰り返す必要が無い。
+            op_before_code = "、".join(dict.fromkeys(p["staff_code"] for p in route_pairs if p["staff_code"]))
+            op_before_name = "、".join(dict.fromkeys(p["staff_name"] for p in route_pairs if p["staff_name"]))
 
             def _on_rt_oafter_code_change(_rclear=rclear):
                 code_val = st.session_state.get(f"rt_oafter_code{_rclear}", "").strip()
                 st.session_state[f"rt_oafter_name{_rclear}"] = get_staff_name_by_code(code_val) if code_val else ""
 
-            row4_col1, row4_col2, row4_col3 = st.columns(3)
-            route_after = row4_col1.text_input("変更後ルート", key=f"rt_rafter{rclear}")
-            op_after_code = row4_col2.text_input(
+            st.write("---")
+            staff_col1, staff_col2, staff_col3, staff_col4 = st.columns(4)
+            staff_col1.text_input(
+                "変更前担当者コード", value=op_before_code, disabled=True,
+                key=f"rt_obefore_code_display{rclear}",
+            )
+            staff_col2.text_input(
+                "変更前担当者", value=op_before_name, disabled=True,
+                key=f"rt_obefore_name_display{rclear}",
+            )
+            op_after_code = staff_col3.text_input(
                 "変更後担当者コード（入力すると担当者名を自動表示）",
                 key=f"rt_oafter_code{rclear}",
                 on_change=_on_rt_oafter_code_change,
             )
-            op_after_name = row4_col3.text_input("変更後担当者（コードから自動表示・手入力も可）", key=f"rt_oafter_name{rclear}")
+            op_after_name = staff_col4.text_input("変更後担当者（コードから自動表示・手入力も可）", key=f"rt_oafter_name{rclear}")
 
             st.write("---")
 
             # 💡 変更後ルートが担当表に登場する日付を「次回訪問日」の候補にする
             #    （同じルートが数週間おきに巡回するため、複数の日付が候補になることがある）。
-            rt_visit_date_options = get_route_dates_for_code(route_after)
+            #    変更後ルートがルートごとに複数入力されている場合は、それぞれの候補日を
+            #    まとめて（重複除去・日付順で）候補にする。
+            rt_visit_date_options = sorted(set(
+                d for v in route_after_list if v.strip() for d in get_route_dates_for_code(v)
+            ))
 
             with st.form("rt_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
