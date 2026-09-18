@@ -10,7 +10,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
-    ai_check_order_anomaly,
+    ai_check_order_anomaly, check_route_roster_match,
 )
 
 
@@ -618,6 +618,27 @@ def render_product_order_tabs():
                                     ai_items.append({"code": code, "qty": qty, "price": price})
                             ai_past_items = _get_past_order_items_for_ai(cust_code)
                             ai_result = ai_check_order_anomaly(cust_code, cust_name, ai_items, ai_past_items)
+
+                            # 💡 ルート担当表との照合：申請のルートコード・納品日・担当者（納品者）が
+                            #    担当表の記載と食い違っている場合は、AIの判定に関わらず必ず
+                            #    「異常あり」にして人の確認に回す（担当表が読めない・該当データが
+                            #    無いだけの場合は判定不能＝matched=Noneとして、AIの結果はそのまま使う）。
+                            route_matched, route_detail = check_route_roster_match(
+                                str(row.iloc[6]) if pd.notna(row.iloc[6]) else "",
+                                str(row.iloc[7]) if pd.notna(row.iloc[7]) else "",
+                                str(row.iloc[8]) if pd.notna(row.iloc[8]) else "",
+                            )
+                            if route_matched is False:
+                                ai_result = {
+                                    "checked": True,
+                                    "has_anomaly": True,
+                                    "reason": (
+                                        f"{ai_result['reason']} / 🗺️ {route_detail}"
+                                        if ai_result["checked"] and ai_result["reason"]
+                                        else f"🗺️ {route_detail}"
+                                    ),
+                                }
+
                             st.session_state["ai_checked_row_sigs"][ai_sig] = ai_result
                         else:
                             ai_result = st.session_state["ai_checked_row_sigs"][ai_sig]

@@ -21,6 +21,13 @@ CONTRACT_DATA_SHEET_URL = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAI
 CONTRACT_COL_CUST_CODE = 0
 CONTRACT_WEEK_COLS = [12, 13, 14, 15]  # M, N, O, P → 週1, 週2, 週3, 週4
 
+# ルート担当表（日付 × 担当者のマトリクス。A列=日付、B列=曜日、C列=基本ルート、
+# D列以降＝担当者ごとの列で、見出しがその人の氏名、セルの値がその日その人が担当する
+# 実際のルートコード）。管理職チェックで、申請のルートコード・納品日・担当者が
+# この表と一致しているかを確認するために使う。
+ROUTE_ROSTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=1244262789"
+ROUTE_ROSTER_STAFF_COL_START = 3  # D列（0始まり）から担当者ごとの列が始まる
+
 # TAB5用：加盟店別 印刷フォーマットのスプレッドシート（DEST_SHEET_URLとは別シート／gidが違う点に注意）
 PRINT_SHEET_ID = "1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI"
 
@@ -148,6 +155,57 @@ def ai_check_order_anomaly(cust_code, cust_name, items, past_items_list):
             "has_anomaly": True,
             "reason": f"AIチェックでエラーが発生したため、念のため内容をご確認ください（{e}）",
         }
+
+
+def check_route_roster_match(delivery_date_str, route_code, staff_name):
+    """申請のルートコード・納品日・担当者が、ルート担当表（ROUTE_ROSTER_CSV）の
+    内容と一致しているかを確認する。
+    戻り値: (matched, detail)
+    - matched=True: 担当表の記載と一致
+    - matched=False: 担当表の記載と食い違っている（＝明確な異常として扱ってよい）
+    - matched=None: 担当表が読み込めない／該当する日付や担当者の列が無いなど、
+      判定できなかった場合。判定不能なだけなので、呼び出し側では「異常あり」には
+      しない（担当表の氏名表記ゆれ等で毎回引っかかってしまうのを避けるため）。
+    シートに年の記載が無い（"10/1"のような月日のみ）ため、月日だけで日付を照合する。
+    """
+    try:
+        df = read_csv_cached(ROUTE_ROSTER_CSV, header=None)
+    except Exception as e:
+        return None, f"担当表の読み込みに失敗しました（{e}）"
+
+    if df.empty or len(df) < 2:
+        return None, "担当表にデータがありません"
+
+    header = df.iloc[0]
+    staff_col = None
+    for col_idx in range(ROUTE_ROSTER_STAFF_COL_START, len(header)):
+        name = str(header.iloc[col_idx]).strip() if pd.notna(header.iloc[col_idx]) else ""
+        if name and name == str(staff_name).strip():
+            staff_col = col_idx
+            break
+    if staff_col is None:
+        return None, f"担当表に「{staff_name}」の列が見つかりません"
+
+    parsed_target = pd.to_datetime(str(delivery_date_str), errors="coerce")
+    if pd.isna(parsed_target):
+        return None, "納品日の形式を解釈できませんでした"
+
+    for row_idx in range(1, len(df)):
+        parsed_row = pd.to_datetime(str(df.iloc[row_idx, 0]), errors="coerce")
+        if pd.isna(parsed_row):
+            continue
+        if (parsed_row.month, parsed_row.day) != (parsed_target.month, parsed_target.day):
+            continue
+
+        cell = df.iloc[row_idx, staff_col] if staff_col < df.shape[1] else None
+        sheet_route = str(cell).strip() if pd.notna(cell) else ""
+        if not sheet_route:
+            return False, f"担当表では{staff_name}さんは{delivery_date_str}の割り当てがありません"
+        if sheet_route == str(route_code).strip():
+            return True, ""
+        return False, f"担当表では{delivery_date_str}の{staff_name}さんのルートは「{sheet_route}」です（申請は「{route_code}」）"
+
+    return None, f"担当表に{delivery_date_str}のデータが見つかりません"
 
 
 @st.cache_data(ttl=60)
