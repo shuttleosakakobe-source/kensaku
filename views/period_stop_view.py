@@ -510,33 +510,14 @@ def render_period_stop_tabs():
                                     st.text_area("特記事項", value=comment_val, disabled=True, key=f"ps_v_comment_{row_id}")
 
                             st.write("---")
-                            st.write("**💬 申請者への連絡コメント（差戻しではなく、情報共有のみ）**")
-                            staff_comment_val = st.text_area(
-                                "コメント", key=f"ps_staff_comment_{row_id}",
-                                placeholder="差戻しにはせず、申請者に伝えたい連絡事項があれば入力してください",
-                            )
-                            if st.button("💬 コメントを送信", key=f"ps_staff_comment_btn_{row_id}"):
-                                if staff_comment_val.strip():
-                                    staff_comment_res = send_staff_comment(
-                                        mode_name="期間ストップ",
-                                        cust_code=_v("cust_code"), cust_name=_v("cust_name"),
-                                        applicant=_v("applicant"),
-                                        comment=staff_comment_val,
-                                        staff_name=st.session_state["user_name"],
-                                    )
-                                    if staff_comment_res.get("status") == "success":
-                                        st.toast("コメントを送信しました！", icon="💬")
-                                        time.sleep(1)
-                                        st.rerun()
-                                    else:
-                                        st.error(f"送信に失敗しました: {staff_comment_res.get('message')}")
-                                else:
-                                    st.warning("コメントを入力してください。")
-
                             st.write("---")
                             with st.form(key=f"ps_transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
+                                staff_comment_val = st.text_area(
+                                    "💬 申請者への連絡コメント（任意・差戻しにはなりません）", key=f"ps_staff_comment_{row_id}",
+                                    placeholder="転記時に申請者へ伝えたい連絡事項があれば入力してください",
+                                )
                                 op_reject_reason = st.text_input("⚠️ 差戻し理由（※業務側で不備がある場合のみ入力）", key=f"ps_op_rej_reason_{row_id}")
 
                                 col_trans, col_rej = st.columns(2)
@@ -566,6 +547,14 @@ def render_period_stop_tabs():
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
                                             read_csv_cached.clear()
+                                            if staff_comment_val.strip():
+                                                send_staff_comment(
+                                                    mode_name="期間ストップ",
+                                                    cust_code=_v("cust_code"), cust_name=_v("cust_name"),
+                                                    applicant=_v("applicant"),
+                                                    comment=staff_comment_val,
+                                                    staff_name=op_user,
+                                                )
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
                                             st.rerun()
