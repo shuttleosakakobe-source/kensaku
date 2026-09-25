@@ -1,5 +1,6 @@
 """メンテナンス業務画面の入口。商品発注／ルート変更／契約内容変更をボタンで切り替える。"""
 import streamlit as st
+import time
 
 from views.route_view import render_route_change_tabs, ROUTE_COL, ROUTE_TARGET_SHEET_CSV, ROUTE_DEST_SHEET_CSV
 from views.contract_view import render_contract_change_tabs, CC_COL, CC_TARGET_SHEET_CSV, CC_DEST_SHEET_CSV
@@ -16,7 +17,10 @@ from views.customer_balance_view import (
 from views.period_stop_view import render_period_stop_tabs, PS_COL, PS_TARGET_SHEET_CSV, PS_DEST_SHEET_CSV
 from views.other_view import render_other_maintenance_tabs, OT_COL, OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV
 from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV
-from views.maint_common import mode_has_pending_work, get_current_role
+from views.maint_common import (
+    mode_has_pending_work, get_current_role,
+    get_unconfirmed_staff_comments, confirm_staff_comment,
+)
 from views.navi_view import route_navigation_screen
 from views.customer_contract_data_view import customer_contract_data_screen
 
@@ -87,6 +91,40 @@ def maintenance_admin_screen():
     """, unsafe_allow_html=True)
 
     st.markdown("#### 📦🗺️📋 メンテナンス業務")
+
+    # 💡 業務担当（TAB3）からの連絡コメント通知：ログイン中のユーザーが申請者になっている
+    #    未確認コメントがあれば、バッジを出して一覧・確認ボタンを表示する。
+    unconfirmed_comments = get_unconfirmed_staff_comments(st.session_state.get("user_name", ""))
+    if unconfirmed_comments:
+        if "show_staff_comments" not in st.session_state:
+            st.session_state["show_staff_comments"] = False
+
+        def _toggle_staff_comments():
+            st.session_state["show_staff_comments"] = not st.session_state["show_staff_comments"]
+
+        st.button(
+            f"🔔 業務担当からの未確認コメントが{len(unconfirmed_comments)}件あります（クリックで表示）",
+            on_click=_toggle_staff_comments,
+            use_container_width=True,
+            type="primary",
+            key="staff_comment_badge_btn",
+        )
+
+        if st.session_state["show_staff_comments"]:
+            for _c in unconfirmed_comments:
+                with st.container(border=True):
+                    st.write(f"**{_c['mode_name']}** ｜ {_c['cust_name']}（{_c['cust_code']}） ｜ {_c['timestamp']}")
+                    st.caption(f"記入者: {_c['staff_name']}")
+                    st.write(_c["comment"])
+                    if st.button("✅ 確認しました", key=f"confirm_staff_comment_{_c['row_index']}"):
+                        _confirm_res = confirm_staff_comment(_c["row_index"])
+                        if _confirm_res.get("status") == "success":
+                            st.toast("確認しました！", icon="✅")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"確認処理に失敗しました: {_confirm_res.get('message')}")
+        st.write("---")
 
     if "maint_mode" not in st.session_state:
         st.session_state["maint_mode"] = "order"

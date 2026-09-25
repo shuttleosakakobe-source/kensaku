@@ -14,8 +14,7 @@ import time
 from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
-    tab_visible, RESTRICTED_TAB_MSG,
-
+    tab_visible, RESTRICTED_TAB_MSG, send_staff_comment,
 )
 from views.contract_view import (
     get_contract_products, _cc_product_labels, _cc_hide_zero, _cc_sum4,
@@ -758,6 +757,30 @@ def render_delivery_qty_change_tabs():
                                     st.text_area("特記事項", value=comment_val, disabled=True, key=f"dq_v_comment_{row_id}")
                                 if contact_val.strip():
                                     st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"dq_v_contact_{row_id}")
+
+                            st.write("---")
+                            st.write("**💬 申請者への連絡コメント（差戻しではなく、情報共有のみ）**")
+                            staff_comment_val = st.text_area(
+                                "コメント", key=f"dq_staff_comment_{row_id}",
+                                placeholder="差戻しにはせず、申請者に伝えたい連絡事項があれば入力してください",
+                            )
+                            if st.button("💬 コメントを送信", key=f"dq_staff_comment_btn_{row_id}"):
+                                if staff_comment_val.strip():
+                                    staff_comment_res = send_staff_comment(
+                                        mode_name="納品数量変更",
+                                        cust_code=_v("cust_code"), cust_name=_v("cust_name"),
+                                        applicant=_v("applicant"),
+                                        comment=staff_comment_val,
+                                        staff_name=st.session_state["user_name"],
+                                    )
+                                    if staff_comment_res.get("status") == "success":
+                                        st.toast("コメントを送信しました！", icon="💬")
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"送信に失敗しました: {staff_comment_res.get('message')}")
+                                else:
+                                    st.warning("コメントを入力してください。")
 
                             st.write("---")
                             with st.form(key=f"dq_transfer_form_{row_id}"):

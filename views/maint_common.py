@@ -28,6 +28,13 @@ CONTRACT_WEEK_COLS = [12, 13, 14, 15]  # M, N, O, P → 週1, 週2, 週3, 週4
 ROUTE_ROSTER_CSV = "https://docs.google.com/spreadsheets/d/1AkMb1J2m3VZAIyMCKmr3T3E8-kJB0BDDdWQJuEn7YGc/gviz/tq?tqx=out:csv&gid=1244262789"
 ROUTE_ROSTER_STAFF_COL_START = 3  # D列（0始まり）から担当者ごとの列が始まる
 
+# 業務担当コメント通知用シート（TAB3「業務担当」で、差戻しとは別に申請者への連絡コメントを
+# 残せるようにするための共有シート。列（0始まり）：
+# 0=タイムスタンプ, 1=モード名, 2=顧客コード, 3=顧客名, 4=申請者（通知先）,
+# 5=コメント本文, 6=記入した業務担当者, 7=確認済みフラグ, 8=確認日時）
+STAFF_COMMENT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=876912853#gid=876912853"
+STAFF_COMMENT_CSV = "https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/gviz/tq?tqx=out:csv&gid=876912853"
+
 # TAB5用：加盟店別 印刷フォーマットのスプレッドシート（DEST_SHEET_URLとは別シート／gidが違う点に注意）
 PRINT_SHEET_ID = "1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI"
 
@@ -257,6 +264,65 @@ def get_route_dates_for_code(route_code):
         found_dates.add(candidate)
 
     return [d.strftime("%Y/%m/%d") for d in sorted(found_dates)]
+
+
+def send_staff_comment(mode_name, cust_code, cust_name, applicant, comment, staff_name):
+    """業務担当（TAB3）から、差戻しとは別に申請者への連絡コメントを送る。
+    差戻しと違って申請のステータスは一切変更せず、共有のSTAFF_COMMENT_SHEETに
+    1行追加するだけ（申請者側はメイン画面の通知バッジで気付いて確認する）。"""
+    now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+    full_row = [now_str, mode_name, cust_code, cust_name, applicant, comment, staff_name, "", ""]
+    return post_to_gas({
+        "action": "SEND_STAFF_COMMENT",
+        "target_sheet_url": STAFF_COMMENT_SHEET_URL,
+        "full_row": full_row,
+    })
+
+
+def get_unconfirmed_staff_comments(user_name):
+    """ログイン中のユーザーが申請者になっている、業務担当からの未確認コメントを
+    新しい順に返す。戻り値: [{"row_index":..., "timestamp":..., "mode_name":...,
+    "cust_code":..., "cust_name":..., "comment":..., "staff_name":...}, ...]"""
+    if not user_name or not str(user_name).strip():
+        return []
+    try:
+        df = read_csv_cached(STAFF_COMMENT_CSV, header=None)
+    except Exception:
+        return []
+    if df.empty or len(df) < 2:
+        return []
+
+    results = []
+    for row_idx in range(1, len(df)):
+        row = df.iloc[row_idx]
+        if len(row) < 8:
+            continue
+        row_applicant = str(row.iloc[4]).strip() if pd.notna(row.iloc[4]) else ""
+        confirmed = str(row.iloc[7]).strip() if pd.notna(row.iloc[7]) else ""
+        if confirmed or row_applicant != str(user_name).strip():
+            continue
+        results.append({
+            "row_index": row_idx + 1,  # header行を含めたシート上の実際の行番号（1始まり）
+            "timestamp": str(row.iloc[0]) if pd.notna(row.iloc[0]) else "",
+            "mode_name": str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
+            "cust_code": str(row.iloc[2]) if pd.notna(row.iloc[2]) else "",
+            "cust_name": str(row.iloc[3]) if pd.notna(row.iloc[3]) else "",
+            "comment": str(row.iloc[5]) if pd.notna(row.iloc[5]) else "",
+            "staff_name": str(row.iloc[6]) if pd.notna(row.iloc[6]) else "",
+        })
+    results.reverse()
+    return results
+
+
+def confirm_staff_comment(row_index):
+    """業務担当からの連絡コメントを「確認済み」にする。"""
+    now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+    return post_to_gas({
+        "action": "CONFIRM_STAFF_COMMENT",
+        "target_sheet_url": STAFF_COMMENT_SHEET_URL,
+        "row_index": row_index,
+        "confirmed_time": now_str,
+    })
 
 
 @st.cache_data(ttl=60)

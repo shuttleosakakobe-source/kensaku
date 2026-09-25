@@ -11,6 +11,7 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
+    send_staff_comment,
 )
 
 
@@ -862,6 +863,30 @@ def render_product_order_tabs():
                             app_com_val = str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else ""
                             if app_com_val.strip():
                                 st.text_area("申請者コメント", value=app_com_val, disabled=True, key=f"v_com_{row_id}")
+
+                            st.write("---")
+                            st.write("**💬 申請者への連絡コメント（差戻しではなく、情報共有のみ）**")
+                            staff_comment_val = st.text_area(
+                                "コメント", key=f"staff_comment_{row_id}",
+                                placeholder="差戻しにはせず、申請者に伝えたい連絡事項があれば入力してください",
+                            )
+                            if st.button("💬 コメントを送信", key=f"staff_comment_btn_{row_id}"):
+                                if staff_comment_val.strip():
+                                    staff_comment_res = send_staff_comment(
+                                        mode_name="商品発注",
+                                        cust_code=cust_code, cust_name=cust_name,
+                                        applicant=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
+                                        comment=staff_comment_val,
+                                        staff_name=st.session_state["user_name"],
+                                    )
+                                    if staff_comment_res.get("status") == "success":
+                                        st.toast("コメントを送信しました！", icon="💬")
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"送信に失敗しました: {staff_comment_res.get('message')}")
+                                else:
+                                    st.warning("コメントを入力してください。")
 
                             st.write("---")
                             with st.form(key=f"transfer_form_{row_id}"):

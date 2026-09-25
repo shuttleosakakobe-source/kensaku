@@ -182,6 +182,25 @@ function doPost(e) {
       }
 
       return ContentService.createTextOutput(JSON.stringify({"status": "success"})).setMimeType(ContentService.MimeType.JSON);
+
+    // ==========================================
+    // 7. 業務担当コメント通知用（TAB3「業務担当」で、差戻しとは別に申請者への連絡
+    //    コメントを残せるようにするための共有シート）
+    // 対象: https://docs.google.com/spreadsheets/d/1iiiCnlP0_wLgIJ092qiorb-Dj4O1GwNt_J9z92VXQNI/edit?gid=876912853#gid=876912853
+    // 列（1始まり）：A=タイムスタンプ, B=モード名, C=顧客コード, D=顧客名,
+    //   E=申請者（通知先）, F=コメント本文, G=記入した業務担当者, H=確認済みフラグ, I=確認日時
+    // ==========================================
+    } else if (action === "SEND_STAFF_COMMENT") {
+      var sheet = getSheetFromUrl(data.target_sheet_url);
+      sheet.appendRow(data.full_row);
+      return ContentService.createTextOutput(JSON.stringify({"status": "success"})).setMimeType(ContentService.MimeType.JSON);
+
+    } else if (action === "CONFIRM_STAFF_COMMENT") {
+      var sheet = getSheetFromUrl(data.target_sheet_url);
+      var rowIndex = data.row_index;
+      sheet.getRange(rowIndex, 8).setValue("確認済み");
+      sheet.getRange(rowIndex, 9).setValue(data.confirmed_time);
+      return ContentService.createTextOutput(JSON.stringify({"status": "success"})).setMimeType(ContentService.MimeType.JSON);
     }
 
     return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": "未定義のアクション: " + action})).setMimeType(ContentService.MimeType.JSON);
