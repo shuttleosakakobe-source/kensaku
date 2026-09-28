@@ -868,7 +868,6 @@ def render_product_order_tabs():
                             if app_com_val.strip():
                                 st.text_area("申請者コメント", value=app_com_val, disabled=True, key=f"v_com_{row_id}")
 
-                            st.write("---")
                             with st.form(key=f"transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
