@@ -573,7 +573,7 @@ def render_product_order_tabs():
                                         else:
                                             st.error(f"処理に失敗しました: {res.get('message')}")
             else:
-                st.info("現在、データがありません。")
+                st.info("現在、差戻しデータはありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -782,7 +782,7 @@ def render_product_order_tabs():
                         time.sleep(1)
                         st.rerun()
             else:
-                st.info("現在、データがありません。")
+                st.info("現在、未承認の申請はありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 

@@ -705,7 +705,7 @@ def render_contract_change_tabs():
                                         else:
                                             st.error(f"処理に失敗しました: {res.get('message')}")
             else:
-                st.info("現在、データがありません。")
+                st.info("現在、差戻しデータはありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -802,7 +802,7 @@ def render_contract_change_tabs():
                                     else:
                                         st.error(f"処理に失敗しました: {res.get('message')}")
             else:
-                st.info("現在、データがありません。")
+                st.info("現在、未承認の申請はありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
