@@ -44,10 +44,25 @@ def _render_replace_section(label, action_name, target_sheet_url, state_key):
         "（見出し行も含めて、シートに入れたい内容をそのままアップロードします）。"
     )
 
+    # 💡 反映成功後、アップロード欄／確認チェックボックスを未入力の状態に戻したいが、
+    #    st.session_state[widgetのkey] = 値 という代入・削除は、そのウィジェットが
+    #    この回のスクリプト内で既にインスタンス化された後だとStreamlitWidgetAlready
+    #    InstantiatedErrorになってしまう（del でも同様に発生することが確認できたため、
+    #    ウィジェット本体のkeyには一切触れない設計に変更した）。
+    #    代わりに、ウィジェットのkey自体に含める「世代番号」をただの整数として
+    #    session_stateに持たせ、反映成功時にその番号を1つ進めてからrerunする。
+    #    次のスクリプト実行ではkeyが変わるため、アップロード欄・チェックボックスは
+    #    自動的に「何もアップロードされていない・未チェック」の初期状態になる
+    #    （かつ、古いファイルがそのまま残って誤って二重反映されるのも防げる）。
+    reset_key = f"{state_key}_gen"
+    if reset_key not in st.session_state:
+        st.session_state[reset_key] = 0
+    gen = st.session_state[reset_key]
+
     uploaded_file = st.file_uploader(
         f"{label}のファイルを選択",
         type=["xlsx", "csv"],
-        key=f"{state_key}_file",
+        key=f"{state_key}_file_{gen}",
     )
 
     if uploaded_file is None:
@@ -76,14 +91,14 @@ def _render_replace_section(label, action_name, target_sheet_url, state_key):
     )
     confirm = st.checkbox(
         f"内容を確認しました。「{label}」シートをこのファイルの内容で置き換えます。",
-        key=f"{state_key}_confirm",
+        key=f"{state_key}_confirm_{gen}",
     )
 
     if st.button(
         f"🔁 {label}をこの内容で置き換える",
         type="primary",
         disabled=not confirm,
-        key=f"{state_key}_btn",
+        key=f"{state_key}_btn_{gen}",
     ):
         payload = {
             "action": action_name,
@@ -95,11 +110,7 @@ def _render_replace_section(label, action_name, target_sheet_url, state_key):
 
         if res.get("status") == "success":
             st.success(f"✅ {label}を反映しました。")
-            # このチェックボックスはすでに st.checkbox(key=...) でこの回のスクリプト内に
-            # 生成済みのため、st.session_state[key] = False という代入は
-            # StreamlitWidgetAlreadyInstantiatedError になる。del で削除すれば、
-            # 次のrerun時にキーが無い状態＝チェックボックスの既定値（未チェック）に戻る。
-            del st.session_state[f"{state_key}_confirm"]
+            st.session_state[reset_key] = gen + 1
             read_csv_cached.clear()
             st.rerun()
         else:
