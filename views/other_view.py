@@ -176,9 +176,33 @@ def render_other_maintenance_tabs():
 
                         expander_label = f"📌 【{store_name_v or '未設定'}】 {cust_name_v}（{cust_code_v}） | 申請日: {timestamp_v}"
                         with st.expander(expander_label):
-                            st.write(f"**担当者名：** {applicant_v}")
-                            st.write(f"**処理日時：** {process_time_v}")
-                            st.dataframe(row.to_frame().T, use_container_width=True, hide_index=True)
+                            st.write("**📋 申請内容**")
+
+                            s6_c1, s6_c2, s6_c3 = st.columns(3)
+                            s6_c1.text_input("顧客コード", value=cust_code_v, disabled=True, key=f"s6_ccode_{idx}")
+                            s6_c2.text_input("顧客名", value=cust_name_v, disabled=True, key=f"s6_cname_{idx}")
+                            s6_c3.text_input("加盟店コード", value=_val(_col6.get("store_code")), disabled=True, key=f"s6_scode_{idx}")
+
+                            s6_d1, s6_d2, s6_d3 = st.columns(3)
+                            s6_d1.text_input("加盟店名", value=store_name_v, disabled=True, key=f"s6_sname_{idx}")
+                            s6_d2.text_input("申請者名", value=applicant_v, disabled=True, key=f"s6_app_{idx}")
+                            s6_d3.text_input("承認者", value=_val(_col6.get("status_sign")), disabled=True, key=f"s6_mgr_{idx}")
+
+                            s6_e1, s6_e2 = st.columns(2)
+                            s6_e1.text_input("種別", value=_val(_col6.get("category")), disabled=True, key=f"s6_cat_{idx}")
+                            s6_e2.text_input("種別詳細", value=_val(_col6.get("category_detail")), disabled=True, key=f"s6_catd_{idx}")
+
+                            s6_content = _val(_col6.get("content"))
+                            if s6_content.strip():
+                                st.text_area("内容", value=s6_content, disabled=True, key=f"s6_content_{idx}")
+
+                            st.text_input("連絡担当者様", value=_val(_col6.get("contact_person")), disabled=True, key=f"s6_contact_{idx}")
+                            s6_com = _val(_col6.get("comment"))
+                            if s6_com.strip():
+                                st.text_area("コメント", value=s6_com, disabled=True, key=f"s6_com_{idx}")
+
+                            st.write("---")
+                            st.write(f"**処理日時：** {process_time_v}　**処理者：** {_val(_col6.get('process_user'))}")
 
     _o_tab_all_labels = [
         "📝 メンテナンス / 差戻し修正",

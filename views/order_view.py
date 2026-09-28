@@ -266,9 +266,41 @@ def render_product_order_tabs():
 
                         expander_label = f"📌 【{store_name_v or '未設定'}】 {cust_name_v}（{cust_code_v}） | 申請日: {timestamp_v}"
                         with st.expander(expander_label):
-                            st.write(f"**担当者名：** {applicant_v}")
-                            st.write(f"**処理日時：** {process_time_v}")
-                            st.dataframe(row.to_frame().T, use_container_width=True, hide_index=True)
+                            st.write("**📋 申請内容**")
+
+                            s6_c1, s6_c2, s6_c3 = st.columns(3)
+                            s6_c1.text_input("顧客コード", value=cust_code_v, disabled=True, key=f"s6_ccode_{idx}")
+                            s6_c2.text_input("顧客名", value=cust_name_v, disabled=True, key=f"s6_cname_{idx}")
+                            s6_c3.text_input("加盟店コード", value=_val(5), disabled=True, key=f"s6_scode_{idx}")
+
+                            s6_d1, s6_d2, s6_d3 = st.columns(3)
+                            s6_d1.text_input("加盟店名", value=store_name_v, disabled=True, key=f"s6_sname_{idx}")
+                            s6_d2.text_input("ルートコード", value=_val(7), disabled=True, key=f"s6_rcode_{idx}")
+                            s6_d3.text_input("納品日", value=_val(6), disabled=True, key=f"s6_ddate_{idx}")
+
+                            s6_e1, s6_e2, s6_e3 = st.columns(3)
+                            s6_e1.text_input("納品者", value=_val(8), disabled=True, key=f"s6_dperson_{idx}")
+                            s6_e2.text_input("申請者名", value=applicant_v, disabled=True, key=f"s6_app_{idx}")
+                            s6_e3.text_input("承認者", value=_val(30), disabled=True, key=f"s6_mgr_{idx}")
+
+                            st.write("---")
+                            st.write("**📦 発注商品**")
+                            for s6_i in range(5):
+                                s6_base = 9 + (s6_i * 4)
+                                s6_p = _val(s6_base)
+                                if s6_p.strip():
+                                    s6_f1, s6_f2, s6_f3, s6_f4 = st.columns([3, 2, 2, 2])
+                                    s6_f1.text_input(f"商品コード {s6_i+1}", value=s6_p, disabled=True, key=f"s6_p_{idx}_{s6_i}")
+                                    s6_f2.text_input(f"数量 {s6_i+1}", value=_val(s6_base+1), disabled=True, key=f"s6_q_{idx}_{s6_i}")
+                                    s6_f3.text_input(f"単価 {s6_i+1}", value=_val(s6_base+2), disabled=True, key=f"s6_pr_{idx}_{s6_i}")
+                                    s6_f4.text_input(f"伝票出力 {s6_i+1}", value=_val(s6_base+3), disabled=True, key=f"s6_flg_{idx}_{s6_i}")
+
+                            s6_com = _val(29)
+                            if s6_com.strip():
+                                st.text_area("申請者コメント", value=s6_com, disabled=True, key=f"s6_com_{idx}")
+
+                            st.write("---")
+                            st.write(f"**処理日時：** {process_time_v}　**処理者：** {_val(OP_USER_COL_IDX)}")
 
     _tab_all_labels = [
         "📝 メンテナンス / 差戻し修正",
