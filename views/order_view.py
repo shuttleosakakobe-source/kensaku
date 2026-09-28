@@ -872,7 +872,6 @@ def render_product_order_tabs():
                             with st.form(key=f"transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
-                                op_memo = st.text_input("業務メモ / 伝票番号など（任意）", key=f"op_memo_{row_id}")
                                 staff_comment_val = st.text_area(
                                     "💬 申請者への連絡コメント（任意・差戻しにはなりません）", key=f"staff_comment_{row_id}",
                                     placeholder="転記時に申請者へ伝えたい連絡事項があれば入力してください",
@@ -888,7 +887,7 @@ def render_product_order_tabs():
 
                                 if btn_transfer:
                                     clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
-                                    transfer_row = clean_base_row + [action_time, op_user, op_memo]
+                                    transfer_row = clean_base_row + [action_time, op_user, ""]
 
                                     payload = {
                                         "action": "TRANSFER_TO_OPERATOR",
