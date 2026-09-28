@@ -829,7 +829,7 @@ def render_contract_change_tabs():
                 if approved_df.empty:
                     st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
                 else:
-                    st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
+                    st.success(f"📋 未承認のデータ: **{len(approved_df)} 件**")
 
                     for idx, row in approved_df.iloc[::-1].iterrows():
                         row_id = idx + 2

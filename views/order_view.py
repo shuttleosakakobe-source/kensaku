@@ -809,7 +809,7 @@ def render_product_order_tabs():
                 if approved_df.empty:
                     st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
                 else:
-                    st.success(f"📋 転記可能な承認済みデータ: **{len(approved_df)} 件**")
+                    st.success(f"📋 未承認のデータ: **{len(approved_df)} 件**")
                     
                     sort_by_date = st.checkbox("📅 納品日の早い順（昇順）で並び替える", value=False, key="t3_sort_date")
 
