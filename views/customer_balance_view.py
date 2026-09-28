@@ -464,6 +464,8 @@ def render_customer_balance_correction_tabs():
                                             st.rerun()
                                         else:
                                             st.error(f"処理に失敗しました: {res.get('message')}")
+            else:
+                st.info("現在、データがありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -557,6 +559,8 @@ def render_customer_balance_correction_tabs():
                                         st.rerun()
                                     else:
                                         st.error(f"処理に失敗しました: {res.get('message')}")
+            else:
+                st.info("現在、データがありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 

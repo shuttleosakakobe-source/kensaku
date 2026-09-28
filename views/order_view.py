@@ -572,6 +572,8 @@ def render_product_order_tabs():
                                             st.rerun()
                                         else:
                                             st.error(f"処理に失敗しました: {res.get('message')}")
+            else:
+                st.info("現在、データがありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
@@ -779,6 +781,8 @@ def render_product_order_tabs():
                         st.toast(f"🤖 AIチェックにより {auto_approved_count} 件を自動承認しました", icon="🤖")
                         time.sleep(1)
                         st.rerun()
+            else:
+                st.info("現在、データがありません。")
         except Exception as e:
             st.error(f"データ取得エラー: {e}")
 
