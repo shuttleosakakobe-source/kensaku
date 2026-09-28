@@ -1221,61 +1221,82 @@ def render_product_order_tabs():
                                     st.caption(f"顧客コード: {rec['cust_code']} ｜ 申請者: {rec['applicant']} ｜ 納品者: {rec['delivery_person']} ｜ 納品日: {rec['delivery_date']} ｜ ルートコード: {rec['route_code']}")
                                     st.caption(f"特記事項: {rec['special_note']}")
 
-                            if st.button("📥 反映してPDFを作成する", key=f"print_sync_btn_{page_idx}", type="primary"):
-                                payload = {
-                                    "action": "SYNC_PRINT_STORE_DATA",
-                                    "print_sheet_url": PRINT_SHEET_URL,
-                                    "store_name": selected_store,
-                                    "c1_value": c1_value,
-                                    "blocks": blocks,
-                                }
-                                with st.spinner("印刷用スプレッドシートへ反映しています..."):
-                                    res = post_to_gas(payload)
+                            # 💡 以前は「反映してPDFを作成する」ボタン1つで、スプレッドシートへの反映と同時に
+                            #    印刷済みマーク（AL列）まで付けてしまっていたため、PDFのダウンロード・印刷に
+                            #    失敗した場合や、実際にはまだ印刷していない場合でもこの一覧から消えてしまう
+                            #    不具合があった。「反映」と「印刷済みにする」を別ボタンに分離し、実際に印刷
+                            #    （またはPDF保存）したことをユーザー自身に確認してもらってから印刷済み
+                            #    マークを付けるようにする。
+                            pending_key = f"print_pending_{selected_store}_{page_idx}"
 
-                                if res.get("status") == "success":
-                                    # 印刷済みマーク（AL列＝印刷日時）を付けて、以後この印刷画面に出てこないようにする
-                                    print_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
-                                    mark_payload = {
-                                        "action": "MARK_PRINTED",
-                                        "target_sheet_url": DEST_SHEET_URL,
-                                        "row_indices": page_row_ids,
-                                        "print_time": print_time,
-                                        "print_col": PRINT_TIME_COL_IDX + 1,
+                            if pending_key not in st.session_state:
+                                if st.button("📥 反映してPDFを作成する", key=f"print_sync_btn_{page_idx}", type="primary"):
+                                    payload = {
+                                        "action": "SYNC_PRINT_STORE_DATA",
+                                        "print_sheet_url": PRINT_SHEET_URL,
+                                        "store_name": selected_store,
+                                        "c1_value": c1_value,
+                                        "blocks": blocks,
                                     }
-                                    mark_res = post_to_gas(mark_payload)
-                                    if mark_res.get("status") != "success":
-                                        st.warning(f"印刷済みマークの更新に失敗しました（反映自体は完了しています）: {mark_res.get('message')}")
+                                    with st.spinner("印刷用スプレッドシートへ反映しています..."):
+                                        res = post_to_gas(payload)
 
-                                    st.toast("🎉 反映が完了しました。PDFを作成しています…", icon="✅")
-                                    try:
-                                        # このページの実件数分（1件なら1〜16行目、2件なら1〜31行目…）だけをPDF化する。
-                                        # 空のブロックまで印刷されないよう、件数に応じて末尾行を切り詰める。
-                                        pdf_row_end = 1 + len(chunk) * 15
-                                        with st.spinner("PDFを作成しています..."):
-                                            pdf_res = requests.get(build_print_pdf_url(row_end=pdf_row_end, gid=PRINT_SHEET_GID), timeout=30)
-                                        content_type = pdf_res.headers.get("Content-Type", "")
-                                        if pdf_res.status_code == 200 and "pdf" in content_type.lower():
-                                            st.success("✅ PDFが作成できました。下のボタンからダウンロードしてください。")
-                                            st.download_button(
-                                                "📄 PDFをダウンロード",
-                                                data=pdf_res.content,
-                                                file_name=f"{selected_store}_p{page_idx + 1}.pdf",
-                                                mime="application/pdf",
-                                                key=f"pdf_dl_{page_idx}",
-                                            )
-                                        else:
-                                            st.warning(
-                                                "スプレッドシートへの反映は完了しましたが、アプリ上でのPDF取得に失敗しました"
-                                                "（共有設定などが原因の可能性があります）。"
-                                                f"[印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
-                                            )
-                                    except Exception as pdf_err:
+                                    if res.get("status") == "success":
+                                        st.session_state[pending_key] = {
+                                            "row_ids": page_row_ids,
+                                            "print_time": datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"),
+                                        }
+                                        st.rerun()
+                                    else:
+                                        st.error(f"反映に失敗しました: {res.get('message')}")
+                            else:
+                                st.success("✅ 印刷用スプレッドシートへの反映が完了しています。")
+                                try:
+                                    # このページの実件数分（1件なら1〜16行目、2件なら1〜31行目…）だけをPDF化する。
+                                    # 空のブロックまで印刷されないよう、件数に応じて末尾行を切り詰める。
+                                    pdf_row_end = 1 + len(chunk) * 15
+                                    with st.spinner("PDFを作成しています..."):
+                                        pdf_res = requests.get(build_print_pdf_url(row_end=pdf_row_end, gid=PRINT_SHEET_GID), timeout=30)
+                                    content_type = pdf_res.headers.get("Content-Type", "")
+                                    if pdf_res.status_code == 200 and "pdf" in content_type.lower():
+                                        st.download_button(
+                                            "📄 PDFをダウンロード",
+                                            data=pdf_res.content,
+                                            file_name=f"{selected_store}_p{page_idx + 1}.pdf",
+                                            mime="application/pdf",
+                                            key=f"pdf_dl_{page_idx}",
+                                        )
+                                    else:
                                         st.warning(
-                                            f"スプレッドシートへの反映は完了しましたが、PDF取得中にエラーが発生しました: {pdf_err}　"
+                                            "アプリ上でのPDF取得に失敗しました（共有設定などが原因の可能性があります）。"
                                             f"[印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
                                         )
-                                else:
-                                    st.error(f"反映に失敗しました: {res.get('message')}")
+                                except Exception as pdf_err:
+                                    st.warning(
+                                        f"PDF取得中にエラーが発生しました: {pdf_err}　"
+                                        f"[印刷用スプレッドシートを開く]({PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                    )
+
+                                st.info("🖨️ 印刷（またはPDF保存）が終わったら、下のボタンでこの一覧から消してください。")
+                                col_done, col_cancel = st.columns(2)
+                                if col_done.button("✅ 印刷済みにする（一覧から消す）", key=f"print_done_btn_{page_idx}", type="primary"):
+                                    pending = st.session_state[pending_key]
+                                    mark_res = post_to_gas({
+                                        "action": "MARK_PRINTED",
+                                        "target_sheet_url": DEST_SHEET_URL,
+                                        "row_indices": pending["row_ids"],
+                                        "print_time": pending["print_time"],
+                                        "print_col": PRINT_TIME_COL_IDX + 1,
+                                    })
+                                    if mark_res.get("status") == "success":
+                                        del st.session_state[pending_key]
+                                        read_csv_cached.clear()
+                                        st.rerun()
+                                    else:
+                                        st.error(f"印刷済みマークの更新に失敗しました: {mark_res.get('message')}")
+                                if col_cancel.button("↩️ まだ印刷していない（反映をやり直す）", key=f"print_cancel_btn_{page_idx}"):
+                                    del st.session_state[pending_key]
+                                    st.rerun()
 
                             st.write("---")
 

@@ -1105,60 +1105,78 @@ def render_delivery_qty_change_tabs():
                                     st.caption(f"理由: {rec['reason']} ｜ 連絡担当者様: {rec['contact_disp']}")
                                     st.caption(f"特記事項: {rec['comment']}")
 
-                            if st.button("📥 反映してPDFを作成する", key=f"dq_print_sync_btn_{page_idx}", type="primary"):
-                                payload = {
-                                    "action": "SYNC_PRINT_STORE_DATA",
-                                    "print_sheet_url": DQ_PRINT_SHEET_URL,
-                                    "store_name": selected_store,
-                                    "c1_value": c1_value,
-                                    "blocks": blocks,
-                                }
-                                with st.spinner("印刷用スプレッドシートへ反映しています..."):
-                                    res = post_to_gas(payload)
+                            # 💡「反映」と「印刷済みにする」を別ボタンに分離し、実際に印刷（またはPDF保存）
+                            #    したことをユーザー自身に確認してもらってから印刷済みマークを付ける
+                            #    （以前は反映と同時に印刷済みマークを付けていたため、PDFのダウンロードに
+                            #    失敗した場合や実際には印刷していない場合でも一覧から消えてしまっていた）。
+                            pending_key = f"dq_print_pending_{selected_store}_{page_idx}"
 
-                                if res.get("status") == "success":
-                                    print_time = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
-                                    mark_payload = {
+                            if pending_key not in st.session_state:
+                                if st.button("📥 反映してPDFを作成する", key=f"dq_print_sync_btn_{page_idx}", type="primary"):
+                                    payload = {
+                                        "action": "SYNC_PRINT_STORE_DATA",
+                                        "print_sheet_url": DQ_PRINT_SHEET_URL,
+                                        "store_name": selected_store,
+                                        "c1_value": c1_value,
+                                        "blocks": blocks,
+                                    }
+                                    with st.spinner("印刷用スプレッドシートへ反映しています..."):
+                                        res = post_to_gas(payload)
+
+                                    if res.get("status") == "success":
+                                        st.session_state[pending_key] = {
+                                            "row_ids": page_row_ids,
+                                            "print_time": datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"),
+                                        }
+                                        st.rerun()
+                                    else:
+                                        st.error(f"反映に失敗しました: {res.get('message')}")
+                            else:
+                                st.success("✅ 印刷用スプレッドシートへの反映が完了しています。")
+                                try:
+                                    pdf_row_end = DQ_PRINT_BASE_ROWS[len(chunk) - 1] + 14 if len(chunk) > 0 else 18
+                                    with st.spinner("PDFを作成しています..."):
+                                        pdf_res = requests.get(
+                                            build_print_pdf_url(row_end=pdf_row_end, gid=DQ_PRINT_SHEET_GID),
+                                            timeout=30
+                                        )
+                                    content_type = pdf_res.headers.get("Content-Type", "")
+                                    if pdf_res.status_code == 200 and "pdf" in content_type.lower():
+                                        st.download_button(
+                                            "📄 PDFをダウンロード",
+                                            data=pdf_res.content,
+                                            file_name=f"{selected_store}_dq_p{page_idx + 1}.pdf",
+                                            mime="application/pdf",
+                                            key=f"dq_pdf_dl_{page_idx}",
+                                        )
+                                    else:
+                                        st.warning(
+                                            "アプリ上でのPDF取得に失敗しました（共有設定などが原因の可能性があります）。"
+                                            f"[印刷用スプレッドシートを開く]({DQ_PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
+                                        )
+                                except Exception as pdf_e:
+                                    st.warning(f"PDF作成中にエラーが発生しました: {pdf_e}")
+
+                                st.info("🖨️ 印刷（またはPDF保存）が終わったら、下のボタンでこの一覧から消してください。")
+                                col_done, col_cancel = st.columns(2)
+                                if col_done.button("✅ 印刷済みにする（一覧から消す）", key=f"dq_print_done_btn_{page_idx}", type="primary"):
+                                    pending = st.session_state[pending_key]
+                                    mark_res = post_to_gas({
                                         "action": "MARK_PRINTED",
                                         "target_sheet_url": DQ_DEST_SHEET_URL,
-                                        "row_indices": page_row_ids,
-                                        "print_time": print_time,
+                                        "row_indices": pending["row_ids"],
+                                        "print_time": pending["print_time"],
                                         "print_col": DQ_COL["print_time"] + 1,
-                                    }
-                                    mark_res = post_to_gas(mark_payload)
-                                    if mark_res.get("status") != "success":
-                                        st.warning(f"印刷済みマークの更新に失敗しました（反映自体は完了しています）: {mark_res.get('message')}")
-
-                                    st.toast("🎉 反映が完了しました。PDFを作成しています…", icon="✅")
-                                    try:
-                                        pdf_row_end = DQ_PRINT_BASE_ROWS[len(chunk) - 1] + 14 if len(chunk) > 0 else 18
-                                        with st.spinner("PDFを作成しています..."):
-                                            pdf_res = requests.get(
-                                                build_print_pdf_url(row_end=pdf_row_end, gid=DQ_PRINT_SHEET_GID),
-                                                timeout=30
-                                            )
-                                        content_type = pdf_res.headers.get("Content-Type", "")
-                                        if pdf_res.status_code == 200 and "pdf" in content_type.lower():
-                                            st.success("✅ PDFが作成できました。下のボタンからダウンロードしてください。")
-                                            st.download_button(
-                                                "📄 PDFをダウンロード",
-                                                data=pdf_res.content,
-                                                file_name=f"{selected_store}_dq_p{page_idx + 1}.pdf",
-                                                mime="application/pdf",
-                                                key=f"dq_pdf_dl_{page_idx}",
-                                            )
-                                        else:
-                                            st.warning(
-                                                "スプレッドシートへの反映は完了しましたが、アプリ上でのPDF取得に失敗しました"
-                                                "（共有設定などが原因の可能性があります）。"
-                                                f"[印刷用スプレッドシートを開く]({DQ_PRINT_SHEET_URL}) から印刷（PDF保存）してください。"
-                                            )
-                                    except Exception as pdf_e:
-                                        st.warning(f"PDF作成中にエラーが発生しました: {pdf_e}")
-                                    time.sleep(1)
+                                    })
+                                    if mark_res.get("status") == "success":
+                                        del st.session_state[pending_key]
+                                        read_csv_cached.clear()
+                                        st.rerun()
+                                    else:
+                                        st.error(f"印刷済みマークの更新に失敗しました: {mark_res.get('message')}")
+                                if col_cancel.button("↩️ まだ印刷していない（反映をやり直す）", key=f"dq_print_cancel_btn_{page_idx}"):
+                                    del st.session_state[pending_key]
                                     st.rerun()
-                                else:
-                                    st.error(f"反映に失敗しました: {res.get('message')}")
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
