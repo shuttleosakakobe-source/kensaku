@@ -18,7 +18,19 @@ def _read_uploaded_table(uploaded_file):
     """アップロードされたExcel/CSVファイルを2次元配列（リストのリスト）に変換する。
     1行目の見出し行も含め、ファイルの中身をそのままシートの行として扱う（header=None）。"""
     if uploaded_file.name.lower().endswith(".csv"):
-        df = pd.read_csv(uploaded_file, header=None, dtype=str, keep_default_na=False)
+        # ExcelでCSV保存すると既定でShift-JIS（cp932）になることが多く、UTF-8での
+        # 読み込みに失敗するため、UTF-8（BOM付き含む）→cp932の順に試す。
+        df = None
+        last_err = None
+        for enc in ("utf-8-sig", "cp932"):
+            uploaded_file.seek(0)
+            try:
+                df = pd.read_csv(uploaded_file, header=None, dtype=str, keep_default_na=False, encoding=enc)
+                break
+            except (UnicodeDecodeError, UnicodeError) as e:
+                last_err = e
+        if df is None:
+            raise last_err
     else:
         df = pd.read_excel(uploaded_file, header=None, dtype=str, keep_default_na=False)
     return df.fillna("").values.tolist()
