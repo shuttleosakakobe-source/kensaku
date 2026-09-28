@@ -158,16 +158,12 @@ def maintenance_admin_screen():
     # 💡 border/box-shadowは、下の「対応待ちモードは赤枠」CSS（同じ div.st-key-modebtn_<key> button
     #    セレクタ）と詳細度を揃えるため、あえて汎用セレクタではなく1モードずつ同じ形のセレクタで
     #    出力する（詳細度が異なると、後から出すはずの赤枠CSSが先に出したこちらに負けてしまうため）。
-    card_css_parts = ["""
-        div[data-testid="stHorizontalBlock"] button p:first-of-type {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 52px; height: 52px; border-radius: 50%;
-            font-size: 24px; line-height: 1; margin: 0 auto 10px auto !important;
-        }
-        div[data-testid="stHorizontalBlock"] button p:last-of-type {
-            font-weight: 700; font-size: 1rem; color: #1f2937 !important; margin: 0 !important;
-        }
-    """]
+    #    ※ p:first-of-type / p:last-of-type のスタイルも必ず div.st-key-modebtn_<key> 配下に
+    #    限定すること。汎用の div[data-testid="stHorizontalBlock"] button p... にすると、
+    #    アプリ内の他の（st.columns内にある）普通のボタン全部に丸アイコン用の固定幅・中央寄せが
+    #    誤って適用され、文字が丸の中に収まらず欠けて見える不具合が起きる
+    #    （顧客データ・契約データ一括更新画面の「👤 顧客データ」ボタン等で実際に発生した）。
+    card_css_parts = []
     for _mk, _color in _mode_icon_colors.items():
         card_css_parts.append(f"""
             div.st-key-modebtn_{_mk} button {{
@@ -182,7 +178,15 @@ def maintenance_admin_screen():
                 transform: translateY(-2px);
                 box-shadow: 0 6px 14px rgba(15, 23, 42, 0.16) !important;
             }}
-            div.st-key-modebtn_{_mk} button p:first-of-type {{ background: {_color} !important; }}
+            div.st-key-modebtn_{_mk} button p:first-of-type {{
+                display: inline-flex; align-items: center; justify-content: center;
+                width: 52px; height: 52px; border-radius: 50%;
+                font-size: 24px; line-height: 1; margin: 0 auto 10px auto !important;
+                background: {_color} !important;
+            }}
+            div.st-key-modebtn_{_mk} button p:last-of-type {{
+                font-weight: 700; font-size: 1rem; color: #1f2937 !important; margin: 0 !important;
+            }}
             div.st-key-modebtn_{_mk} button[data-testid="stBaseButton-primary"] {{
                 background: #eef2ff !important;
                 box-shadow: 0 0 0 3px #2563eb inset, 0 2px 8px rgba(15,23,42,0.08) !important;
