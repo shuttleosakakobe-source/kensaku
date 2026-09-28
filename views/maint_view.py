@@ -132,27 +132,6 @@ def maintenance_admin_screen():
     def _set_maint_mode(mode):
         st.session_state["maint_mode"] = mode
 
-    # 💡 各モードに対応待ちのデータが残っているかどうかをまとめて判定
-    #    （読み込みに失敗したモードは「対応待ちなし」扱いにして、赤枠が出ないだけにする）
-    #    9モード分のシート読み込みをget_pending_modes()内で並列化し、キャッシュが切れた
-    #    直後でもボタン行の表示が長く待たされないようにしている。
-    try:
-        pending_modes = get_pending_modes(MODE_DEFS)
-    except Exception:
-        pending_modes = set()
-
-    # 💡 対応待ちがあるモードのボタンだけ、枠を赤くするCSSを動的に追加する
-    #    （st.container(key=...)で各ボタンをラップし、そのラッパーに付くst-key-<key>クラスを
-    #    ピンポイントで狙う。対応待ちが無いモードは通常のボタンの見た目のまま＝赤枠は出さない）
-    if pending_modes:
-        pending_css = "\n".join(
-            f'div.st-key-modebtn_{m} button {{ '
-            f'border: 3px solid #e53935 !important; '
-            f'box-shadow: 0 0 0 1px #e53935 !important; }}'
-            for m in pending_modes
-        )
-        st.markdown(f"<style>{pending_css}</style>", unsafe_allow_html=True)
-
     # 💡 ボタンのクリックはそれ自体で自動的に再実行(rerun)がかかるため、
     #    ここでさらに st.rerun() を呼ぶと「再実行の中でもう一度再実行」が発生し、
     #    画面切り替え時にまれにブラウザ側でDOM操作エラー(NotFoundError: removeChild)が
@@ -167,11 +146,78 @@ def maintenance_admin_screen():
 
     all_buttons = [(mode_key, label) for mode_key, label, *_rest in MODE_DEFS] + extra_buttons
 
+    # 💡 各モードボタンを、アイコンを丸背景に乗せたカード風の見た目にする。
+    #    アイコン色はモードごとに割り当て、st.buttonのラベルを「アイコン行」「タイトル行」の
+    #    2段落（空行区切り）にすることで、Streamlitが<p>タグを2つに分けて出力するのを利用し、
+    #    1つ目の<p>（アイコン）だけに丸背景を、2つ目の<p>（タイトル）だけに太字を充てている。
+    _mode_icon_colors = {
+        "order": "#fdba74", "route": "#93c5fd", "sroute": "#5eead4", "dq": "#c4b5fd",
+        "kz": "#fcd34d", "ps": "#fca5a5", "cc": "#d1d5db", "ot": "#fda4af", "cx": "#f87171",
+        "navi": "#7dd3fc", "cust_contract": "#a3e635",
+    }
+    # 💡 border/box-shadowは、下の「対応待ちモードは赤枠」CSS（同じ div.st-key-modebtn_<key> button
+    #    セレクタ）と詳細度を揃えるため、あえて汎用セレクタではなく1モードずつ同じ形のセレクタで
+    #    出力する（詳細度が異なると、後から出すはずの赤枠CSSが先に出したこちらに負けてしまうため）。
+    card_css_parts = ["""
+        div[data-testid="stHorizontalBlock"] button p:first-of-type {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 52px; height: 52px; border-radius: 50%;
+            font-size: 24px; line-height: 1; margin: 0 auto 10px auto !important;
+        }
+        div[data-testid="stHorizontalBlock"] button p:last-of-type {
+            font-weight: 700; font-size: 1rem; color: #1f2937 !important; margin: 0 !important;
+        }
+    """]
+    for _mk, _color in _mode_icon_colors.items():
+        card_css_parts.append(f"""
+            div.st-key-modebtn_{_mk} button {{
+                min-height: 118px !important;
+                border-radius: 18px !important;
+                border: none !important;
+                background: #f4f6fa !important;
+                box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08) !important;
+                transition: transform 0.12s ease, box-shadow 0.12s ease;
+            }}
+            div.st-key-modebtn_{_mk} button:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 6px 14px rgba(15, 23, 42, 0.16) !important;
+            }}
+            div.st-key-modebtn_{_mk} button p:first-of-type {{ background: {_color} !important; }}
+            div.st-key-modebtn_{_mk} button[data-testid="stBaseButton-primary"] {{
+                background: #eef2ff !important;
+                box-shadow: 0 0 0 3px #2563eb inset, 0 2px 8px rgba(15,23,42,0.08) !important;
+            }}
+        """)
+    st.markdown(f"<style>{''.join(card_css_parts)}</style>", unsafe_allow_html=True)
+
+    # 💡 各モードに対応待ちのデータが残っているかどうかをまとめて判定
+    #    （読み込みに失敗したモードは「対応待ちなし」扱いにして、赤枠が出ないだけにする）
+    #    9モード分のシート読み込みをget_pending_modes()内で並列化し、キャッシュが切れた
+    #    直後でもボタン行の表示が長く待たされないようにしている。
+    try:
+        pending_modes = get_pending_modes(MODE_DEFS)
+    except Exception:
+        pending_modes = set()
+
+    # 💡 対応待ちがあるモードのボタンだけ、枠を赤くするCSSを動的に追加する
+    #    （st.container(key=...)で各ボタンをラップし、そのラッパーに付くst-key-<key>クラスを
+    #    ピンポイントで狙う。対応待ちが無いモードは通常のボタンの見た目のまま＝赤枠は出さない。
+    #    上のカード用CSSと詳細度が同じセレクタのため、これを後から出すことで確実に上書きする）
+    if pending_modes:
+        pending_css = "\n".join(
+            f'div.st-key-modebtn_{m} button {{ '
+            f'border: 3px solid #e53935 !important; '
+            f'box-shadow: 0 0 0 1px #e53935 !important; }}'
+            for m in pending_modes
+        )
+        st.markdown(f"<style>{pending_css}</style>", unsafe_allow_html=True)
+
     mode_cols = st.columns(len(all_buttons))
     for (mode_key, label), col in zip(all_buttons, mode_cols):
+        icon, _sep, title = label.partition(" ")
         with col.container(key=f"modebtn_{mode_key}"):
             st.button(
-                label, use_container_width=True,
+                f"{icon}\n\n{title}", use_container_width=True,
                 type="primary" if st.session_state["maint_mode"] == mode_key else "secondary",
                 on_click=_set_maint_mode, args=(mode_key,),
                 key=f"modebtn_click_{mode_key}",
