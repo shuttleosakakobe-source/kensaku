@@ -50,8 +50,7 @@ else:
     with col_l2:
         if os.path.exists("1.png"):
             st.image("1.png", use_container_width=True)
-        st.title("🔑 業務システム ログイン")
-            
+
         u_email = st.text_input("メールアドレス").strip()
         u_pass = st.text_input("パスワード", type="password").strip()
         
