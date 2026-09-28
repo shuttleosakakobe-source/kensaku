@@ -95,7 +95,11 @@ def _render_replace_section(label, action_name, target_sheet_url, state_key):
 
         if res.get("status") == "success":
             st.success(f"✅ {label}を反映しました。")
-            st.session_state[f"{state_key}_confirm"] = False
+            # このチェックボックスはすでに st.checkbox(key=...) でこの回のスクリプト内に
+            # 生成済みのため、st.session_state[key] = False という代入は
+            # StreamlitWidgetAlreadyInstantiatedError になる。del で削除すれば、
+            # 次のrerun時にキーが無い状態＝チェックボックスの既定値（未チェック）に戻る。
+            del st.session_state[f"{state_key}_confirm"]
             read_csv_cached.clear()
             st.rerun()
         else:
