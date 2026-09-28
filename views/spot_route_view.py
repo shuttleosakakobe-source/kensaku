@@ -574,8 +574,6 @@ def render_spot_route_change_tabs():
                                 if contact_val.strip():
                                     st.text_input("連絡担当者", value=contact_val, disabled=True, key=f"sr_v_contact_{row_id}")
 
-                            st.write("---")
-                            st.write("---")
                             with st.form(key=f"sr_transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 

@@ -762,8 +762,6 @@ def render_delivery_qty_change_tabs():
                                 if contact_val.strip():
                                     st.text_input("連絡担当者様", value=contact_val, disabled=True, key=f"dq_v_contact_{row_id}")
 
-                            st.write("---")
-                            st.write("---")
                             with st.form(key=f"dq_transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 

@@ -870,8 +870,6 @@ def render_contract_change_tabs():
                                     st.text_input("次回訪問日", value=nvisit_val, disabled=True, key=f"cc_v_nvisit_{row_id}")
                             st.caption(f"増減金額: {_cc_format_yen(_v('amount_diff'))}")
 
-                            st.write("---")
-                            st.write("---")
                             with st.form(key=f"cc_transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 

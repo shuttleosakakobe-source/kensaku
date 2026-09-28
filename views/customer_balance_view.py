@@ -624,8 +624,6 @@ def render_customer_balance_correction_tabs():
                                 if comment_val.strip():
                                     st.text_area("特記事項", value=comment_val, disabled=True, key=f"kz_v_comment_{row_id}")
 
-                            st.write("---")
-                            st.write("---")
                             with st.form(key=f"kz_transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
