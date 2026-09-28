@@ -12,7 +12,7 @@ from views.maint_view import maintenance_admin_screen
 
 # --- 1. ページ基本設定 ---
 st.set_page_config(
-    page_title="ダスキンシャトル 業務アプリ",
+    page_title="ダスキンシャトル メンテナンス依頼アプリ",
     page_icon="icon.png", 
     layout="wide"
 )
