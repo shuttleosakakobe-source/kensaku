@@ -18,7 +18,7 @@ from views.period_stop_view import render_period_stop_tabs, PS_COL, PS_TARGET_SH
 from views.other_view import render_other_maintenance_tabs, OT_COL, OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV
 from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV
 from views.maint_common import (
-    mode_has_pending_work, get_current_role,
+    get_pending_modes, get_current_role,
     get_unconfirmed_staff_comments, confirm_staff_comment,
 )
 from views.navi_view import route_navigation_screen
@@ -134,13 +134,12 @@ def maintenance_admin_screen():
 
     # 💡 各モードに対応待ちのデータが残っているかどうかをまとめて判定
     #    （読み込みに失敗したモードは「対応待ちなし」扱いにして、赤枠が出ないだけにする）
-    pending_modes = set()
-    for mode_key, _label, target_csv, dest_csv, status_col, check_col, print_col in MODE_DEFS:
-        try:
-            if mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
-                pending_modes.add(mode_key)
-        except Exception:
-            pass
+    #    9モード分のシート読み込みをget_pending_modes()内で並列化し、キャッシュが切れた
+    #    直後でもボタン行の表示が長く待たされないようにしている。
+    try:
+        pending_modes = get_pending_modes(MODE_DEFS)
+    except Exception:
+        pending_modes = set()
 
     # 💡 対応待ちがあるモードのボタンだけ、枠を赤くするCSSを動的に追加する
     #    （st.container(key=...)で各ボタンをラップし、そのラッパーに付くst-key-<key>クラスを

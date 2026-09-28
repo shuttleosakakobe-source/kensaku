@@ -6,6 +6,7 @@ import requests
 import json
 import os
 import re
+import concurrent.futures
 from datetime import timezone, timedelta, datetime, date
 
 
@@ -115,6 +116,7 @@ def get_anthropic_client():
         return None
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
 def ai_check_order_anomaly(cust_code, cust_name, items, past_items_list):
     """商品発注の申請内容をAIでチェックし、異常（数量・単価の急激な変化や桁間違いなど）が
     無いかを判定する。
@@ -124,7 +126,11 @@ def ai_check_order_anomaly(cust_code, cust_name, items, past_items_list):
     - checked=False（APIキー未設定など）の場合は has_anomaly=False とし、
       これまで通り人がチェックする（AI機能が無効なだけで、動作は変わらない）。
     - APIは呼べたが失敗した場合は、安全側に倒して has_anomaly=True とし、
-      必ず人の目を通す（＝エラー時に誤って自動承認しない）。"""
+      必ず人の目を通す（＝エラー時に誤って自動承認しない）。
+    st.cache_data で引数の内容（＝申請内容そのもの）ごとに結果をキャッシュする。
+    これにより、以前はブラウザを再読み込みするたびに全件AI問い合わせをやり直して
+    いたのが、同じ内容なら（TTL 30分の間は）アプリ全体で使い回されるようになり、
+    管理職チェック画面を開くたびに数十秒待たされる、という遅さの主因を解消する。"""
     client = get_anthropic_client()
     if client is None:
         return {"checked": False, "has_anomaly": False, "reason": ""}
@@ -325,20 +331,28 @@ def confirm_staff_comment(row_index):
     })
 
 
-@st.cache_data(ttl=60)
-def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_csv_or_none(csv_url):
+    """mode_has_pending_work / get_pending_modes 用のCSV読み込み。
+    読み込みエラー時はNoneを返す（呼び出し側は「そちら側は判定不能＝処理待ちなし扱い」にする）。"""
+    try:
+        return pd.read_csv(csv_url, dtype=str)
+    except Exception:
+        return None
+
+
+def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col):
     """あるモード（商品発注／ルート変更／単発ルート変更／納品数量変更／客中残訂正／契約内容変更）に、
-    誰かの対応待ちのデータが残っているかどうかを判定する（メンテナンス業務トップのボタンの
-    赤枠表示用）。以下のいずれかに該当すれば「処理が残っている」とみなす：
+    誰かの対応待ちのデータが残っているかどうかを、既に読み込み済みのDataFrameから判定する
+    （メンテナンス業務トップのボタンの赤枠表示用）。以下のいずれかに該当すれば「処理が残っている」とみなす：
     - TARGET側（TAB1・2用シート）：差戻し（要再修正・再申請）／申請中（要承認）／
       承認済みだが未転記（要業務転記＝TAB3の対象）
     - DEST側（TAB3・4用シート）：チェック未完了（要チェック＝TAB4の対象）／
       チェック済みだが未印刷（要印刷＝TAB5の対象）
-    読み込みエラー時は「処理待ちなし」扱いとする（ボタン表示のためだけにトップ画面全体が
+    読み込みエラー（df=None）時は「処理待ちなし」扱いとする（ボタン表示のためだけにトップ画面全体が
     落ちないようにするため）。"""
     try:
-        df_t = pd.read_csv(target_csv, dtype=str)
-        if not df_t.empty and len(df_t.columns) > status_col:
+        if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
             status_series = df_t.iloc[:, status_col].astype(str).str.strip()
             if (status_series == "差戻し").any():
                 return True
@@ -354,8 +368,7 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
         pass
 
     try:
-        df_d = pd.read_csv(dest_csv, dtype=str)
-        if not df_d.empty:
+        if df_d is not None and not df_d.empty:
             if len(df_d.columns) > check_col:
                 unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
                 if unchecked.any():
@@ -369,6 +382,49 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
         pass
 
     return False
+
+
+def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
+    """1モード分だけ対応待み判定が欲しい場合の単体版（内部は_fetch_csv_or_none/
+    _pending_flag_from_dfsと共通）。9モードまとめて判定する場合はget_pending_modes()を使うこと。"""
+    df_t = _fetch_csv_or_none(target_csv)
+    df_d = _fetch_csv_or_none(dest_csv)
+    return _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col)
+
+
+def get_pending_modes(mode_defs):
+    """メンテナンス業務トップの全モード分の「対応待ちデータあり」判定をまとめて行う。
+    mode_defs: [(mode_key, label, target_csv, dest_csv, status_col, check_col, print_col), ...]
+    9モード分（最大18件）のシート読み込みを1件ずつ順番に行うと、キャッシュが切れた
+    タイミング（60秒ごと）でボタン行の表示が毎回数秒〜十数秒待たされてしまうため、
+    ThreadPoolExecutorで並列に読み込むことで待ち時間を大きく縮める
+    （各読み込み自体はキャッシュ付きの_fetch_csv_or_noneなので、2回目以降はほぼ一瞬で返る）。
+    戻り値: 対応待ちがあるmode_keyのset。"""
+    urls = []
+    for _mode_key, _label, target_csv, dest_csv, *_rest in mode_defs:
+        urls.append(target_csv)
+        urls.append(dest_csv)
+    unique_urls = list(dict.fromkeys(urls))
+
+    fetched = {}
+    if unique_urls:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(16, len(unique_urls))) as executor:
+            future_to_url = {executor.submit(_fetch_csv_or_none, u): u for u in unique_urls}
+            for future in concurrent.futures.as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    fetched[url] = future.result()
+                except Exception:
+                    fetched[url] = None
+
+    pending_modes = set()
+    for mode_key, _label, target_csv, dest_csv, status_col, check_col, print_col in mode_defs:
+        try:
+            if _pending_flag_from_dfs(fetched.get(target_csv), fetched.get(dest_csv), status_col, check_col, print_col):
+                pending_modes.add(mode_key)
+        except Exception:
+            pass
+    return pending_modes
 
 
 
