@@ -57,25 +57,35 @@ else:
         if st.button("ログイン", type="primary", use_container_width=True):
             raw = load_sheet_data(gid="0")
             if raw and len(raw) > 1:
-                # 行ごとに判定 (A列: 0[メール], C列: 2[名前], D列: 3[パスワード], F列: 5[権限])
+                # 行ごとに判定 (A列: 0[メール], B列: 1[拠点], C列: 2[名前], D列: 3[パスワード],
+                # F列: 5[権限], G列: 6[エリア])
+                # 💡 拠点・エリアはこのアプリでは今のところ使っていないが、将来1つの業務アプリに
+                #    統合する際にそのまま使えるよう、campaign-tallyと同じ列の読み方・
+                #    session_stateキー名（user_branch, user_area）で取得しておく。
+                #    同じメール・パスワードで複数行（拠点違い）がある場合も、このアプリでは
+                #    拠点を使わないため選択させず、従来通り最初に見つかった行を使う。
                 user_found = None
                 for row in raw[1:]:
                     if len(row) >= 6:
                         email_val = str(row[0]).strip() # A列
                         pass_val = str(row[3]).strip()  # D列
-                        
+
                         if email_val.lower() == u_email.lower() and pass_val == u_pass:
                             user_found = {
                                 "email": email_val,
+                                "branch": str(row[1]).strip(),  # B列
                                 "name": str(row[2]).strip(), # C列
-                                "role": str(row[5]).strip()  # F列
+                                "role": str(row[5]).strip(),  # F列
+                                "area": str(row[6]).strip() if len(row) >= 7 else "",  # G列
                             }
                             break
-                
+
                 if user_found:
                     st.session_state.user_name = user_found["name"]
                     st.session_state.user_role = user_found["role"]
                     st.session_state.user_code = user_found["email"]
+                    st.session_state.user_branch = user_found["branch"]
+                    st.session_state.user_area = user_found["area"]
                     st.session_state.login_status = True
                     st.session_state.logout_requested = False
 
