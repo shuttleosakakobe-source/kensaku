@@ -532,7 +532,8 @@ def render_product_order_tabs():
                         row_id = idx + 2
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
                         rej_comment = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else ""
-                        
+                        rejector_name = str(row.iloc[33]) if len(row) > 33 and pd.notna(row.iloc[33]) else ""
+
                         with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {rej_comment}"):
                             with st.form(key=f"resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
@@ -581,6 +582,7 @@ def render_product_order_tabs():
                                 edit_app_comment = st.text_area("申請コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"re_com_{row_id}")
 
                                 btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
+                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
 
                                 if btn_resubmit:
                                     if not edit_route_code.strip() or not edit_deliv_date.strip():
@@ -589,7 +591,7 @@ def render_product_order_tabs():
                                         updated_row = [
                                             str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
                                             edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
-                                        ] + edit_items + [edit_app_comment, "申請中", "", ""]
+                                        ] + edit_items + [edit_app_comment, "申請中", "", "", ""]
 
                                         payload = {
                                             "action": "RESUBMIT_MAINTENANCE",
@@ -599,11 +601,46 @@ def render_product_order_tabs():
                                         }
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
+                                            if rejector_name:
+                                                send_staff_comment(
+                                                    "📦 商品発注", edit_cust_code, edit_cust_name, rejector_name,
+                                                    "差戻しを修正し、再申請しました。",
+                                                    st.session_state.get("user_name", ""),
+                                                )
                                             st.toast("再申請が完了しました！")
                                             time.sleep(1)
                                             st.rerun()
                                         else:
                                             st.error(f"処理に失敗しました: {res.get('message')}")
+
+                                elif btn_withdraw:
+                                    # 💡 列0〜29（基本情報・商品明細・申請コメント）は元のまま残し、
+                                    #    ステータス列（30〜33）だけ「削除」に書き換える（他の削除処理と同じやり方）。
+                                    withdrawn_row = [
+                                        str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
+                                        for i in range(30)
+                                    ]
+                                    withdrawn_row.extend(["削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "", ""])
+
+                                    payload = {
+                                        "action": "DELETE_MAINTENANCE",
+                                        "target_sheet_url": TARGET_SHEET_URL,
+                                        "row_index": row_id,
+                                        "updated_row": withdrawn_row,
+                                    }
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        if rejector_name:
+                                            send_staff_comment(
+                                                "📦 商品発注", str(row.iloc[2]), cust_name, rejector_name,
+                                                "差し戻された申請を削除（取り下げ）しました。",
+                                                st.session_state.get("user_name", ""),
+                                            )
+                                        st.toast("削除しました。")
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"削除に失敗しました: {res.get('message')}")
             else:
                 st.info("現在、差戻しデータはありません。")
         except Exception as e:
@@ -786,13 +823,16 @@ def render_product_order_tabs():
                                     action_type = ""
                                     if btn_approve:
                                         action_type = "APPROVE_MAINTENANCE"
-                                        updated_row.extend([mgr_name, now_str, mgr_comment])
+                                        updated_row.extend([mgr_name, now_str, mgr_comment, ""])
                                     elif btn_reject:
                                         action_type = "REJECT_MAINTENANCE"
-                                        updated_row.extend(["差戻し", now_str, mgr_comment])
+                                        # 💡 col33に差し戻した管理職名を記録しておく（col30は従来通り
+                                        #    固定文字列「差戻し」のまま＝他の判定箇所に影響を与えない）。
+                                        #    申請者が修正・再申請／削除した際に、この管理職へ通知するために使う。
+                                        updated_row.extend(["差戻し", now_str, mgr_comment, mgr_name])
                                     elif btn_delete:
                                         action_type = "DELETE_MAINTENANCE"
-                                        updated_row.extend(["削除", now_str, mgr_comment])
+                                        updated_row.extend(["削除", now_str, mgr_comment, ""])
 
                                     payload = {
                                         "action": action_type,
