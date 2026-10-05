@@ -31,7 +31,7 @@ ORDER_STATUS_COL_IDX = 30
 # 💡 メンテナンス業務トップの6モードボタン：各モードに「対応待ちのデータ」が残っている場合は
 #    ボタンの枠を赤くして目立たせ、残っていない場合は通常の見た目（赤枠なし）に戻す。
 #    「対応待ち」の判定はモードごとの一連のワークフロー（差戻し／承認待ち／業務転記待ち／
-#    チェック待ち／印刷待ち）をまとめて見るmode_has_pending_work()で行う（60秒キャッシュ）。
+#    チェック待ち／印刷待ち）をまとめて見るmode_has_pending_work()で行う（各タブと共通のread_csv_cachedキャッシュ）。
 MODE_DEFS = [
     ("order", "📦 商品発注", ORDER_TARGET_SHEET_CSV, ORDER_DEST_SHEET_CSV,
      ORDER_STATUS_COL_IDX, ORDER_CHECK_TIME_COL_IDX, ORDER_PRINT_TIME_COL_IDX),

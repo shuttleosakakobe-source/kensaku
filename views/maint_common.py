@@ -331,12 +331,15 @@ def confirm_staff_comment(row_index):
     })
 
 
-@st.cache_data(ttl=60, show_spinner=False)
 def _fetch_csv_or_none(csv_url):
     """mode_has_pending_work / get_pending_modes 用のCSV読み込み。
-    読み込みエラー時はNoneを返す（呼び出し側は「そちら側は判定不能＝処理待ちなし扱い」にする）。"""
+    読み込みエラー時はNoneを返す（呼び出し側は「そちら側は判定不能＝処理待ちなし扱い」にする）。
+    💡 以前はこの関数専用の60秒キャッシュを持っていたが、各画面でチェック完了・印刷・転記などを
+    行ったあとに呼ばれる read_csv_cached.clear() ではそのキャッシュが消えないため、
+    「未チェックがもう無いのにボタンの赤枠だけ残り続ける」不具合が起きていた。
+    各タブと同じ read_csv_cached を経由することで、操作直後のクリアで赤枠も同時に最新化される。"""
     try:
-        return pd.read_csv(csv_url, dtype=str)
+        return read_csv_cached(csv_url)
     except Exception:
         return None
 
@@ -396,9 +399,9 @@ def get_pending_modes(mode_defs):
     """メンテナンス業務トップの全モード分の「対応待ちデータあり」判定をまとめて行う。
     mode_defs: [(mode_key, label, target_csv, dest_csv, status_col, check_col, print_col), ...]
     9モード分（最大18件）のシート読み込みを1件ずつ順番に行うと、キャッシュが切れた
-    タイミング（60秒ごと）でボタン行の表示が毎回数秒〜十数秒待たされてしまうため、
+    タイミングでボタン行の表示が毎回数秒〜十数秒待たされてしまうため、
     ThreadPoolExecutorで並列に読み込むことで待ち時間を大きく縮める
-    （各読み込み自体はキャッシュ付きの_fetch_csv_or_noneなので、2回目以降はほぼ一瞬で返る）。
+    （各読み込み自体はキャッシュ付きのread_csv_cached経由なので、2回目以降はほぼ一瞬で返る）。
     戻り値: 対応待ちがあるmode_keyのset。"""
     urls = []
     for _mode_key, _label, target_csv, dest_csv, *_rest in mode_defs:
