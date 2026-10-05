@@ -54,7 +54,8 @@ else:
 
         u_email = st.text_input("メールアドレス", value=get_remembered_email()).strip()
         u_pass = st.text_input("パスワード", type="password").strip()
-        
+        remember = st.checkbox("📌 ログイン情報を保存する（30日間）")
+
         if st.button("ログイン", type="primary", use_container_width=True):
             raw = load_sheet_data(gid="0")
             if raw and len(raw) > 1:
@@ -98,6 +99,7 @@ else:
                         st.session_state.user_code,
                         st.session_state.user_branch,
                         st.session_state.user_area,
+                        remember=remember,
                     )
                     remember_email(u_email)
                     st.rerun()
