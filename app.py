@@ -6,7 +6,7 @@ sys.path.append(str(Path(__file__).parent))
 
 import streamlit as st
 import os
-from utils import inject_pwa_blocker, set_login_storage, check_session_storage, clear_login_storage
+from utils import inject_pwa_blocker, set_login_storage, check_session_storage, clear_login_storage, remember_email, get_remembered_email
 from data_loader import load_sheet_data
 from views.maint_view import maintenance_admin_screen
 
@@ -52,7 +52,7 @@ else:
         if os.path.exists("1.png"):
             st.image("1.png", use_container_width=True)
 
-        u_email = st.text_input("メールアドレス").strip()
+        u_email = st.text_input("メールアドレス", value=get_remembered_email()).strip()
         u_pass = st.text_input("パスワード", type="password").strip()
         
         if st.button("ログイン", type="primary", use_container_width=True):
@@ -99,6 +99,7 @@ else:
                         st.session_state.user_branch,
                         st.session_state.user_area,
                     )
+                    remember_email(u_email)
                     st.rerun()
                 else:
                     st.error("認証失敗: メールアドレスまたはパスワードが正しくありません")
