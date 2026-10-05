@@ -346,34 +346,56 @@ def _fetch_csv_or_none(csv_url):
         return None
 
 
-def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col):
+def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applicant_col=1, *, user_role="", user_name=""):
     """あるモード（商品発注／ルート変更／単発ルート変更／納品数量変更／客中残訂正／契約内容変更）に、
-    誰かの対応待ちのデータが残っているかどうかを、既に読み込み済みのDataFrameから判定する
-    （メンテナンス業務トップのボタンの赤枠表示用）。以下のいずれかに該当すれば「処理が残っている」とみなす：
-    - TARGET側（TAB1・2用シート）：差戻し（要再修正・再申請）／申請中（要承認）／
-      承認済みだが未転記（要業務転記＝TAB3の対象）
-    - DEST側（TAB3・4用シート）：チェック未完了（要チェック＝TAB4の対象）／
-      チェック済みだが未印刷（要印刷＝TAB5の対象）
+    ログイン中のユーザー自身が対応すべき「対応待ち」のデータが残っているかどうかを、既に
+    読み込み済みのDataFrameから判定する（メンテナンス業務トップのボタンの赤枠表示用）。
+    💡 以前は会社全体のデータを見て、誰の・どの担当範囲の対応待ちでも無条件に赤枠にしていた
+    （自分の管轄外の対応待ちでも赤枠が点いてしまっていた）。これを、対応待ちの種類ごとに
+    「本来それに対応すべき人」にだけ赤枠が見えるよう絞り込む：
+    - 差戻し（要再修正・再申請）：その申請の担当者（申請者）本人のみ
+    - 申請中（要承認）：管理職（権限0・1）のみ
+    - 承認済みだが未転記（要業務転記）／チェック未完了（要チェック）／
+      チェック済みだが未印刷（要印刷）：業務担当（権限0・3）のみ
+    権限0（全権限）は、どの種類の対応待ちでも対象として見る。
     読み込みエラー（df=None）時は「処理待ちなし」扱いとする（ボタン表示のためだけにトップ画面全体が
     落ちないようにするため）。"""
+    role = str(user_role).strip()
+    if role.endswith(".0"):
+        role = role[:-2]
+    is_all = role == "0"
+    is_manager = role in {"0", "1"}
+    is_operator = role in {"0", "3"}
+    my_name = str(user_name).strip()
+
     try:
         if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
             status_series = df_t.iloc[:, status_col].astype(str).str.strip()
-            if (status_series == "差戻し").any():
+
+            if is_all:
+                if (status_series == "差戻し").any():
+                    return True
+            elif my_name and len(df_t.columns) > applicant_col:
+                applicant_series = df_t.iloc[:, applicant_col].astype(str).str.strip()
+                my_rejected = (status_series == "差戻し") & (applicant_series == my_name)
+                if my_rejected.any():
+                    return True
+
+            if is_manager and (status_series == "申請中").any():
                 return True
-            if (status_series == "申請中").any():
-                return True
-            pending_transfer = (
-                (~df_t.iloc[:, status_col].isna()) &
-                (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
-            )
-            if pending_transfer.any():
-                return True
+
+            if is_operator:
+                pending_transfer = (
+                    (~df_t.iloc[:, status_col].isna()) &
+                    (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+                )
+                if pending_transfer.any():
+                    return True
     except Exception:
         pass
 
     try:
-        if df_d is not None and not df_d.empty:
+        if is_operator and df_d is not None and not df_d.empty:
             if len(df_d.columns) > check_col:
                 unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
                 if unchecked.any():
@@ -389,21 +411,29 @@ def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col):
     return False
 
 
-def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col):
+def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col, applicant_col=1):
     """1モード分だけ対応待み判定が欲しい場合の単体版（内部は_fetch_csv_or_none/
-    _pending_flag_from_dfsと共通）。9モードまとめて判定する場合はget_pending_modes()を使うこと。"""
+    _pending_flag_from_dfsと共通）。9モードまとめて判定する場合はget_pending_modes()を使うこと。
+    ログイン中のユーザー（st.session_state の user_role / user_name）を基準に絞り込む。"""
     df_t = _fetch_csv_or_none(target_csv)
     df_d = _fetch_csv_or_none(dest_csv)
-    return _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col)
+    return _pending_flag_from_dfs(
+        df_t, df_d, status_col, check_col, print_col, applicant_col,
+        user_role=st.session_state.get("user_role", ""),
+        user_name=st.session_state.get("user_name", ""),
+    )
 
 
 def get_pending_modes(mode_defs):
     """メンテナンス業務トップの全モード分の「対応待ちデータあり」判定をまとめて行う。
     mode_defs: [(mode_key, label, target_csv, dest_csv, status_col, check_col, print_col), ...]
+    （申請者/担当者の列は全モード共通でB列＝index1のため、mode_defsには含めていない）
     9モード分（最大18件）のシート読み込みを1件ずつ順番に行うと、キャッシュが切れた
     タイミング（60秒ごと）でボタン行の表示が毎回数秒〜十数秒待たされてしまうため、
     ThreadPoolExecutorで並列に読み込むことで待ち時間を大きく縮める
     （各読み込み自体はキャッシュ付きの_fetch_csv_or_noneなので、2回目以降はほぼ一瞬で返る）。
+    ログイン中のユーザー（st.session_state の user_role / user_name）を基準に絞り込む
+    （差戻しは申請者本人、承認待ちは管理職、転記・チェック・印刷待ちは業務担当のみに見える）。
     戻り値: 対応待ちがあるmode_keyのset。"""
     urls = []
     for _mode_key, _label, target_csv, dest_csv, *_rest in mode_defs:
@@ -422,10 +452,16 @@ def get_pending_modes(mode_defs):
                 except Exception:
                     fetched[url] = None
 
+    user_role = st.session_state.get("user_role", "")
+    user_name = st.session_state.get("user_name", "")
+
     pending_modes = set()
     for mode_key, _label, target_csv, dest_csv, status_col, check_col, print_col in mode_defs:
         try:
-            if _pending_flag_from_dfs(fetched.get(target_csv), fetched.get(dest_csv), status_col, check_col, print_col):
+            if _pending_flag_from_dfs(
+                fetched.get(target_csv), fetched.get(dest_csv), status_col, check_col, print_col,
+                user_role=user_role, user_name=user_name,
+            ):
                 pending_modes.add(mode_key)
         except Exception:
             pass
