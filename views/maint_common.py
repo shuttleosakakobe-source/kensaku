@@ -331,12 +331,17 @@ def confirm_staff_comment(row_index):
     })
 
 
-@st.cache_data(ttl=60, show_spinner=False)
 def _fetch_csv_or_none(csv_url):
     """mode_has_pending_work / get_pending_modes 用のCSV読み込み。
+    💡 read_csv_cached と同じキャッシュ（同じ関数・同じ引数）を使うことで、承認・
+    チェック・印刷などの操作後に read_csv_cached.clear() が呼ばれれば、この関数の
+    結果も自動的に最新化されるようにしている。
+    以前はこの関数専用に別のキャッシュ（60秒）を持っていたため、TAB4でチェックを
+    完了した直後でも、メインメニューの「未チェックあり」の赤枠が最大60秒古いままの
+    データを見て表示され続けてしまう不具合があった。
     読み込みエラー時はNoneを返す（呼び出し側は「そちら側は判定不能＝処理待ちなし扱い」にする）。"""
     try:
-        return pd.read_csv(csv_url, dtype=str)
+        return read_csv_cached(csv_url)
     except Exception:
         return None
 
