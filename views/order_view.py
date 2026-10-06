@@ -309,8 +309,9 @@ def render_product_order_tabs():
         "✅ メンテナンスチェック画面",
         "🖨️ 加盟店別 印刷",
         "🔍 過去の申請検索",
+        "📋 差戻し一覧",
     ]
-    _tab_visible_nums = [_n for _n in range(1, 7) if tab_visible(_n)]
+    _tab_visible_nums = [_n for _n in range(1, 8) if tab_visible(_n)]
     if not _tab_visible_nums:
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
@@ -533,6 +534,10 @@ def render_product_order_tabs():
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
                         rej_comment = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else ""
                         rejector_name = str(row.iloc[33]) if len(row) > 33 and pd.notna(row.iloc[33]) else ""
+                        # 💡 col34＝差戻し日時。「差戻し一覧」ページで、再申請・削除後も
+                        #    元の差戻し日を表示し続けるために使う。col34が無い古いデータは
+                        #    col31（現在は差戻し処理日時そのもの）で代用する。
+                        reject_date = str(row.iloc[34]) if len(row) > 34 and pd.notna(row.iloc[34]) and str(row.iloc[34]).strip() else (str(row.iloc[31]) if pd.notna(row.iloc[31]) else "")
 
                         with st.expander(f"🔴 【差戻し】{cust_name} (行: {row_id}) | 理由: {rej_comment}"):
                             with st.form(key=f"resubmit_form_{row_id}"):
@@ -588,10 +593,13 @@ def render_product_order_tabs():
                                     if not edit_route_code.strip() or not edit_deliv_date.strip():
                                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。")
                                     else:
+                                        # 💡 col33（差し戻した管理職名）・col34（差戻し日時）は、ここでは
+                                        #    クリアせずそのまま引き継ぐ。「差戻し一覧」ページで、再申請済み
+                                        #    （再送）の行を元々の差戻し情報とともに表示できるようにするため。
                                         updated_row = [
                                             str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
                                             edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
-                                        ] + edit_items + [edit_app_comment, "申請中", "", "", ""]
+                                        ] + edit_items + [edit_app_comment, "申請中", "", "", rejector_name, reject_date]
 
                                         payload = {
                                             "action": "RESUBMIT_MAINTENANCE",
@@ -615,12 +623,14 @@ def render_product_order_tabs():
 
                                 elif btn_withdraw:
                                     # 💡 列0〜29（基本情報・商品明細・申請コメント）は元のまま残し、
-                                    #    ステータス列（30〜33）だけ「削除」に書き換える（他の削除処理と同じやり方）。
+                                    #    ステータス列（30〜34）だけ「削除」に書き換える（他の削除処理と同じやり方）。
+                                    #    col33・col34（差し戻した管理職名・差戻し日時）は引き継ぎ、
+                                    #    「差戻し一覧」ページでこの削除が差戻し由来だと分かるようにする。
                                     withdrawn_row = [
                                         str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
                                         for i in range(30)
                                     ]
-                                    withdrawn_row.extend(["削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "", ""])
+                                    withdrawn_row.extend(["削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "", rejector_name, reject_date])
 
                                     payload = {
                                         "action": "DELETE_MAINTENANCE",
@@ -823,16 +833,21 @@ def render_product_order_tabs():
                                     action_type = ""
                                     if btn_approve:
                                         action_type = "APPROVE_MAINTENANCE"
-                                        updated_row.extend([mgr_name, now_str, mgr_comment, ""])
+                                        # 💡 承認済み＝差戻しサイクルは解消されたとみなし、col33・col34
+                                        #    （差し戻した管理職名・差戻し日時）はクリアする。
+                                        #    「差戻し一覧」ページはこの2列が空の行を一覧に出さない。
+                                        updated_row.extend([mgr_name, now_str, mgr_comment, "", ""])
                                     elif btn_reject:
                                         action_type = "REJECT_MAINTENANCE"
-                                        # 💡 col33に差し戻した管理職名を記録しておく（col30は従来通り
-                                        #    固定文字列「差戻し」のまま＝他の判定箇所に影響を与えない）。
-                                        #    申請者が修正・再申請／削除した際に、この管理職へ通知するために使う。
-                                        updated_row.extend(["差戻し", now_str, mgr_comment, mgr_name])
+                                        # 💡 col33に差し戻した管理職名、col34に差戻し日時を記録しておく
+                                        #    （col30は従来通り固定文字列「差戻し」のまま＝他の判定箇所に
+                                        #    影響を与えない）。申請者への通知や「差戻し一覧」ページで使う。
+                                        updated_row.extend(["差戻し", now_str, mgr_comment, mgr_name, now_str])
                                     elif btn_delete:
                                         action_type = "DELETE_MAINTENANCE"
-                                        updated_row.extend(["削除", now_str, mgr_comment, ""])
+                                        # 💡 ここは「申請中」の行を管理職が直接削除する操作であり、
+                                        #    差戻し由来ではないため col33・col34 は空のままにする。
+                                        updated_row.extend(["削除", now_str, mgr_comment, "", ""])
 
                                     payload = {
                                         "action": action_type,
@@ -1380,3 +1395,82 @@ def render_product_order_tabs():
     if 6 in _tab_map:
         with _tab_map[6]:
             _tab6_body()
+
+    # ==========================================
+    # TAB 7: 差戻し一覧（管理職・業務担当のみ）
+    # ==========================================
+    def _tab7_body():
+        st.subheader("📋 差戻し一覧")
+        st.caption("管理職チェックで差戻しとなった申請の一覧です。申請者が対応するまでの状況を確認できます。")
+        try:
+            df = read_csv_cached(TARGET_SHEET_CSV)
+            if df.empty or len(df.columns) < 31:
+                st.info("現在、差戻しデータはありません。")
+                return
+
+            status_series = df.iloc[:, 30].fillna("").astype(str).str.strip()
+            if len(df.columns) > 33:
+                col33 = df.iloc[:, 33].fillna("").astype(str).str.strip()
+            else:
+                col33 = pd.Series([""] * len(df), index=df.index)
+            if len(df.columns) > 34:
+                col34 = df.iloc[:, 34].fillna("").astype(str).str.strip()
+            else:
+                col34 = pd.Series([""] * len(df), index=df.index)
+
+            # 未処理＝まだ差戻しのまま／再送＝修正して再申請済み／削除＝差戻しを取り下げた
+            # （col33が入っている＝過去に差戻しを受けた行であることの目印。管理職が
+            # 「申請中」の行を直接削除した場合はcol33が空のため、この一覧には出さない）。
+            is_unprocessed = status_series == "差戻し"
+            is_resent = (status_series == "申請中") & (col33 != "")
+            is_withdrawn = (status_series == "削除") & (col33 != "")
+            target_df = df[is_unprocessed | is_resent | is_withdrawn]
+
+            if target_df.empty:
+                st.info("現在、差戻しデータはありません。")
+                return
+
+            status_filter = st.multiselect(
+                "状況で絞り込み", ["未処理", "削除", "再送"],
+                default=["未処理", "削除", "再送"], key="t7_status_filter",
+            )
+
+            records = []
+            for idx, row in target_df.iterrows():
+                st_val = status_series.loc[idx]
+                if st_val == "差戻し":
+                    status_label = "未処理"
+                elif st_val == "削除":
+                    status_label = "削除"
+                else:
+                    status_label = "再送"
+                if status_label not in status_filter:
+                    continue
+
+                reject_date = col34.loc[idx]
+                if not reject_date and st_val == "差戻し" and pd.notna(row.iloc[31]):
+                    reject_date = str(row.iloc[31])
+
+                records.append({
+                    "差戻し日": reject_date,
+                    "担当者名": str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
+                    "顧客名": str(row.iloc[3]) if pd.notna(row.iloc[3]) else "",
+                    "メンテナンス種別": "📦 商品発注",
+                    "差し戻した管理職": col33.loc[idx],
+                    "現在の状況": status_label,
+                })
+
+            if not records:
+                st.info("条件に一致するデータはありません。")
+                return
+
+            result_df = pd.DataFrame(records)
+            result_df["_sort"] = pd.to_datetime(result_df["差戻し日"], errors="coerce")
+            result_df = result_df.sort_values(by="_sort", ascending=False, na_position="last").drop(columns="_sort")
+            st.dataframe(result_df, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.error(f"データ取得エラー: {e}")
+
+    if 7 in _tab_map:
+        with _tab_map[7]:
+            _tab7_body()
