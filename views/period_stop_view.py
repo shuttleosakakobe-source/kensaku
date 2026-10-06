@@ -39,6 +39,10 @@ PS_COL = {
     "process_time": 14, "process_user": 15,
     "check_time": 16, "check_user": 17,
     "print_time": 18,
+    # 💡 rejector_name・reject_dateは「差戻し一覧」用に、差戻し修正(TAB1)・管理職チェック(TAB2)
+    # だけがTARGET_SHEET側で使う列（process_time・process_userと同じ列番号だが、あちらは
+    # 転記後のDEST_SHEET側の列として使われるため実際には衝突しない）。
+    "rejector_name": 14, "reject_date": 15,
 }
 
 # 「期間ストップ」モードTAB5用：加盟店別 印刷フォーマットのスプレッドシート（同じブック内・別タブ）
@@ -330,6 +334,8 @@ def render_period_stop_tabs():
                             return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
 
                         rej_comment = _v("approval_comment")
+                        rejector_name = _v("rejector_name")
+                        reject_date = _v("reject_date") or _v("approval_time")
 
                         with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
                             with st.form(key=f"ps_resubmit_form_{row_id}"):
@@ -353,6 +359,7 @@ def render_period_stop_tabs():
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"ps_re_comment_{row_id}")
 
                                 btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
+                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
 
                                 if btn_resubmit:
                                     if not edit_cust_code.strip():
@@ -362,7 +369,7 @@ def render_period_stop_tabs():
                                             _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                             edit_store_name, edit_store_code,
                                             edit_stop_dates, edit_next_visit, edit_reason, edit_contact, edit_comment,
-                                            "申請中", "", ""
+                                            "申請中", "", "", rejector_name, reject_date,
                                         ]
 
                                         payload = {
@@ -373,11 +380,46 @@ def render_period_stop_tabs():
                                         }
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
+                                            if rejector_name:
+                                                send_staff_comment(
+                                                    "期間ストップ", edit_cust_code, edit_cust_name, rejector_name,
+                                                    "差戻しを修正し、再申請しました。",
+                                                    st.session_state.get("user_name", ""),
+                                                )
                                             st.toast("再申請が完了しました！")
                                             time.sleep(1)
                                             st.rerun()
                                         else:
                                             st.error(f"処理に失敗しました: {res.get('message')}")
+
+                                elif btn_withdraw:
+                                    withdrawn_row = [
+                                        _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
+                                        _v("store_name"), _v("store_code"),
+                                        _v("stop_dates"), _v("next_visit_date"), _v("reason"), _v("contact_person"), _v("comment"),
+                                        "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
+                                        rejector_name, reject_date,
+                                    ]
+
+                                    payload = {
+                                        "action": "DELETE_PERIOD_STOP_CHANGE",
+                                        "target_sheet_url": PS_TARGET_SHEET_URL,
+                                        "row_index": row_id,
+                                        "updated_row": withdrawn_row,
+                                    }
+                                    res = post_to_gas(payload)
+                                    if res.get("status") == "success":
+                                        if rejector_name:
+                                            send_staff_comment(
+                                                "期間ストップ", _v("cust_code"), _v("cust_name"), rejector_name,
+                                                "差し戻された申請を削除（取り下げ）しました。",
+                                                st.session_state.get("user_name", ""),
+                                            )
+                                        st.toast("削除しました。")
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"削除に失敗しました: {res.get('message')}")
             else:
                 st.info("現在、差戻しデータはありません。")
         except Exception as e:
@@ -446,13 +488,13 @@ def render_period_stop_tabs():
                                     action_type = ""
                                     if btn_approve:
                                         action_type = "APPROVE_PERIOD_STOP_CHANGE"
-                                        updated_row.extend([mgr_name, now_str, mgr_comment])
+                                        updated_row.extend([mgr_name, now_str, mgr_comment, "", ""])
                                     elif btn_reject:
                                         action_type = "REJECT_PERIOD_STOP_CHANGE"
-                                        updated_row.extend(["差戻し", now_str, mgr_comment])
+                                        updated_row.extend(["差戻し", now_str, mgr_comment, mgr_name, now_str])
                                     elif btn_delete:
                                         action_type = "DELETE_PERIOD_STOP_CHANGE"
-                                        updated_row.extend(["削除", now_str, mgr_comment])
+                                        updated_row.extend(["削除", now_str, mgr_comment, "", ""])
 
                                     payload = {
                                         "action": action_type,
