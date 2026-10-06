@@ -20,7 +20,9 @@ from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, C
 from views.maint_common import (
     get_pending_modes, get_current_role,
     get_unconfirmed_staff_comments, confirm_staff_comment,
+    read_csv_cached,
 )
+import pandas as pd
 from views.navi_view import route_navigation_screen
 from views.customer_contract_data_view import customer_contract_data_screen
 
@@ -52,6 +54,95 @@ MODE_DEFS = [
     ("cx", "🚫 解約", CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV,
      CX_COL["status_sign"], CX_COL["check_time"], CX_COL["print_time"]),
 ]
+
+
+def render_rejection_overview():
+    """管理職・業務担当向け：9モード全てをまとめて見られる「差戻し一覧」。
+    各モードのTARGET_SHEETから、差戻し（未処理）・差戻し後に再申請された（再送）・
+    差戻し後に取り下げられた（削除）データを横断的に集めて1つの表に表示する。
+    💡 「再送」「削除」の判定には、差し戻した管理職名を記録する列（status_col+3）が必要。
+    現時点でこの列を使っているのは商品発注（order_view.py）のみなので、他モードは
+    「未処理」（差戻しのまま）しか区別できない（再申請・取り下げ後は一覧から消える）。
+    その列を持つモードが増えれば、このままで「再送」「削除」も自動的に区別されるようになる。"""
+    st.markdown("#### 📋 差戻し一覧（全モード）")
+    st.caption(
+        "管理職チェックで差戻しとなった申請を、9モードまとめて確認できます。"
+        "「再送」「削除」の区別は、現時点では商品発注のみ対応しています（他モードは差戻し中のもののみ表示されます）。"
+    )
+
+    status_filter = st.multiselect(
+        "状況で絞り込み", ["未処理", "削除", "再送"],
+        default=["未処理", "削除", "再送"], key="reject_overview_status_filter",
+    )
+    mode_labels = [label for _k, label, *_r in MODE_DEFS]
+    mode_filter = st.multiselect(
+        "モードで絞り込み", mode_labels, default=mode_labels, key="reject_overview_mode_filter",
+    )
+
+    records = []
+    for mode_key, label, target_csv, _dest_csv, status_col, _check_col, _print_col in MODE_DEFS:
+        if label not in mode_filter:
+            continue
+        try:
+            df = read_csv_cached(target_csv)
+        except Exception:
+            continue
+        if df is None or df.empty or len(df.columns) <= status_col:
+            continue
+
+        rejector_col = status_col + 3
+        reject_date_col = status_col + 4
+        approval_time_col = status_col + 1
+
+        status_series = df.iloc[:, status_col].fillna("").astype(str).str.strip()
+        if len(df.columns) > rejector_col:
+            col_rejector = df.iloc[:, rejector_col].fillna("").astype(str).str.strip()
+        else:
+            col_rejector = pd.Series([""] * len(df), index=df.index)
+        if len(df.columns) > reject_date_col:
+            col_reject_date = df.iloc[:, reject_date_col].fillna("").astype(str).str.strip()
+        else:
+            col_reject_date = pd.Series([""] * len(df), index=df.index)
+
+        is_unprocessed = status_series == "差戻し"
+        is_resent = (status_series == "申請中") & (col_rejector != "")
+        is_withdrawn = (status_series == "削除") & (col_rejector != "")
+        target_df = df[is_unprocessed | is_resent | is_withdrawn]
+        if target_df.empty:
+            continue
+
+        for idx, row in target_df.iterrows():
+            st_val = status_series.loc[idx]
+            if st_val == "差戻し":
+                status_label = "未処理"
+            elif st_val == "削除":
+                status_label = "削除"
+            else:
+                status_label = "再送"
+            if status_label not in status_filter:
+                continue
+
+            reject_date = col_reject_date.loc[idx]
+            if not reject_date and st_val == "差戻し" and len(row) > approval_time_col and pd.notna(row.iloc[approval_time_col]):
+                reject_date = str(row.iloc[approval_time_col])
+
+            records.append({
+                "差戻し日": reject_date,
+                "担当者名": str(row.iloc[1]) if len(row) > 1 and pd.notna(row.iloc[1]) else "",
+                "顧客名": str(row.iloc[3]) if len(row) > 3 and pd.notna(row.iloc[3]) else "",
+                "メンテナンス種別": label,
+                "差し戻した管理職": col_rejector.loc[idx],
+                "現在の状況": status_label,
+            })
+
+    if not records:
+        st.info("現在、差戻しデータはありません。")
+        return
+
+    result_df = pd.DataFrame(records)
+    result_df["_sort"] = pd.to_datetime(result_df["差戻し日"], errors="coerce")
+    result_df = result_df.sort_values(by="_sort", ascending=False, na_position="last").drop(columns="_sort")
+    st.dataframe(result_df, use_container_width=True, hide_index=True)
 
 
 def maintenance_admin_screen():
@@ -143,6 +234,8 @@ def maintenance_admin_screen():
     extra_buttons = [("navi", "🗺️ ナビ画面")]
     if get_current_role() in ("0", "3"):
         extra_buttons.append(("cust_contract", "🗂️ 顧客・契約データ管理"))
+    if get_current_role() in ("0", "1", "3"):
+        extra_buttons.append(("reject_list", "📋 差戻し一覧"))
 
     all_buttons = [(mode_key, label) for mode_key, label, *_rest in MODE_DEFS] + extra_buttons
 
@@ -153,7 +246,7 @@ def maintenance_admin_screen():
     _mode_icon_colors = {
         "order": "#fdba74", "route": "#93c5fd", "sroute": "#5eead4", "dq": "#c4b5fd",
         "kz": "#fcd34d", "ps": "#fca5a5", "cc": "#d1d5db", "ot": "#fda4af", "cx": "#f87171",
-        "navi": "#7dd3fc", "cust_contract": "#a3e635",
+        "navi": "#7dd3fc", "cust_contract": "#a3e635", "reject_list": "#fb923c",
     }
     # 💡 border/box-shadowは、下の「対応待ちモードは赤枠」CSS（同じ div.st-key-modebtn_<key> button
     #    セレクタ）と詳細度を揃えるため、あえて汎用セレクタではなく1モードずつ同じ形のセレクタで
@@ -251,6 +344,8 @@ def maintenance_admin_screen():
         route_navigation_screen()
     elif st.session_state["maint_mode"] == "cust_contract":
         customer_contract_data_screen()
+    elif st.session_state["maint_mode"] == "reject_list":
+        render_rejection_overview()
     else:
         render_contract_change_tabs()
 

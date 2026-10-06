@@ -309,9 +309,8 @@ def render_product_order_tabs():
         "✅ メンテナンスチェック画面",
         "🖨️ 加盟店別 印刷",
         "🔍 過去の申請検索",
-        "📋 差戻し一覧",
     ]
-    _tab_visible_nums = [_n for _n in range(1, 8) if tab_visible(_n)]
+    _tab_visible_nums = [_n for _n in range(1, 7) if tab_visible(_n)]
     if not _tab_visible_nums:
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
@@ -1396,81 +1395,3 @@ def render_product_order_tabs():
         with _tab_map[6]:
             _tab6_body()
 
-    # ==========================================
-    # TAB 7: 差戻し一覧（管理職・業務担当のみ）
-    # ==========================================
-    def _tab7_body():
-        st.subheader("📋 差戻し一覧")
-        st.caption("管理職チェックで差戻しとなった申請の一覧です。申請者が対応するまでの状況を確認できます。")
-        try:
-            df = read_csv_cached(TARGET_SHEET_CSV)
-            if df.empty or len(df.columns) < 31:
-                st.info("現在、差戻しデータはありません。")
-                return
-
-            status_series = df.iloc[:, 30].fillna("").astype(str).str.strip()
-            if len(df.columns) > 33:
-                col33 = df.iloc[:, 33].fillna("").astype(str).str.strip()
-            else:
-                col33 = pd.Series([""] * len(df), index=df.index)
-            if len(df.columns) > 34:
-                col34 = df.iloc[:, 34].fillna("").astype(str).str.strip()
-            else:
-                col34 = pd.Series([""] * len(df), index=df.index)
-
-            # 未処理＝まだ差戻しのまま／再送＝修正して再申請済み／削除＝差戻しを取り下げた
-            # （col33が入っている＝過去に差戻しを受けた行であることの目印。管理職が
-            # 「申請中」の行を直接削除した場合はcol33が空のため、この一覧には出さない）。
-            is_unprocessed = status_series == "差戻し"
-            is_resent = (status_series == "申請中") & (col33 != "")
-            is_withdrawn = (status_series == "削除") & (col33 != "")
-            target_df = df[is_unprocessed | is_resent | is_withdrawn]
-
-            if target_df.empty:
-                st.info("現在、差戻しデータはありません。")
-                return
-
-            status_filter = st.multiselect(
-                "状況で絞り込み", ["未処理", "削除", "再送"],
-                default=["未処理", "削除", "再送"], key="t7_status_filter",
-            )
-
-            records = []
-            for idx, row in target_df.iterrows():
-                st_val = status_series.loc[idx]
-                if st_val == "差戻し":
-                    status_label = "未処理"
-                elif st_val == "削除":
-                    status_label = "削除"
-                else:
-                    status_label = "再送"
-                if status_label not in status_filter:
-                    continue
-
-                reject_date = col34.loc[idx]
-                if not reject_date and st_val == "差戻し" and pd.notna(row.iloc[31]):
-                    reject_date = str(row.iloc[31])
-
-                records.append({
-                    "差戻し日": reject_date,
-                    "担当者名": str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
-                    "顧客名": str(row.iloc[3]) if pd.notna(row.iloc[3]) else "",
-                    "メンテナンス種別": "📦 商品発注",
-                    "差し戻した管理職": col33.loc[idx],
-                    "現在の状況": status_label,
-                })
-
-            if not records:
-                st.info("条件に一致するデータはありません。")
-                return
-
-            result_df = pd.DataFrame(records)
-            result_df["_sort"] = pd.to_datetime(result_df["差戻し日"], errors="coerce")
-            result_df = result_df.sort_values(by="_sort", ascending=False, na_position="last").drop(columns="_sort")
-            st.dataframe(result_df, use_container_width=True, hide_index=True)
-        except Exception as e:
-            st.error(f"データ取得エラー: {e}")
-
-    if 7 in _tab_map:
-        with _tab_map[7]:
-            _tab7_body()
