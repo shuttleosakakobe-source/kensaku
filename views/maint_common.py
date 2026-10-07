@@ -491,6 +491,113 @@ def render_section_pending_banner(label, count):
     )
 
 
+def handle_tab4_reject(
+    row, row_id, reject_target, reject_reason, checker_name,
+    col, target_sheet_csv, target_sheet_url, dest_sheet_url,
+    reopen_action, applicant_reject_action, update_check_action,
+):
+    """TAB4（メンテナンスチェック画面）の「↩️ 指定先へ差戻し」共通処理。
+    以前はボタンを押してもトーストが出るだけで実際には何も更新されず、
+    差戻しが機能していなかった（データが一切書き込まれていなかった）ため追加。
+
+    reject_target が「業務担当」の場合：TARGET_SHEET側の元の申請行を探し、
+    ステータスを転記前の承認済み状態に戻す（status_sign列に元の承認者名を
+    書き戻す）ことで、TAB3（業務担当メンテナンス処理）に再び表示されるように
+    する。差戻し理由はTAB3でも見える「コメント」欄に追記する。
+
+    reject_target が「申請者」の場合：TAB2の差戻しと同じ要領で、TARGET_SHEET側を
+    status_sign="差戻し"・rejector_name・reject_date付きで更新し、TAB1（差戻し
+    一覧）に表示されるようにする。
+
+    いずれの場合もDEST_SHEET側の該当行はチェック済み扱い（check_time/check_user）
+    にして、TAB4の未チェック一覧から外す。
+
+    col: cust_code/timestamp/comment/status_sign/approval_time/approval_comment/
+         rejector_name/reject_date/check_time/check_userの各列番号を持つdict。
+
+    戻り値: (success: bool, message: str)
+    """
+    now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+
+    def _v(col_key, r=row):
+        i = col[col_key]
+        return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+    cust_code = _v("cust_code")
+    timestamp = _v("timestamp")
+
+    df_target = read_csv_cached(target_sheet_csv)
+    if df_target.empty or len(df_target.columns) <= col["status_sign"]:
+        return False, "元データ（スタッフ用シート）が見つかりませんでした。"
+
+    match_mask = (
+        (df_target.iloc[:, col["cust_code"]].astype(str).str.strip() == cust_code) &
+        (df_target.iloc[:, col["timestamp"]].astype(str).str.strip() == timestamp) &
+        (df_target.iloc[:, col["status_sign"]].astype(str).str.strip() == "業務転記済")
+    )
+    matched = df_target[match_mask]
+    if matched.empty:
+        return False, "差戻し先の元データ（スタッフ用シート側の申請行）が見つかりませんでした。別の担当者が既に処理した可能性があります。"
+
+    target_idx = matched.index[0]
+    target_row_id = target_idx + 2
+    target_row = matched.iloc[0]
+
+    base_width = col["reject_date"] + 1
+    base_row = [
+        "" if pd.isna(target_row.iloc[i]) else str(target_row.iloc[i])
+        for i in range(min(base_width, len(target_row)))
+    ]
+    while len(base_row) < base_width:
+        base_row.append("")
+
+    note = f"⚠️ メンテナンスチェックからの差戻し理由: {reject_reason}"
+
+    if reject_target == "業務担当":
+        # 💡 TARGET_SHEET側のstatus_signは転記時に既に「業務転記済」へ上書きされているため、
+        #    元の承認者名はDEST_SHEET側（＝この関数に渡されたrow）のstatus_signから取る。
+        mgr_name_val = _v("status_sign")
+        orig_comment = base_row[col["comment"]] if col["comment"] < len(base_row) else ""
+        base_row[col["comment"]] = f"{orig_comment}\n{note}" if orig_comment.strip() else note
+        base_row[col["status_sign"]] = mgr_name_val
+        action = reopen_action
+    else:
+        base_row[col["status_sign"]] = "差戻し"
+        base_row[col["approval_time"]] = now_str
+        base_row[col["approval_comment"]] = reject_reason
+        base_row[col["rejector_name"]] = checker_name
+        base_row[col["reject_date"]] = now_str
+        action = applicant_reject_action
+
+    payload = {
+        "action": action,
+        "target_sheet_url": target_sheet_url,
+        "row_index": target_row_id,
+        "updated_row": base_row,
+    }
+    res = post_to_gas(payload)
+    if res.get("status") != "success":
+        return False, f"差戻し失敗（元データの更新）: {res.get('message')}"
+
+    check_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
+    while len(check_row) < col["check_user"] + 1:
+        check_row.append("")
+    check_row[col["check_time"]] = now_str
+    check_row[col["check_user"]] = f"↩️ 差戻し（{reject_target}）: {reject_reason}"
+
+    check_payload = {
+        "action": update_check_action,
+        "target_sheet_url": dest_sheet_url,
+        "row_index": row_id,
+        "updated_row": check_row,
+    }
+    check_res = post_to_gas(check_payload)
+    if check_res.get("status") != "success":
+        return False, f"差戻し失敗（チェック画面側の更新）: {check_res.get('message')}"
+
+    return True, f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）"
+
+
 def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, print_col, tab_visible_nums):
     """TAB2（管理職チェック/承認待ち）=黄、TAB3（業務担当メンテナンス処理/転記待ち）=緑、
     TAB4（メンテナンスチェック/未チェック）=赤、TAB5（加盟店別印刷/未印刷）=ピンクで、

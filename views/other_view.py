@@ -12,7 +12,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
-    render_tab_header_pending_css,
+    render_tab_header_pending_css, handle_tab4_reject,
 )
 
 
@@ -820,9 +820,19 @@ def render_other_maintenance_tabs():
                                 if not reject_reason.strip():
                                     st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
                                 else:
-                                    st.toast(f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）", icon="↩️")
-                                    time.sleep(1.5)
-                                    st.rerun()
+                                    ok, msg = handle_tab4_reject(
+                                        row, row_id, reject_target, reject_reason,
+                                        st.session_state["user_name"],
+                                        OT_COL, OT_TARGET_SHEET_CSV, OT_TARGET_SHEET_URL, OT_DEST_SHEET_URL,
+                                        "APPROVE_OTHER_MAINTENANCE_CHANGE", "REJECT_OTHER_MAINTENANCE_CHANGE", "UPDATE_OTHER_MAINTENANCE_CHECK",
+                                    )
+                                    if ok:
+                                        read_csv_cached.clear()
+                                        st.toast(msg, icon="↩️")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")

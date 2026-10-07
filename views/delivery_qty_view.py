@@ -15,7 +15,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
-    render_tab_header_pending_css,
+    render_tab_header_pending_css, handle_tab4_reject,
 )
 from views.contract_view import (
     get_contract_products, _cc_product_labels, _cc_hide_zero, _cc_sum4,
@@ -1083,9 +1083,19 @@ def render_delivery_qty_change_tabs():
                                 if not reject_reason.strip():
                                     st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
                                 else:
-                                    st.toast(f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）", icon="↩️")
-                                    time.sleep(1.5)
-                                    st.rerun()
+                                    ok, msg = handle_tab4_reject(
+                                        row, row_id, reject_target, reject_reason,
+                                        st.session_state["user_name"],
+                                        DQ_COL, DQ_TARGET_SHEET_CSV, DQ_TARGET_SHEET_URL, DQ_DEST_SHEET_URL,
+                                        "APPROVE_DELIVERY_QTY_CHANGE", "REJECT_DELIVERY_QTY_CHANGE", "UPDATE_DELIVERY_QTY_CHECK",
+                                    )
+                                    if ok:
+                                        read_csv_cached.clear()
+                                        st.toast(msg, icon="↩️")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
 
         except Exception as e:
             st.error(f"データ読み込みエラー: {e}")
