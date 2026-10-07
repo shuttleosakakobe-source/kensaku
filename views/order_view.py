@@ -11,7 +11,7 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
-    send_staff_comment,
+    send_staff_comment, render_section_pending_banner,
 )
 
 
@@ -898,9 +898,10 @@ def render_product_order_tabs():
             else:
                 ac_series = df.iloc[:, 30].astype(str).str.strip()
                 approved_df = df[
-                    (~df.iloc[:, 30].isna()) & 
+                    (~df.iloc[:, 30].isna()) &
                     (~ac_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
                 ]
+                render_section_pending_banner("メンテナンス処理", len(approved_df))
 
                 if approved_df.empty:
                     st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
@@ -1057,6 +1058,12 @@ def render_product_order_tabs():
             if df_dest.empty:
                 st.info("現在、チェック対象のデータ（転記済みデータ）はありません。")
             else:
+                if len(df_dest.columns) > CHECK_TIME_COL_IDX:
+                    _unchecked_count = int((df_dest.iloc[:, CHECK_TIME_COL_IDX].fillna("").astype(str).str.strip() == "").sum())
+                else:
+                    _unchecked_count = 0
+                render_section_pending_banner("メンテナンスチェック", _unchecked_count)
+
                 show_checked = st.checkbox("✅ チェック済みのデータも表示する", value=False, key="chk_show_checked")
 
                 if not show_checked and len(df_dest.columns) > CHECK_TIME_COL_IDX:
@@ -1221,6 +1228,8 @@ def render_product_order_tabs():
                 if len(df_print.columns) > PRINT_TIME_COL_IDX:
                     not_printed_mask = df_print.iloc[:, PRINT_TIME_COL_IDX].fillna("").astype(str).str.strip() == ""
                     df_print = df_print[not_printed_mask]
+
+                render_section_pending_banner("印刷", len(df_print))
 
                 if df_print.empty:
                     st.info("印刷対象のデータがありません（TAB4でチェック未完了、またはすでに印刷済みです）。")

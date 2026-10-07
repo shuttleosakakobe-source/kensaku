@@ -424,68 +424,25 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
     )
 
 
-def get_operator_pending_breakdown(target_csv, dest_csv, status_col, check_col, print_col, cust_name_col=3):
-    """業務担当（権限0・3）向け：今開いているモードの「メンテナンス処理（転記待ち）」
-    「メンテナンスチェック（未チェック）」「印刷（未印刷）」のうち、どれに未処理が
-    あるかを種類ごとに判定する（メンテナンス業務画面上部の赤枠メッセージ用）。
-    件数・該当顧客名（最大3件）も一緒に返す。「処理は終わったはずなのに赤枠が消えない」
-    といった食い違いが起きたとき、どの行が引っかかっているのか画面上で確認できるようにするため。
-    権限0・3以外のユーザーの場合は、この表示自体が対象外のため全てFalse・0件を返す。
-    読み込みエラー時は判定不能＝未処理なし扱いにする（表示のためだけに画面全体が
-    落ちないようにするため）。"""
-    role = str(st.session_state.get("user_role", "")).strip()
-    if role.endswith(".0"):
-        role = role[:-2]
-    empty = {"pending": False, "count": 0, "names": []}
-    if role not in {"0", "3"}:
-        return {"transfer": dict(empty), "check": dict(empty), "print": dict(empty)}
-
-    result = {"transfer": dict(empty), "check": dict(empty), "print": dict(empty)}
-
-    def _names_for(df, mask):
-        if cust_name_col >= len(df.columns):
-            return []
-        return df.loc[mask].iloc[:, cust_name_col].fillna("").astype(str).str.strip().head(3).tolist()
-
-    try:
-        df_t = _fetch_csv_or_none(target_csv)
-        if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
-            status_series = df_t.iloc[:, status_col].astype(str).str.strip()
-            pending_transfer = (
-                (~df_t.iloc[:, status_col].isna()) &
-                (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
-            )
-            cnt = int(pending_transfer.sum())
-            result["transfer"] = {
-                "pending": cnt > 0, "count": cnt,
-                "names": _names_for(df_t, pending_transfer) if cnt else [],
-            }
-    except Exception:
-        pass
-
-    try:
-        df_d = _fetch_csv_or_none(dest_csv)
-        if df_d is not None and not df_d.empty:
-            if len(df_d.columns) > check_col:
-                unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
-                cnt = int(unchecked.sum())
-                result["check"] = {
-                    "pending": cnt > 0, "count": cnt,
-                    "names": _names_for(df_d, unchecked) if cnt else [],
-                }
-            if len(df_d.columns) > print_col and len(df_d.columns) > check_col:
-                checked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() != ""
-                not_printed = df_d.iloc[:, print_col].fillna("").astype(str).str.strip() == ""
-                print_mask = checked & not_printed
-                cnt = int(print_mask.sum())
-                result["print"] = {
-                    "pending": cnt > 0, "count": cnt,
-                    "names": _names_for(df_d, print_mask) if cnt else [],
-                }
-    except Exception:
-        pass
-
-    return result
+def render_section_pending_banner(label, count):
+    """業務担当・全権限（権限0・3）向け：今開いているセクション（メンテナンス処理／
+    メンテナンスチェック／印刷のいずれか）自身に未処理が残っている場合だけ、その場に
+    赤枠で件数を表示する。
+    💡 以前はメンテナンス業務トップ画面に3セクション分をまとめて表示していたが、
+    「このセクションを開いているのに関係ない他のセクションの赤枠まで出る」のが
+    分かりにくいという要望を受け、各セクション（TAB3・4・5）自身の中で、
+    そのセクション自身の未処理件数だけを表示する方式に変更した。
+    TAB3・4・5は元々tab_visible()で権限0・3にしか表示されないため、ここでは
+    追加の権限チェックは行わない。呼び出し側がそのタブの本体から、既に読み込み・
+    フィルタ済みのデータの件数を渡すだけでよい。"""
+    if count <= 0:
+        return
+    st.markdown(
+        f"<div style='border:3px solid #e53935;border-radius:10px;padding:8px 14px;"
+        f"background:#fff5f5;margin-bottom:12px;color:#b91c1c;font-weight:600;'>"
+        f"🔴 {label}で未処理が{count}件あります</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def get_pending_modes(mode_defs):

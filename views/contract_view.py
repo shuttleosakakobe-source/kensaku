@@ -9,7 +9,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     CONTRACT_COL_CUST_CODE, CONTRACT_WEEK_COLS,
     post_to_gas, build_print_pdf_url, _load_contract_df, read_csv_cached,
-    tab_visible, RESTRICTED_TAB_MSG, send_staff_comment,
+    tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
 )
 
 
@@ -897,6 +897,7 @@ def render_contract_change_tabs():
                     (~df.iloc[:, CC_COL["status_sign"]].isna()) &
                     (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
                 ]
+                render_section_pending_banner("メンテナンス処理", len(approved_df))
 
                 if approved_df.empty:
                     st.info("現在、業務引き継ぎ待ちの承認済みデータはありません。")
@@ -1036,6 +1037,12 @@ def render_contract_change_tabs():
             if df_dest.empty:
                 st.info("現在、チェック対象のデータ（転記済みデータ）はありません。")
             else:
+                if len(df_dest.columns) > CC_COL["check_time"]:
+                    _unchecked_count = int((df_dest.iloc[:, CC_COL["check_time"]].fillna("").astype(str).str.strip() == "").sum())
+                else:
+                    _unchecked_count = 0
+                render_section_pending_banner("メンテナンスチェック", _unchecked_count)
+
                 show_checked = st.checkbox("✅ チェック済みのデータも表示する", value=False, key="cc_chk_show_checked")
 
                 if not show_checked and len(df_dest.columns) > CC_COL["check_time"]:
@@ -1177,6 +1184,8 @@ def render_contract_change_tabs():
                 if len(df_print.columns) > CC_COL["print_time"]:
                     not_printed_mask = df_print.iloc[:, CC_COL["print_time"]].fillna("").astype(str).str.strip() == ""
                     df_print = df_print[not_printed_mask]
+
+                render_section_pending_banner("印刷", len(df_print))
 
                 if df_print.empty:
                     st.info("印刷対象のデータがありません（TAB4でチェック未完了、またはすでに印刷済みです）。")

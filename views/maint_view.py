@@ -20,7 +20,7 @@ from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, C
 from views.maint_common import (
     get_pending_modes, get_current_role,
     get_unconfirmed_staff_comments, confirm_staff_comment,
-    read_csv_cached, get_operator_pending_breakdown,
+    read_csv_cached,
 )
 import pandas as pd
 from views.navi_view import route_navigation_screen
@@ -54,7 +54,6 @@ MODE_DEFS = [
     ("cx", "🚫 解約", CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV,
      CX_COL["status_sign"], CX_COL["check_time"], CX_COL["print_time"]),
 ]
-MODE_DEFS_BY_KEY = {mode_def[0]: mode_def for mode_def in MODE_DEFS}
 
 
 def render_rejection_overview():
@@ -180,32 +179,12 @@ def maintenance_admin_screen():
 
     st.markdown("#### 📦🗺️📋 メンテナンス業務")
 
-    # 💡 業務担当・全権限（権限0・3）向け：今開いているモードの「メンテナンス処理（転記）」
-    #    「メンテナンスチェック」「印刷」のうち、未処理が残っているものだけを赤枠で表示する
-    #    （どの作業が残っているか一目で分かるようにするため）。管理職（権限1）はこの3つの
-    #    セクション自体を使わないため対象外。
-    _current_mode_key = st.session_state.get("maint_mode", "order")
-    if get_current_role() in ("0", "3") and _current_mode_key in MODE_DEFS_BY_KEY:
-        _mk, _label, _target_csv, _dest_csv, _status_col, _check_col, _print_col = MODE_DEFS_BY_KEY[_current_mode_key]
-        _breakdown = get_operator_pending_breakdown(_target_csv, _dest_csv, _status_col, _check_col, _print_col)
-        # 💡 件数・該当顧客名（最大3件）も一緒に出す。「処理は終わったはずなのに赤枠が
-        #    消えない」といった食い違いが起きたとき、どの顧客の行が引っかかっているのか
-        #    この場で確認できるようにするため。
-        _pending_msgs = []
-        for _key, _label_text in (("transfer", "メンテナンス処理"), ("check", "メンテナンスチェック"), ("print", "印刷")):
-            _info = _breakdown[_key]
-            if _info["pending"]:
-                _names = "、".join(n for n in _info["names"] if n)
-                _suffix = f"（例: {_names}）" if _names else ""
-                _pending_msgs.append(f"{_label_text}で未処理が{_info['count']}件あります{_suffix}")
-        if _pending_msgs:
-            st.markdown(
-                "<div style='border:3px solid #e53935;border-radius:10px;padding:10px 16px;"
-                "background:#fff5f5;margin-bottom:14px;color:#b91c1c;font-weight:600;'>"
-                + "<br>".join(f"🔴 {m}" for m in _pending_msgs)
-                + "</div>",
-                unsafe_allow_html=True,
-            )
+    # 💡 業務担当・全権限向けの「未処理の赤枠」は、以前はここ（モード共通の最上部）に
+    #    3セクション分（メンテナンス処理・チェック・印刷）まとめて表示していたが、
+    #    「このセクションを開いているのに関係ない他のセクションの赤枠まで出る」のが
+    #    分かりにくいという要望を受け、各セクション（TAB3・4・5）自身の中で、
+    #    そのセクション自身の未処理件数だけを表示する方式に変更した
+    #    （render_section_pending_banner、各view内のTAB3・4・5本体から呼ばれる）。
 
     # 💡 業務担当（TAB3）からの連絡コメント通知：ログイン中のユーザーが申請者になっている
     #    未確認コメントがあれば、バッジを出して一覧・確認ボタンを表示する。
