@@ -810,7 +810,16 @@ def render_delivery_qty_change_tabs():
                 else:
                     st.success(f"📋 未承認のデータ: **{len(approved_df)} 件**")
 
-                    for idx, row in approved_df.iloc[::-1].iterrows():
+                    sort_by_date = st.checkbox("📅 納品日の早い順（昇順）で並び替える", value=False, key="dq_t3_sort_date")
+
+                    if sort_by_date:
+                        approved_df = approved_df.copy()
+                        approved_df["_sort_date"] = pd.to_datetime(approved_df.iloc[:, DQ_COL["delivery_date"]], errors="coerce")
+                        approved_df = approved_df.sort_values(by="_sort_date", ascending=True, na_position="last")
+
+                    iterator = approved_df.iterrows() if sort_by_date else approved_df.iloc[::-1].iterrows()
+
+                    for idx, row in iterator:
                         row_id = idx + 2
 
                         def _v(col_key, r=row):
