@@ -297,7 +297,7 @@ def maintenance_admin_screen():
     try:
         pending_modes = get_pending_modes(MODE_DEFS)
     except Exception:
-        pending_modes = set()
+        pending_modes = {}
 
     # 💡 対応待ちがあるモードのボタンだけ、枠を赤くするCSSを動的に追加する
     #    （st.container(key=...)で各ボタンをラップし、そのラッパーに付くst-key-<key>クラスを
@@ -322,6 +322,15 @@ def maintenance_admin_screen():
                 on_click=_set_maint_mode, args=(mode_key,),
                 key=f"modebtn_click_{mode_key}",
             )
+
+    # 💡 「ボタンが赤いのに、見ているTABには何も残っていない」という混乱が繰り返し
+    #    起きたため、今選んでいるモードのボタンが赤い場合は、その理由（差戻し／承認待ち／
+    #    転記待ち／未チェック／未印刷のうちどれが・何件か）をここに出す。ボタン自体は
+    #    モード全体の状態をまとめて示すものなので、今見ているTAB以外の理由で赤いことも
+    #    ある（例: TAB1に差戻しが残っている、TAB2に承認待ちが残っている等）。
+    _current_reasons = pending_modes.get(st.session_state["maint_mode"]) if pending_modes else None
+    if _current_reasons:
+        st.caption("🔴 このモードが赤い理由: " + "、".join(_current_reasons))
 
     st.write("---")
 

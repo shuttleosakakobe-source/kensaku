@@ -346,7 +346,7 @@ def _fetch_csv_or_none(csv_url):
         return None
 
 
-def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applicant_col=1, *, user_role="", user_name=""):
+def _pending_reasons_from_dfs(df_t, df_d, status_col, check_col, print_col, applicant_col=1, *, user_role="", user_name=""):
     """あるモード（商品発注／ルート変更／単発ルート変更／納品数量変更／客中残訂正／契約内容変更）に、
     ログイン中のユーザー自身が対応すべき「対応待ち」のデータが残っているかどうかを、既に
     読み込み済みのDataFrameから判定する（メンテナンス業務トップのボタンの赤枠表示用）。
@@ -358,6 +358,9 @@ def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applica
     - 承認済みだが未転記（要業務転記）／チェック未完了（要チェック）／
       チェック済みだが未印刷（要印刷）：業務担当（権限0・3）のみ
     権限0（全権限）は、どの種類の対応待ちでも対象として見る。
+    💡 「ボタンが赤いのに、見ているTABには何も残っていない」という混乱が繰り返し起きたため、
+    単純なTrue/Falseではなく、どの種類が・何件該当したかのリストを返すようにしている
+    （例: ["差戻し1件", "未チェック2件"]）。空リスト＝対応待ちなし。
     読み込みエラー（df=None）時は「処理待ちなし」扱いとする（ボタン表示のためだけにトップ画面全体が
     落ちないようにするため）。"""
     role = str(user_role).strip()
@@ -368,29 +371,36 @@ def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applica
     is_operator = role in {"0", "3"}
     my_name = str(user_name).strip()
 
+    reasons = []
+
     try:
         if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
             status_series = df_t.iloc[:, status_col].astype(str).str.strip()
 
             if is_all:
-                if (status_series == "差戻し").any():
-                    return True
+                cnt = int((status_series == "差戻し").sum())
+                if cnt:
+                    reasons.append(f"差戻し{cnt}件")
             elif my_name and len(df_t.columns) > applicant_col:
                 applicant_series = df_t.iloc[:, applicant_col].astype(str).str.strip()
                 my_rejected = (status_series == "差戻し") & (applicant_series == my_name)
-                if my_rejected.any():
-                    return True
+                cnt = int(my_rejected.sum())
+                if cnt:
+                    reasons.append(f"差戻し{cnt}件")
 
-            if is_manager and (status_series == "申請中").any():
-                return True
+            if is_manager:
+                cnt = int((status_series == "申請中").sum())
+                if cnt:
+                    reasons.append(f"承認待ち{cnt}件")
 
             if is_operator:
                 pending_transfer = (
                     (~df_t.iloc[:, status_col].isna()) &
                     (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
                 )
-                if pending_transfer.any():
-                    return True
+                cnt = int(pending_transfer.sum())
+                if cnt:
+                    reasons.append(f"転記待ち{cnt}件")
     except Exception:
         pass
 
@@ -398,17 +408,27 @@ def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applica
         if is_operator and df_d is not None and not df_d.empty:
             if len(df_d.columns) > check_col:
                 unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
-                if unchecked.any():
-                    return True
+                cnt = int(unchecked.sum())
+                if cnt:
+                    reasons.append(f"未チェック{cnt}件")
             if len(df_d.columns) > print_col and len(df_d.columns) > check_col:
                 checked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() != ""
                 not_printed = df_d.iloc[:, print_col].fillna("").astype(str).str.strip() == ""
-                if (checked & not_printed).any():
-                    return True
+                cnt = int((checked & not_printed).sum())
+                if cnt:
+                    reasons.append(f"未印刷{cnt}件")
     except Exception:
         pass
 
-    return False
+    return reasons
+
+
+def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applicant_col=1, *, user_role="", user_name=""):
+    """_pending_reasons_from_dfsの真偽値版（理由の内訳までは不要な呼び出し元用）。"""
+    return bool(_pending_reasons_from_dfs(
+        df_t, df_d, status_col, check_col, print_col, applicant_col,
+        user_role=user_role, user_name=user_name,
+    ))
 
 
 def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col, applicant_col=1):
@@ -455,7 +475,10 @@ def get_pending_modes(mode_defs):
     （各読み込み自体はキャッシュ付きの_fetch_csv_or_noneなので、2回目以降はほぼ一瞬で返る）。
     ログイン中のユーザー（st.session_state の user_role / user_name）を基準に絞り込む
     （差戻しは申請者本人、承認待ちは管理職、転記・チェック・印刷待ちは業務担当のみに見える）。
-    戻り値: 対応待ちがあるmode_keyのset。"""
+    戻り値: {mode_key: ["差戻し1件", "未チェック2件", ...]} の辞書（対応待ちがあるモードのみ）。
+    setとして使っていた既存の呼び出し元（`if pending_modes:` や `for m in pending_modes`）は
+    辞書でもそのまま動く（キーがmode_keyのため）。理由の内訳はボタンが赤い根拠を画面上で
+    確認できるようにするためのもの。"""
     urls = []
     for _mode_key, _label, target_csv, dest_csv, *_rest in mode_defs:
         urls.append(target_csv)
@@ -476,14 +499,15 @@ def get_pending_modes(mode_defs):
     user_role = st.session_state.get("user_role", "")
     user_name = st.session_state.get("user_name", "")
 
-    pending_modes = set()
+    pending_modes = {}
     for mode_key, _label, target_csv, dest_csv, status_col, check_col, print_col in mode_defs:
         try:
-            if _pending_flag_from_dfs(
+            reasons = _pending_reasons_from_dfs(
                 fetched.get(target_csv), fetched.get(dest_csv), status_col, check_col, print_col,
                 user_role=user_role, user_name=user_name,
-            ):
-                pending_modes.add(mode_key)
+            )
+            if reasons:
+                pending_modes[mode_key] = reasons
         except Exception:
             pass
     return pending_modes
