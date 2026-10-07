@@ -510,8 +510,13 @@ def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, p
         if not pending[tab_no] or tab_no not in tab_visible_nums:
             continue
         position = tab_visible_nums.index(tab_no) + 1
+        # 💡 :nth-child ではなく :nth-of-type を使う。st.tabsのタブ一覧
+        # （div[data-baseweb="tab-list"]）には、選択中タブの下線などを描画する
+        # button以外の要素が混ざることがあり、:nth-childだと数がずれて
+        # 別のタブに色が付いてしまう不具合があった。:nth-of-typeなら
+        # button要素だけを数えるため、このズレが起きない。
         css_parts.append(
-            f'div[data-baseweb="tab-list"] button:nth-child({position}) {{'
+            f'div[data-baseweb="tab-list"] button[data-baseweb="tab"]:nth-of-type({position}) {{'
             f' border: 3px solid {color} !important;'
             f' border-radius: 6px !important;'
             f' box-shadow: 0 0 0 1px {color} !important; }}'
