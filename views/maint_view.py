@@ -188,13 +188,16 @@ def maintenance_admin_screen():
     if get_current_role() in ("0", "3") and _current_mode_key in MODE_DEFS_BY_KEY:
         _mk, _label, _target_csv, _dest_csv, _status_col, _check_col, _print_col = MODE_DEFS_BY_KEY[_current_mode_key]
         _breakdown = get_operator_pending_breakdown(_target_csv, _dest_csv, _status_col, _check_col, _print_col)
+        # 💡 件数・該当顧客名（最大3件）も一緒に出す。「処理は終わったはずなのに赤枠が
+        #    消えない」といった食い違いが起きたとき、どの顧客の行が引っかかっているのか
+        #    この場で確認できるようにするため。
         _pending_msgs = []
-        if _breakdown["transfer"]:
-            _pending_msgs.append("メンテナンス処理で未処理があります")
-        if _breakdown["check"]:
-            _pending_msgs.append("メンテナンスチェックで未処理があります")
-        if _breakdown["print"]:
-            _pending_msgs.append("印刷で未処理があります")
+        for _key, _label_text in (("transfer", "メンテナンス処理"), ("check", "メンテナンスチェック"), ("print", "印刷")):
+            _info = _breakdown[_key]
+            if _info["pending"]:
+                _names = "、".join(n for n in _info["names"] if n)
+                _suffix = f"（例: {_names}）" if _names else ""
+                _pending_msgs.append(f"{_label_text}で未処理が{_info['count']}件あります{_suffix}")
         if _pending_msgs:
             st.markdown(
                 "<div style='border:3px solid #e53935;border-radius:10px;padding:10px 16px;"

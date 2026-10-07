@@ -424,20 +424,28 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
     )
 
 
-def get_operator_pending_breakdown(target_csv, dest_csv, status_col, check_col, print_col):
+def get_operator_pending_breakdown(target_csv, dest_csv, status_col, check_col, print_col, cust_name_col=3):
     """業務担当（権限0・3）向け：今開いているモードの「メンテナンス処理（転記待ち）」
     「メンテナンスチェック（未チェック）」「印刷（未印刷）」のうち、どれに未処理が
     あるかを種類ごとに判定する（メンテナンス業務画面上部の赤枠メッセージ用）。
-    権限0・3以外のユーザーの場合は、この表示自体が対象外のため全てFalseを返す。
+    件数・該当顧客名（最大3件）も一緒に返す。「処理は終わったはずなのに赤枠が消えない」
+    といった食い違いが起きたとき、どの行が引っかかっているのか画面上で確認できるようにするため。
+    権限0・3以外のユーザーの場合は、この表示自体が対象外のため全てFalse・0件を返す。
     読み込みエラー時は判定不能＝未処理なし扱いにする（表示のためだけに画面全体が
     落ちないようにするため）。"""
     role = str(st.session_state.get("user_role", "")).strip()
     if role.endswith(".0"):
         role = role[:-2]
+    empty = {"pending": False, "count": 0, "names": []}
     if role not in {"0", "3"}:
-        return {"transfer": False, "check": False, "print": False}
+        return {"transfer": dict(empty), "check": dict(empty), "print": dict(empty)}
 
-    result = {"transfer": False, "check": False, "print": False}
+    result = {"transfer": dict(empty), "check": dict(empty), "print": dict(empty)}
+
+    def _names_for(df, mask):
+        if cust_name_col >= len(df.columns):
+            return []
+        return df.loc[mask].iloc[:, cust_name_col].fillna("").astype(str).str.strip().head(3).tolist()
 
     try:
         df_t = _fetch_csv_or_none(target_csv)
@@ -447,7 +455,11 @@ def get_operator_pending_breakdown(target_csv, dest_csv, status_col, check_col, 
                 (~df_t.iloc[:, status_col].isna()) &
                 (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
             )
-            result["transfer"] = bool(pending_transfer.any())
+            cnt = int(pending_transfer.sum())
+            result["transfer"] = {
+                "pending": cnt > 0, "count": cnt,
+                "names": _names_for(df_t, pending_transfer) if cnt else [],
+            }
     except Exception:
         pass
 
@@ -456,11 +468,20 @@ def get_operator_pending_breakdown(target_csv, dest_csv, status_col, check_col, 
         if df_d is not None and not df_d.empty:
             if len(df_d.columns) > check_col:
                 unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
-                result["check"] = bool(unchecked.any())
+                cnt = int(unchecked.sum())
+                result["check"] = {
+                    "pending": cnt > 0, "count": cnt,
+                    "names": _names_for(df_d, unchecked) if cnt else [],
+                }
             if len(df_d.columns) > print_col and len(df_d.columns) > check_col:
                 checked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() != ""
                 not_printed = df_d.iloc[:, print_col].fillna("").astype(str).str.strip() == ""
-                result["print"] = bool((checked & not_printed).any())
+                print_mask = checked & not_printed
+                cnt = int(print_mask.sum())
+                result["print"] = {
+                    "pending": cnt > 0, "count": cnt,
+                    "names": _names_for(df_d, print_mask) if cnt else [],
+                }
     except Exception:
         pass
 
