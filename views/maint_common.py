@@ -424,6 +424,49 @@ def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col
     )
 
 
+def get_operator_pending_breakdown(target_csv, dest_csv, status_col, check_col, print_col):
+    """業務担当（権限0・3）向け：今開いているモードの「メンテナンス処理（転記待ち）」
+    「メンテナンスチェック（未チェック）」「印刷（未印刷）」のうち、どれに未処理が
+    あるかを種類ごとに判定する（メンテナンス業務画面上部の赤枠メッセージ用）。
+    権限0・3以外のユーザーの場合は、この表示自体が対象外のため全てFalseを返す。
+    読み込みエラー時は判定不能＝未処理なし扱いにする（表示のためだけに画面全体が
+    落ちないようにするため）。"""
+    role = str(st.session_state.get("user_role", "")).strip()
+    if role.endswith(".0"):
+        role = role[:-2]
+    if role not in {"0", "3"}:
+        return {"transfer": False, "check": False, "print": False}
+
+    result = {"transfer": False, "check": False, "print": False}
+
+    try:
+        df_t = _fetch_csv_or_none(target_csv)
+        if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
+            status_series = df_t.iloc[:, status_col].astype(str).str.strip()
+            pending_transfer = (
+                (~df_t.iloc[:, status_col].isna()) &
+                (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+            )
+            result["transfer"] = bool(pending_transfer.any())
+    except Exception:
+        pass
+
+    try:
+        df_d = _fetch_csv_or_none(dest_csv)
+        if df_d is not None and not df_d.empty:
+            if len(df_d.columns) > check_col:
+                unchecked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == ""
+                result["check"] = bool(unchecked.any())
+            if len(df_d.columns) > print_col and len(df_d.columns) > check_col:
+                checked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() != ""
+                not_printed = df_d.iloc[:, print_col].fillna("").astype(str).str.strip() == ""
+                result["print"] = bool((checked & not_printed).any())
+    except Exception:
+        pass
+
+    return result
+
+
 def get_pending_modes(mode_defs):
     """メンテナンス業務トップの全モード分の「対応待ちデータあり」判定をまとめて行う。
     mode_defs: [(mode_key, label, target_csv, dest_csv, status_col, check_col, print_col), ...]
