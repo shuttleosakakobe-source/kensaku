@@ -11,7 +11,7 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
-    send_staff_comment, render_section_pending_banner,
+    send_staff_comment, render_section_pending_banner, render_tab_header_pending_css,
 )
 
 
@@ -325,6 +325,9 @@ def render_product_order_tabs():
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
     else:
+        render_tab_header_pending_css(
+            TARGET_SHEET_CSV, DEST_SHEET_CSV, 30, CHECK_TIME_COL_IDX, PRINT_TIME_COL_IDX, _tab_visible_nums
+        )
         _tab_objs = st.tabs([_tab_all_labels[_n - 1] for _n in _tab_visible_nums])
         _tab_map = dict(zip(_tab_visible_nums, _tab_objs))
 

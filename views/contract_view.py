@@ -10,6 +10,7 @@ from views.maint_common import (
     CONTRACT_COL_CUST_CODE, CONTRACT_WEEK_COLS,
     post_to_gas, build_print_pdf_url, _load_contract_df, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
+    render_tab_header_pending_css,
 )
 
 
@@ -464,6 +465,11 @@ def render_contract_change_tabs():
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
     else:
+        render_tab_header_pending_css(
+            CC_TARGET_SHEET_CSV, CC_DEST_SHEET_CSV,
+            CC_COL["status_sign"], CC_COL["check_time"], CC_COL["print_time"],
+            _c_tab_visible_nums,
+        )
         _c_tab_objs = st.tabs([_c_tab_all_labels[_n - 1] for _n in _c_tab_visible_nums])
         _tab_map = dict(zip(_c_tab_visible_nums, _c_tab_objs))
 

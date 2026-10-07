@@ -15,6 +15,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
+    render_tab_header_pending_css,
 )
 from views.contract_view import (
     get_contract_products, _cc_product_labels, _cc_hide_zero, _cc_sum4,
@@ -311,6 +312,11 @@ def render_delivery_qty_change_tabs():
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
     else:
+        render_tab_header_pending_css(
+            DQ_TARGET_SHEET_CSV, DQ_DEST_SHEET_CSV,
+            DQ_COL["status_sign"], DQ_COL["check_time"], DQ_COL["print_time"],
+            _d_tab_visible_nums,
+        )
         _d_tab_objs = st.tabs([_d_tab_all_labels[_n - 1] for _n in _d_tab_visible_nums])
         _tab_map = dict(zip(_d_tab_visible_nums, _d_tab_objs))
 

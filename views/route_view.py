@@ -10,7 +10,7 @@ from views.maint_common import (
     CONTRACT_COL_CUST_CODE, CONTRACT_WEEK_COLS,
     post_to_gas, build_print_pdf_url, _load_contract_df, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code, send_staff_comment,
-    render_section_pending_banner,
+    render_section_pending_banner, render_tab_header_pending_css,
 )
 
 
@@ -292,6 +292,11 @@ def render_route_change_tabs():
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
     else:
+        render_tab_header_pending_css(
+            ROUTE_TARGET_SHEET_CSV, ROUTE_DEST_SHEET_CSV,
+            ROUTE_COL["status_sign"], ROUTE_COL["check_time"], ROUTE_COL["print_time"],
+            _r_tab_visible_nums,
+        )
         _r_tab_objs = st.tabs([_r_tab_all_labels[_n - 1] for _n in _r_tab_visible_nums])
         _tab_map = dict(zip(_r_tab_visible_nums, _r_tab_objs))
 

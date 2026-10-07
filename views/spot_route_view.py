@@ -12,7 +12,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code, send_staff_comment,
-    render_section_pending_banner,
+    render_section_pending_banner, render_tab_header_pending_css,
 )
 from views.route_view import get_route_lookup
 
@@ -228,6 +228,11 @@ def render_spot_route_change_tabs():
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
     else:
+        render_tab_header_pending_css(
+            SR_TARGET_SHEET_CSV, SR_DEST_SHEET_CSV,
+            SR_COL["status_sign"], SR_COL["check_time"], SR_COL["print_time"],
+            _s_tab_visible_nums,
+        )
         _s_tab_objs = st.tabs([_s_tab_all_labels[_n - 1] for _n in _s_tab_visible_nums])
         _tab_map = dict(zip(_s_tab_visible_nums, _s_tab_objs))
 

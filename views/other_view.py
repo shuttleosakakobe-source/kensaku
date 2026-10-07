@@ -12,6 +12,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
+    render_tab_header_pending_css,
 )
 
 
@@ -221,6 +222,11 @@ def render_other_maintenance_tabs():
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
     else:
+        render_tab_header_pending_css(
+            OT_TARGET_SHEET_CSV, OT_DEST_SHEET_CSV,
+            OT_COL["status_sign"], OT_COL["check_time"], OT_COL["print_time"],
+            _o_tab_visible_nums,
+        )
         _o_tab_objs = st.tabs([_o_tab_all_labels[_n - 1] for _n in _o_tab_visible_nums])
         _tab_map = dict(zip(_o_tab_visible_nums, _o_tab_objs))
 

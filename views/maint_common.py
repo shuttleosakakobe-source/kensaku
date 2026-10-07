@@ -465,6 +465,61 @@ def render_section_pending_banner(label, count):
     )
 
 
+def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, print_col, tab_visible_nums):
+    """TAB2（管理職チェック/承認待ち）=黄、TAB3（業務担当メンテナンス処理/転記待ち）=緑、
+    TAB4（メンテナンスチェック/未チェック）=赤、TAB5（加盟店別印刷/未印刷）=ピンクで、
+    それぞれ未処理がある場合だけ、そのタブの見出し（st.tabsのタブボタン自体）に
+    色付きの枠をつける。render_section_pending_bannerはタブの中身に出す文言、
+    こちらはタブを開く前から見出し自体の色でひと目でわかるようにするためのもの。
+    💡 st.tabsの各タブは個別のkeyを持てずCSSで直接狙えないため、実際に表示されている
+    タブ番号の並び順（tab_visible_nums＝tab_visible()でフィルタ済みのもの）から、
+    何番目のタブボタンか（nth-child）を逆算して当てる。権限によって表示されるタブの
+    数・順番が変わるため、呼び出し側は必ずそのモードで実際に使っているtab_visible_nums
+    をそのまま渡すこと。st.tabs()を呼ぶ「前」に呼び出す必要がある
+    （タブの見出しが描画される前にスタイルを注入しておくため）。"""
+    df_t = _fetch_csv_or_none(target_csv)
+    df_d = _fetch_csv_or_none(dest_csv)
+
+    pending = {2: False, 3: False, 4: False, 5: False}
+    try:
+        if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
+            status_series = df_t.iloc[:, status_col].astype(str).str.strip()
+            pending[2] = bool((status_series == "申請中").any())
+            pending_transfer = (
+                (~df_t.iloc[:, status_col].isna()) &
+                (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+            )
+            pending[3] = bool(pending_transfer.any())
+    except Exception:
+        pass
+
+    try:
+        if df_d is not None and not df_d.empty:
+            if len(df_d.columns) > check_col:
+                pending[4] = bool((df_d.iloc[:, check_col].fillna("").astype(str).str.strip() == "").any())
+            if len(df_d.columns) > print_col and len(df_d.columns) > check_col:
+                checked = df_d.iloc[:, check_col].fillna("").astype(str).str.strip() != ""
+                not_printed = df_d.iloc[:, print_col].fillna("").astype(str).str.strip() == ""
+                pending[5] = bool((checked & not_printed).any())
+    except Exception:
+        pass
+
+    colors = {2: "#f1c40f", 3: "#22c55e", 4: "#e53935", 5: "#ec4899"}
+    css_parts = []
+    for tab_no, color in colors.items():
+        if not pending[tab_no] or tab_no not in tab_visible_nums:
+            continue
+        position = tab_visible_nums.index(tab_no) + 1
+        css_parts.append(
+            f'div[data-baseweb="tab-list"] button:nth-child({position}) {{'
+            f' border: 3px solid {color} !important;'
+            f' border-radius: 6px !important;'
+            f' box-shadow: 0 0 0 1px {color} !important; }}'
+        )
+    if css_parts:
+        st.markdown(f"<style>{''.join(css_parts)}</style>", unsafe_allow_html=True)
+
+
 def get_pending_modes(mode_defs):
     """メンテナンス業務トップの全モード分の「対応待ちデータあり」判定をまとめて行う。
     mode_defs: [(mode_key, label, target_csv, dest_csv, status_col, check_col, print_col), ...]

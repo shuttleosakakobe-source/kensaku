@@ -14,6 +14,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
+    render_tab_header_pending_css,
 )
 from views.contract_view import (
     get_contract_products, calc_cc_amount, _cc_to_float, _cc_format_yen,
@@ -236,6 +237,11 @@ def render_cancel_tabs():
         st.info(RESTRICTED_TAB_MSG)
         _tab_map = {}
     else:
+        render_tab_header_pending_css(
+            CX_TARGET_SHEET_CSV, CX_DEST_SHEET_CSV,
+            CX_COL["status_sign"], CX_COL["check_time"], CX_COL["print_time"],
+            _x_tab_visible_nums,
+        )
         _x_tab_objs = st.tabs([_x_tab_all_labels[_n - 1] for _n in _x_tab_visible_nums])
         _tab_map = dict(zip(_x_tab_visible_nums, _x_tab_objs))
 
