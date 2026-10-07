@@ -489,6 +489,12 @@ def render_route_change_tabs():
                 else:
                     for idx, row in rejected_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        row_sig = hashlib.md5(
+                            "|".join(
+                                "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                for i in range(len(row))
+                            ).encode("utf-8")
+                        ).hexdigest()[:8]
 
                         def _v(col_key, r=row):
                             i = ROUTE_COL[col_key]
@@ -499,36 +505,36 @@ def render_route_change_tabs():
                         reject_date = _v("reject_date") or (_v("approval_time") if _v("status_sign") == "差戻し" else "")
 
                         with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
-                            with st.form(key=f"rt_resubmit_form_{row_id}"):
+                            with st.form(key=f"rt_resubmit_form_{row_id}_{row_sig}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報修正**")
 
                                 r1_1, r1_2, r1_3 = st.columns(3)
-                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"rt_re_ccode_{row_id}")
-                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"rt_re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"rt_re_scode_{row_id}")
+                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"rt_re_ccode_{row_id}_{row_sig}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"rt_re_cname_{row_id}_{row_sig}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"rt_re_scode_{row_id}_{row_sig}")
 
                                 r2_1, r2_2 = st.columns(2)
-                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"rt_re_sname_{row_id}")
-                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"rt_re_app_{row_id}")
+                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"rt_re_sname_{row_id}_{row_sig}")
+                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"rt_re_app_{row_id}_{row_sig}")
 
                                 r3_1, r3_2, r3_3 = st.columns(3)
-                                edit_route_before = r3_1.text_input("変更前ルート", value=_v("route_before"), key=f"rt_re_rbefore_{row_id}")
-                                edit_op_before_code = r3_2.text_input("変更前担当者コード", value=_v("op_before_code"), key=f"rt_re_obefore_code_{row_id}")
-                                edit_op_before_name = r3_3.text_input("変更前担当者", value=_v("op_before_name"), key=f"rt_re_obefore_name_{row_id}")
+                                edit_route_before = r3_1.text_input("変更前ルート", value=_v("route_before"), key=f"rt_re_rbefore_{row_id}_{row_sig}")
+                                edit_op_before_code = r3_2.text_input("変更前担当者コード", value=_v("op_before_code"), key=f"rt_re_obefore_code_{row_id}_{row_sig}")
+                                edit_op_before_name = r3_3.text_input("変更前担当者", value=_v("op_before_name"), key=f"rt_re_obefore_name_{row_id}_{row_sig}")
 
                                 r4_1, r4_2, r4_3 = st.columns(3)
-                                edit_route_after = r4_1.text_input("変更後ルート", value=_v("route_after"), key=f"rt_re_rafter_{row_id}")
-                                edit_op_after_code = r4_2.text_input("変更後担当者コード", value=_v("op_after_code"), key=f"rt_re_oafter_code_{row_id}")
-                                edit_op_after_name = r4_3.text_input("変更後担当者", value=_v("op_after_name"), key=f"rt_re_oafter_name_{row_id}")
+                                edit_route_after = r4_1.text_input("変更後ルート", value=_v("route_after"), key=f"rt_re_rafter_{row_id}_{row_sig}")
+                                edit_op_after_code = r4_2.text_input("変更後担当者コード", value=_v("op_after_code"), key=f"rt_re_oafter_code_{row_id}_{row_sig}")
+                                edit_op_after_name = r4_3.text_input("変更後担当者", value=_v("op_after_name"), key=f"rt_re_oafter_name_{row_id}_{row_sig}")
 
-                                edit_next_visit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"rt_re_nvisit_{row_id}")
+                                edit_next_visit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"rt_re_nvisit_{row_id}_{row_sig}")
 
                                 st.write("---")
-                                edit_comment = st.text_area("コメント", value=_v("comment"), key=f"rt_re_com_{row_id}")
-                                edit_reason = st.text_input("理由", value=_v("reason"), key=f"rt_re_reason_{row_id}")
-                                edit_contact = st.text_input("連絡担当者", value=_v("contact_person"), key=f"rt_re_contact_{row_id}")
+                                edit_comment = st.text_area("コメント", value=_v("comment"), key=f"rt_re_com_{row_id}_{row_sig}")
+                                edit_reason = st.text_input("理由", value=_v("reason"), key=f"rt_re_reason_{row_id}_{row_sig}")
+                                edit_contact = st.text_input("連絡担当者", value=_v("contact_person"), key=f"rt_re_contact_{row_id}_{row_sig}")
 
                                 btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
                                 btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
@@ -620,43 +626,49 @@ def render_route_change_tabs():
                     st.warning(f"承認待ちデータ: **{len(pending_df)} 件**")
                     for idx, row in pending_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        row_sig = hashlib.md5(
+                            "|".join(
+                                "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                for i in range(len(row))
+                            ).encode("utf-8")
+                        ).hexdigest()[:8]
 
                         def _v(col_key, r=row):
                             i = ROUTE_COL[col_key]
                             return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
 
                         with st.expander(f"⏳ 【承認待ち】{_v('cust_name')}（{_v('cust_code')}） | 行: {row_id}"):
-                            with st.form(key=f"rt_mgr_edit_form_{row_id}"):
+                            with st.form(key=f"rt_mgr_edit_form_{row_id}_{row_sig}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報（修正可能）**")
 
                                 m1_1, m1_2, m1_3 = st.columns(3)
-                                edit_ccode = m1_1.text_input("顧客コード", value=_v("cust_code"), key=f"rt_m_ccode_{row_id}")
-                                edit_cname = m1_2.text_input("顧客名", value=_v("cust_name"), key=f"rt_m_cname_{row_id}")
-                                edit_scode = m1_3.text_input("加盟店コード", value=_v("store_code"), key=f"rt_m_scode_{row_id}")
+                                edit_ccode = m1_1.text_input("顧客コード", value=_v("cust_code"), key=f"rt_m_ccode_{row_id}_{row_sig}")
+                                edit_cname = m1_2.text_input("顧客名", value=_v("cust_name"), key=f"rt_m_cname_{row_id}_{row_sig}")
+                                edit_scode = m1_3.text_input("加盟店コード", value=_v("store_code"), key=f"rt_m_scode_{row_id}_{row_sig}")
 
                                 m2_1, m2_2 = st.columns(2)
-                                edit_sname = m2_1.text_input("加盟店", value=_v("store_name"), key=f"rt_m_sname_{row_id}")
-                                edit_app = m2_2.text_input("担当者", value=_v("applicant"), key=f"rt_m_app_{row_id}")
+                                edit_sname = m2_1.text_input("加盟店", value=_v("store_name"), key=f"rt_m_sname_{row_id}_{row_sig}")
+                                edit_app = m2_2.text_input("担当者", value=_v("applicant"), key=f"rt_m_app_{row_id}_{row_sig}")
 
                                 m3_1, m3_2, m3_3 = st.columns(3)
-                                edit_rbefore = m3_1.text_input("変更前ルート", value=_v("route_before"), key=f"rt_m_rbefore_{row_id}")
-                                edit_obefore_code = m3_2.text_input("変更前担当者コード", value=_v("op_before_code"), key=f"rt_m_obefore_code_{row_id}")
-                                edit_obefore_name = m3_3.text_input("変更前担当者", value=_v("op_before_name"), key=f"rt_m_obefore_name_{row_id}")
+                                edit_rbefore = m3_1.text_input("変更前ルート", value=_v("route_before"), key=f"rt_m_rbefore_{row_id}_{row_sig}")
+                                edit_obefore_code = m3_2.text_input("変更前担当者コード", value=_v("op_before_code"), key=f"rt_m_obefore_code_{row_id}_{row_sig}")
+                                edit_obefore_name = m3_3.text_input("変更前担当者", value=_v("op_before_name"), key=f"rt_m_obefore_name_{row_id}_{row_sig}")
 
                                 m4_1, m4_2, m4_3 = st.columns(3)
-                                edit_rafter = m4_1.text_input("変更後ルート", value=_v("route_after"), key=f"rt_m_rafter_{row_id}")
-                                edit_oafter_code = m4_2.text_input("変更後担当者コード", value=_v("op_after_code"), key=f"rt_m_oafter_code_{row_id}")
-                                edit_oafter_name = m4_3.text_input("変更後担当者", value=_v("op_after_name"), key=f"rt_m_oafter_name_{row_id}")
+                                edit_rafter = m4_1.text_input("変更後ルート", value=_v("route_after"), key=f"rt_m_rafter_{row_id}_{row_sig}")
+                                edit_oafter_code = m4_2.text_input("変更後担当者コード", value=_v("op_after_code"), key=f"rt_m_oafter_code_{row_id}_{row_sig}")
+                                edit_oafter_name = m4_3.text_input("変更後担当者", value=_v("op_after_name"), key=f"rt_m_oafter_name_{row_id}_{row_sig}")
 
-                                edit_nvisit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"rt_m_nvisit_{row_id}")
+                                edit_nvisit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"rt_m_nvisit_{row_id}_{row_sig}")
 
                                 st.write("---")
-                                edit_comment = st.text_area("申請者コメント", value=_v("comment"), key=f"rt_m_com_{row_id}")
-                                edit_reason = st.text_input("理由", value=_v("reason"), key=f"rt_m_reason_{row_id}")
-                                edit_contact = st.text_input("連絡担当者", value=_v("contact_person"), key=f"rt_m_contact_{row_id}")
-                                mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"rt_mgr_com_{row_id}")
+                                edit_comment = st.text_area("申請者コメント", value=_v("comment"), key=f"rt_m_com_{row_id}_{row_sig}")
+                                edit_reason = st.text_input("理由", value=_v("reason"), key=f"rt_m_reason_{row_id}_{row_sig}")
+                                edit_contact = st.text_input("連絡担当者", value=_v("contact_person"), key=f"rt_m_contact_{row_id}_{row_sig}")
+                                mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"rt_mgr_com_{row_id}_{row_sig}")
 
                                 col_app, col_rej, col_del = st.columns(3)
                                 btn_approve = col_app.form_submit_button("✅ 承認（変更内容を反映）", type="primary", use_container_width=True)
@@ -732,6 +744,12 @@ def render_route_change_tabs():
 
                     for idx, row in approved_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        row_sig = hashlib.md5(
+                            "|".join(
+                                "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                for i in range(len(row))
+                            ).encode("utf-8")
+                        ).hexdigest()[:8]
 
                         def _v(col_key, r=row):
                             i = ROUTE_COL[col_key]
@@ -743,27 +761,27 @@ def render_route_change_tabs():
                             st.write("**📋 申請内容**")
 
                             o1_c1, o1_c2, o1_c3 = st.columns(3)
-                            o1_c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"rt_v_ccode_{row_id}")
-                            o1_c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"rt_v_cname_{row_id}")
-                            o1_c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"rt_v_scode_{row_id}")
+                            o1_c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"rt_v_ccode_{row_id}_{row_sig}")
+                            o1_c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"rt_v_cname_{row_id}_{row_sig}")
+                            o1_c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"rt_v_scode_{row_id}_{row_sig}")
 
                             o2_c1, o2_c2 = st.columns(2)
-                            o2_c1.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"rt_v_sname_{row_id}")
-                            o2_c2.text_input("担当者", value=_v("applicant"), disabled=True, key=f"rt_v_app_{row_id}")
+                            o2_c1.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"rt_v_sname_{row_id}_{row_sig}")
+                            o2_c2.text_input("担当者", value=_v("applicant"), disabled=True, key=f"rt_v_app_{row_id}_{row_sig}")
 
                             o3_c1, o3_c2, o3_c3 = st.columns(3)
-                            o3_c1.text_input("変更前ルート", value=_v("route_before"), disabled=True, key=f"rt_v_rbefore_{row_id}")
-                            o3_c2.text_input("変更前担当者コード", value=_v("op_before_code"), disabled=True, key=f"rt_v_obefore_code_{row_id}")
-                            o3_c3.text_input("変更前担当者", value=_v("op_before_name"), disabled=True, key=f"rt_v_obefore_name_{row_id}")
+                            o3_c1.text_input("変更前ルート", value=_v("route_before"), disabled=True, key=f"rt_v_rbefore_{row_id}_{row_sig}")
+                            o3_c2.text_input("変更前担当者コード", value=_v("op_before_code"), disabled=True, key=f"rt_v_obefore_code_{row_id}_{row_sig}")
+                            o3_c3.text_input("変更前担当者", value=_v("op_before_name"), disabled=True, key=f"rt_v_obefore_name_{row_id}_{row_sig}")
 
                             o4_c1, o4_c2, o4_c3 = st.columns(3)
-                            o4_c1.text_input("変更後ルート", value=_v("route_after"), disabled=True, key=f"rt_v_rafter_{row_id}")
-                            o4_c2.text_input("変更後担当者コード", value=_v("op_after_code"), disabled=True, key=f"rt_v_oafter_code_{row_id}")
-                            o4_c3.text_input("変更後担当者", value=_v("op_after_name"), disabled=True, key=f"rt_v_oafter_name_{row_id}")
+                            o4_c1.text_input("変更後ルート", value=_v("route_after"), disabled=True, key=f"rt_v_rafter_{row_id}_{row_sig}")
+                            o4_c2.text_input("変更後担当者コード", value=_v("op_after_code"), disabled=True, key=f"rt_v_oafter_code_{row_id}_{row_sig}")
+                            o4_c3.text_input("変更後担当者", value=_v("op_after_name"), disabled=True, key=f"rt_v_oafter_name_{row_id}_{row_sig}")
 
                             o5_c1, o5_c2 = st.columns(2)
-                            o5_c1.text_input("次回訪問日", value=_v("next_visit"), disabled=True, key=f"rt_v_nvisit_{row_id}")
-                            o5_c2.text_input("承認者", value=mgr_name, disabled=True, key=f"rt_v_mgr_{row_id}")
+                            o5_c1.text_input("次回訪問日", value=_v("next_visit"), disabled=True, key=f"rt_v_nvisit_{row_id}_{row_sig}")
+                            o5_c2.text_input("承認者", value=mgr_name, disabled=True, key=f"rt_v_mgr_{row_id}_{row_sig}")
 
                             comment_val = _v("comment")
                             reason_val = _v("reason")
@@ -771,20 +789,20 @@ def render_route_change_tabs():
                             if comment_val.strip() or reason_val.strip() or contact_val.strip():
                                 st.write("---")
                                 if comment_val.strip():
-                                    st.text_area("申請者コメント", value=comment_val, disabled=True, key=f"rt_v_com_{row_id}")
+                                    st.text_area("申請者コメント", value=comment_val, disabled=True, key=f"rt_v_com_{row_id}_{row_sig}")
                                 if reason_val.strip():
-                                    st.text_input("理由", value=reason_val, disabled=True, key=f"rt_v_reason_{row_id}")
+                                    st.text_input("理由", value=reason_val, disabled=True, key=f"rt_v_reason_{row_id}_{row_sig}")
                                 if contact_val.strip():
-                                    st.text_input("連絡担当者", value=contact_val, disabled=True, key=f"rt_v_contact_{row_id}")
+                                    st.text_input("連絡担当者", value=contact_val, disabled=True, key=f"rt_v_contact_{row_id}_{row_sig}")
 
-                            with st.form(key=f"rt_transfer_form_{row_id}"):
+                            with st.form(key=f"rt_transfer_form_{row_id}_{row_sig}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 staff_comment_val = st.text_area(
-                                    "💬 申請者への連絡コメント（任意・差戻しにはなりません）", key=f"rt_staff_comment_{row_id}",
+                                    "💬 申請者への連絡コメント（任意・差戻しにはなりません）", key=f"rt_staff_comment_{row_id}_{row_sig}",
                                     placeholder="転記時に申請者へ伝えたい連絡事項があれば入力してください",
                                 )
-                                op_reject_reason = st.text_input("⚠️ 差戻し理由（※業務側で不備がある場合のみ入力）", key=f"rt_op_rej_reason_{row_id}")
+                                op_reject_reason = st.text_input("⚠️ 差戻し理由（※業務側で不備がある場合のみ入力）", key=f"rt_op_rej_reason_{row_id}_{row_sig}")
 
                                 col_trans, col_rej = st.columns(2)
                                 btn_transfer = col_trans.form_submit_button("📋 別シートへ出力・転記", type="primary", use_container_width=True)
