@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import hashlib
 from datetime import datetime
 import time
 
@@ -889,6 +890,12 @@ def render_route_change_tabs():
 
                 for idx, row in df_dest.iterrows():
                     row_id = idx + 2
+                    row_sig = hashlib.md5(
+                        "|".join(
+                            "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                            for i in range(len(row))
+                        ).encode("utf-8")
+                    ).hexdigest()[:8]
 
                     def _v(col_key, r=row):
                         i = ROUTE_COL[col_key]
@@ -909,29 +916,29 @@ def render_route_change_tabs():
 
                             st.write("**📋 登録内容詳細**")
                             c1, c2, c3 = st.columns(3)
-                            c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"rt_chk_ccode_{row_id}")
-                            c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"rt_chk_cname_{row_id}")
-                            c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"rt_chk_scode_{row_id}")
+                            c1.text_input("顧客コード", value=_v("cust_code"), disabled=True, key=f"rt_chk_ccode_{row_id}_{row_sig}")
+                            c2.text_input("顧客名", value=_v("cust_name"), disabled=True, key=f"rt_chk_cname_{row_id}_{row_sig}")
+                            c3.text_input("加盟店コード", value=_v("store_code"), disabled=True, key=f"rt_chk_scode_{row_id}_{row_sig}")
 
                             c4, c5 = st.columns(2)
-                            c4.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"rt_chk_sname_{row_id}")
-                            c5.text_input("担当者", value=_v("applicant"), disabled=True, key=f"rt_chk_app_{row_id}")
+                            c4.text_input("加盟店", value=_v("store_name"), disabled=True, key=f"rt_chk_sname_{row_id}_{row_sig}")
+                            c5.text_input("担当者", value=_v("applicant"), disabled=True, key=f"rt_chk_app_{row_id}_{row_sig}")
 
                             c6, c7, c8 = st.columns(3)
-                            c6.text_input("変更前ルート", value=_v("route_before"), disabled=True, key=f"rt_chk_rbefore_{row_id}")
-                            c7.text_input("変更前担当者コード", value=_v("op_before_code"), disabled=True, key=f"rt_chk_obefore_code_{row_id}")
-                            c8.text_input("変更前担当者", value=_v("op_before_name"), disabled=True, key=f"rt_chk_obefore_name_{row_id}")
+                            c6.text_input("変更前ルート", value=_v("route_before"), disabled=True, key=f"rt_chk_rbefore_{row_id}_{row_sig}")
+                            c7.text_input("変更前担当者コード", value=_v("op_before_code"), disabled=True, key=f"rt_chk_obefore_code_{row_id}_{row_sig}")
+                            c8.text_input("変更前担当者", value=_v("op_before_name"), disabled=True, key=f"rt_chk_obefore_name_{row_id}_{row_sig}")
 
                             c9, c10, c11 = st.columns(3)
-                            c9.text_input("変更後ルート", value=_v("route_after"), disabled=True, key=f"rt_chk_rafter_{row_id}")
-                            c10.text_input("変更後担当者コード", value=_v("op_after_code"), disabled=True, key=f"rt_chk_oafter_code_{row_id}")
-                            c11.text_input("変更後担当者", value=_v("op_after_name"), disabled=True, key=f"rt_chk_oafter_name_{row_id}")
+                            c9.text_input("変更後ルート", value=_v("route_after"), disabled=True, key=f"rt_chk_rafter_{row_id}_{row_sig}")
+                            c10.text_input("変更後担当者コード", value=_v("op_after_code"), disabled=True, key=f"rt_chk_oafter_code_{row_id}_{row_sig}")
+                            c11.text_input("変更後担当者", value=_v("op_after_name"), disabled=True, key=f"rt_chk_oafter_name_{row_id}_{row_sig}")
 
                             c12, c13 = st.columns(2)
-                            c12.text_input("次回訪問日", value=_v("next_visit"), disabled=True, key=f"rt_chk_nvisit_{row_id}")
-                            c13.text_input("処理者", value=op_user_val, disabled=True, key=f"rt_chk_op_{row_id}")
+                            c12.text_input("次回訪問日", value=_v("next_visit"), disabled=True, key=f"rt_chk_nvisit_{row_id}_{row_sig}")
+                            c13.text_input("処理者", value=op_user_val, disabled=True, key=f"rt_chk_op_{row_id}_{row_sig}")
 
-                            st.text_input("承認者", value=mgr_name_val, disabled=True, key=f"rt_chk_mgr_{row_id}")
+                            st.text_input("承認者", value=mgr_name_val, disabled=True, key=f"rt_chk_mgr_{row_id}_{row_sig}")
 
                             if checked_time_val:
                                 st.info(f"✅ 直近のチェック日時: {checked_time_val} （チェック者: {checked_user_val}）")
@@ -942,11 +949,11 @@ def render_route_change_tabs():
                             if comment_val.strip() or reason_val.strip() or contact_val.strip():
                                 st.write("---")
                                 if comment_val.strip():
-                                    st.text_area("申請者コメント", value=comment_val, disabled=True, key=f"rt_chk_com_{row_id}")
+                                    st.text_area("申請者コメント", value=comment_val, disabled=True, key=f"rt_chk_com_{row_id}_{row_sig}")
                                 if reason_val.strip():
-                                    st.text_input("理由", value=reason_val, disabled=True, key=f"rt_chk_reason_{row_id}")
+                                    st.text_input("理由", value=reason_val, disabled=True, key=f"rt_chk_reason_{row_id}_{row_sig}")
                                 if contact_val.strip():
-                                    st.text_input("連絡担当者", value=contact_val, disabled=True, key=f"rt_chk_contact_{row_id}")
+                                    st.text_input("連絡担当者", value=contact_val, disabled=True, key=f"rt_chk_contact_{row_id}_{row_sig}")
 
                             st.write("---")
                             st.write("⚠️ **差戻しを行う場合の設定**")
