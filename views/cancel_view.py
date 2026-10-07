@@ -736,7 +736,19 @@ def render_cancel_tabs():
                 else:
                     st.success(f"📋 チェック対象データ: **{len(df_dest)} 件**")
 
-                for idx, row in df_dest.iterrows():
+                col_sort1, col_sort2 = st.columns([3, 1])
+                sort_store = col_sort1.checkbox("🏪 加盟店別（店舗名）で並び替える", value=False, key="cx_chk_sort_store")
+                sort_order = col_sort2.selectbox("並び順", ["昇順 (あ〜わ)", "降順 (わ〜あ)"], index=0, key="cx_chk_sort_order", label_visibility="collapsed")
+
+                df_display = df_dest.copy()
+                if sort_store:
+                    store_col_idx = CX_COL["store_name"]
+                    if len(df_display.columns) > store_col_idx:
+                        is_ascending = (sort_order == "昇順 (あ〜わ)")
+                        df_display["_sort_store"] = df_display.iloc[:, store_col_idx].fillna("")
+                        df_display = df_display.sort_values(by="_sort_store", ascending=is_ascending)
+
+                for idx, row in df_display.iterrows():
                     row_id = idx + 2
 
                     def _v(col_key, r=row):
