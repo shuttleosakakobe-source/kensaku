@@ -28,6 +28,16 @@ CHECK_TIME_COL_IDX = 35   # AJ列：チェック日時
 CHECK_USER_COL_IDX = 36   # AK列：チェック者
 PRINT_TIME_COL_IDX = 37   # AL列：印刷日時（TAB5で反映が完了したらここに日時が入る）
 
+# TARGET_SHEET（申請・承認用）側の基本列幅（0〜32列：〜col29=申請コメント,
+# col30=ステータス, col31=承認/差戻し日時, col32=承認/差戻しコメント）。
+# col33・34は「差戻し一覧」用に追加した列（差し戻した管理職名・差戻し日時）で、
+# 転記（TAB3）でDEST_SHEETに引き継ぐ内容には含めない。転記時にこの幅で明示的に
+# 切り詰めないと、シート内の他の行が差戻しを経験してcol33・34を持つようになった
+# 途端、len(df.columns)が35に伸びてしまい、action_time/op_userの付加位置が
+# ずれて（AI列ではなくAJ・AK列に入ってしまい）、チェック未処理のはずの行が
+# 「チェック済み」として誤判定される不具合が起きる。
+TARGET_ROW_BASE_WIDTH = 33
+
 
 def _get_past_order_items_for_ai(cust_code):
     """管理職チェックのAIチェック用に、同じ顧客の過去の発注履歴（DEST_SHEET側＝
@@ -971,7 +981,10 @@ def render_product_order_tabs():
                                 op_user = st.session_state["user_name"]
 
                                 if btn_transfer:
-                                    clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
+                                    clean_base_row = [
+                                        "" if i >= len(row) or pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                        for i in range(TARGET_ROW_BASE_WIDTH)
+                                    ]
                                     transfer_row = clean_base_row + [action_time, op_user, ""]
 
                                     payload = {
