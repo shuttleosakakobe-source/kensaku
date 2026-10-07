@@ -20,7 +20,7 @@ from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, C
 from views.maint_common import (
     get_pending_modes, get_current_role,
     get_unconfirmed_staff_comments, confirm_staff_comment,
-    read_csv_cached,
+    read_csv_cached, pending_reason_color,
 )
 import pandas as pd
 from views.navi_view import route_navigation_screen
@@ -299,16 +299,19 @@ def maintenance_admin_screen():
     except Exception:
         pending_modes = {}
 
-    # 💡 対応待ちがあるモードのボタンだけ、枠を赤くするCSSを動的に追加する
+    # 💡 対応待ちがあるモードのボタンだけ、枠に色を付けるCSSを動的に追加する
     #    （st.container(key=...)で各ボタンをラップし、そのラッパーに付くst-key-<key>クラスを
-    #    ピンポイントで狙う。対応待ちが無いモードは通常のボタンの見た目のまま＝赤枠は出さない。
+    #    ピンポイントで狙う。対応待ちが無いモードは通常のボタンの見た目のまま＝枠は出さない。
     #    上のカード用CSSと詳細度が同じセレクタのため、これを後から出すことで確実に上書きする）
+    #    💡 色はTAB見出しの色分け（render_tab_header_pending_css）と揃えており、最も優先度の
+    #    高い理由（差戻し＞承認待ち＞転記待ち＞未チェック＞未印刷）の色をpending_reason_colorで
+    #    決めている（ボタン1個につき枠は1色しか付けられないため）。
     if pending_modes:
         pending_css = "\n".join(
             f'div.st-key-modebtn_{m} button {{ '
-            f'border: 3px solid #e53935 !important; '
-            f'box-shadow: 0 0 0 1px #e53935 !important; }}'
-            for m in pending_modes
+            f'border: 3px solid {pending_reason_color(reasons)} !important; '
+            f'box-shadow: 0 0 0 1px {pending_reason_color(reasons)} !important; }}'
+            for m, reasons in pending_modes.items()
         )
         st.markdown(f"<style>{pending_css}</style>", unsafe_allow_html=True)
 

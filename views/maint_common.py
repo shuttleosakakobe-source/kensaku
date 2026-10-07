@@ -431,6 +431,32 @@ def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applica
     ))
 
 
+# 理由の文言（_pending_reasons_from_dfsが返す文字列の先頭）と、タブ見出しの色分け
+# （render_tab_header_pending_css）を揃えた対応表。差戻し（TAB1）だけは色の指定が
+# 無いため、既存の赤をそのまま使う。
+PENDING_REASON_COLORS = [
+    ("差戻し", "#e53935"),
+    ("承認待ち", "#f1c40f"),
+    ("転記待ち", "#22c55e"),
+    ("未チェック", "#e53935"),
+    ("未印刷", "#ec4899"),
+]
+
+
+def pending_reason_color(reasons):
+    """get_pending_modes()が返す理由リスト（例: ["差戻し1件", "未チェック2件"]）のうち、
+    最も優先度の高い種類（差戻し＞承認待ち＞転記待ち＞未チェック＞未印刷の順。
+    ワークフロー上、上流の未処理ほど先に解消すべきものとして優先している）の色を返す。
+    メインメニューのモードボタンは1色しか枠を付けられないため、どれか1つに決める必要が
+    あり、タブ見出しの色分け（render_tab_header_pending_css）と対応させている。
+    reasonsが空、または知らない文言の場合は無難に既存の赤を返す。"""
+    for reason in reasons:
+        for prefix, color in PENDING_REASON_COLORS:
+            if reason.startswith(prefix):
+                return color
+    return "#e53935"
+
+
 def mode_has_pending_work(target_csv, dest_csv, status_col, check_col, print_col, applicant_col=1):
     """1モード分だけ対応待み判定が欲しい場合の単体版（内部は_fetch_csv_or_none/
     _pending_flag_from_dfsと共通）。9モードまとめて判定する場合はget_pending_modes()を使うこと。
