@@ -366,6 +366,7 @@ def render_spot_route_change_tabs():
             df = read_csv_cached(SR_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > SR_COL["status_sign"]:
                 rejected_df = df[df.iloc[:, SR_COL["status_sign"]].astype(str).str.strip() == "差戻し"]
+                render_section_pending_banner("差戻し", len(rejected_df))
                 if rejected_df.empty:
                     st.info("現在、差戻しデータはありません。")
                 else:
@@ -491,6 +492,7 @@ def render_spot_route_change_tabs():
             df = read_csv_cached(SR_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > SR_COL["status_sign"]:
                 pending_df = df[df.iloc[:, SR_COL["status_sign"]].astype(str).str.strip() == "申請中"]
+                render_section_pending_banner("承認待ち", len(pending_df))
                 if pending_df.empty:
                     st.info("現在、未承認の申請はありません。")
                 else:
