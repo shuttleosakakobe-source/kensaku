@@ -13,6 +13,7 @@ from views.maint_common import (
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
     send_staff_comment, render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
+    render_internal_note,
 )
 
 ORDER_MODE_NAME = "商品発注"
@@ -956,8 +957,9 @@ def render_product_order_tabs():
                         expander_label = f"🟢【納品日: {deliv_date_str}】{cust_name}（{cust_code}） | 承認者: {mgr_name}"
 
                         with st.expander(expander_label):
+                            render_internal_note(str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "")
                             st.write("**📋 申請内容**")
-                            
+
                             o1_c1, o1_c2, o1_c3 = st.columns(3)
                             o1_c1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", disabled=True, key=f"v_ccode_{row_id}")
                             o1_c2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", disabled=True, key=f"v_cname_{row_id}")
@@ -1014,6 +1016,12 @@ def render_product_order_tabs():
                                         "" if i >= len(row) or pd.isna(row.iloc[i]) else str(row.iloc[i])
                                         for i in range(TARGET_ROW_BASE_WIDTH)
                                     ]
+                                    if staff_comment_val.strip():
+                                        _note = f"【業務担当】{staff_comment_val.strip()}"
+                                        _orig_note = clean_base_row[ORDER_CHECK_COL["approval_comment"]]
+                                        clean_base_row[ORDER_CHECK_COL["approval_comment"]] = (
+                                            f"{_orig_note}\n{_note}" if _orig_note.strip() else _note
+                                        )
                                     transfer_row = clean_base_row + [action_time, op_user, ""]
 
                                     payload = {
@@ -1137,6 +1145,7 @@ def render_product_order_tabs():
                         expander_label += f" ✅【チェック済み】"
 
                     with st.expander(expander_label):
+                        render_internal_note(str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else "")
                         with st.form(key=f"check_form_{row_id}"):
                             st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 

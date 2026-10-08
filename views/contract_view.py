@@ -12,6 +12,7 @@ from views.maint_common import (
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
     render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
+    render_internal_note,
 )
 
 CC_MODE_NAME = "契約内容変更"
@@ -935,6 +936,7 @@ def render_contract_change_tabs():
                         items = cc_extract_items(row)
 
                         with st.expander(f"🟢【{_v('cust_name')}（{_v('cust_code')}）】 承認者: {mgr_name}"):
+                            render_internal_note(_v("approval_comment"))
                             st.write("**📋 申請内容**")
 
                             o1_c1, o1_c2, o1_c3 = st.columns(3)
@@ -984,6 +986,12 @@ def render_contract_change_tabs():
                                         "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
                                         for i in range(CC_COL["status_sign"] + 3)
                                     ]
+                                    if staff_comment_val.strip():
+                                        _note = f"【業務担当】{staff_comment_val.strip()}"
+                                        _orig_note = clean_base_row[CC_COL["approval_comment"]]
+                                        clean_base_row[CC_COL["approval_comment"]] = (
+                                            f"{_orig_note}\n{_note}" if _orig_note.strip() else _note
+                                        )
                                     transfer_row = clean_base_row + [action_time, op_user]
 
                                     payload = {
@@ -1105,6 +1113,7 @@ def render_contract_change_tabs():
                         expander_label += " ✅【チェック済み】"
 
                     with st.expander(expander_label):
+                        render_internal_note(_v("approval_comment"))
                         with st.form(key=f"cc_check_form_{row_id}"):
                             st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 

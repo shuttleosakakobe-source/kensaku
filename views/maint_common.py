@@ -506,6 +506,16 @@ def render_section_pending_banner(label, count):
     )
 
 
+def render_internal_note(note):
+    """管理職・業務担当が残した内部連絡事項（approval_comment列）をTAB3・4・5の
+    画面に表示する。申請者・加盟店向けの印刷（TAB5の印刷シート反映）には一切
+    含めない、あくまで社内確認用の表示。"""
+    note = str(note or "").strip()
+    if not note:
+        return
+    st.info(f"📝 管理職・業務担当からの連絡事項（社内確認用・印刷には反映されません）\n\n{note}")
+
+
 def handle_tab4_reject(
     row, row_id, reject_target, reject_reason, checker_name,
     col, target_sheet_csv, target_sheet_url, dest_sheet_url,
@@ -519,7 +529,8 @@ def handle_tab4_reject(
     reject_target が「業務担当」の場合：TARGET_SHEET側の元の申請行を探し、
     ステータスを転記前の承認済み状態に戻す（status_sign列に元の承認者名を
     書き戻す）ことで、TAB3（業務担当メンテナンス処理）に再び表示されるように
-    する。差戻し理由はTAB3でも見える「コメント」欄に追記する。
+    する。差戻し理由はapproval_comment列（render_internal_noteで表示する社内連絡
+    事項欄・印刷には含まれない）に追記する。
 
     reject_target が「申請者」の場合：TAB2の差戻しと同じ要領で、TARGET_SHEET側を
     status_sign="差戻し"・rejector_name・reject_date付きで更新し、TAB1（差戻し
@@ -572,9 +583,11 @@ def handle_tab4_reject(
     if reject_target == "業務担当":
         # 💡 TARGET_SHEET側のstatus_signは転記時に既に「業務転記済」へ上書きされているため、
         #    元の承認者名はDEST_SHEET側（＝この関数に渡されたrow）のstatus_signから取る。
+        #    差戻し理由はapproval_comment列に追記する（comment列は印刷の「特記事項」に
+        #    使われるため、社内向けの差戻し理由を印刷に出さないよう分けている）。
         mgr_name_val = _v("status_sign")
-        orig_comment = base_row[col["comment"]] if col["comment"] < len(base_row) else ""
-        base_row[col["comment"]] = f"{orig_comment}\n{note}" if orig_comment.strip() else note
+        orig_note = base_row[col["approval_comment"]] if col["approval_comment"] < len(base_row) else ""
+        base_row[col["approval_comment"]] = f"{orig_note}\n{note}" if orig_note.strip() else note
         base_row[col["status_sign"]] = mgr_name_val
         action = reopen_action
     else:
