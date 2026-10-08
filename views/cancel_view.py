@@ -17,6 +17,7 @@ from views.maint_common import (
     render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
     render_internal_note, render_tab4_own_checks_section, is_already_transferred,
+    render_duplicate_transfer_guard,
 )
 from views.contract_view import (
     get_contract_products, calc_cc_amount, _cc_to_float, _cc_format_yen,
@@ -639,6 +640,11 @@ def render_cancel_tabs():
                                 if comment_val.strip():
                                     st.text_area("特記事項", value=comment_val, disabled=True, key=f"cx_v_comment_{row_id}")
 
+                            render_duplicate_transfer_guard(
+                                f"cx_dup_pending_{row_id}", row, row_id, CX_COL,
+                                CX_TARGET_SHEET_URL, "APPROVE_CANCEL_CHANGE",
+                            )
+
                             with st.form(key=f"cx_transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -661,7 +667,8 @@ def render_cancel_tabs():
                                     #    表示される不具合の原因だった）。転記直前に最新状態を読み直す。
                                     read_csv_cached.clear()
                                     if is_already_transferred(CX_DEST_SHEET_CSV, CX_COL, _v("cust_code"), _v("timestamp")):
-                                        st.error("⚠️ この申請はすでに業務担当へ転記済みです（二重転記防止のため中止しました）。画面を更新してください。")
+                                        st.session_state[f"cx_dup_pending_{row_id}"] = True
+                                        st.rerun()
                                     else:
                                         clean_base_row = [
                                             "" if pd.isna(row.iloc[i]) else str(row.iloc[i])

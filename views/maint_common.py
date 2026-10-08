@@ -686,6 +686,41 @@ def is_already_transferred(dest_sheet_csv, col, cust_code, timestamp):
     return not matched.empty
 
 
+def render_duplicate_transfer_guard(session_key, row, row_id, col, target_sheet_url, approve_action):
+    """TAB3でis_already_transferred()が「転記済み」と検出した直後に呼ぶ。
+    以前は警告を出して中止するだけだったが、業務担当が「もう転記されている
+    なら、この申請はここで終わらせたい」というケースに対応できるよう、
+    「🗑️ 重複のため破棄して終了」ボタンも選択肢として表示する。
+    押された場合、実際の転記（DEST_SHEETへの追加）は行わず、TARGET_SHEET側の
+    status_signだけ「業務転記済」に書き換えて一覧から外す（他の列は一切変更
+    しない＝既に転記されている本物のデータには触れない）。
+    呼び出し側は、重複を検出した時点でst.session_state[session_key]=Trueを
+    セットしてからst.rerun()すること（st.form内のボタンから、form外に置く
+    このボタンを次の描画で出すため）。"""
+    if not st.session_state.get(session_key):
+        return
+    st.warning("⚠️ この申請はすでに業務担当へ転記済みです。画面を更新するか、重複のため破棄してこの申請を終了できます。")
+    if st.button("🗑️ 重複のため破棄して終了（転記は行いません）", key=f"{session_key}_btn"):
+        updated_row = ["" if pd.isna(v) else str(v) for v in row]
+        while len(updated_row) < col["status_sign"] + 1:
+            updated_row.append("")
+        updated_row[col["status_sign"]] = "業務転記済"
+        res = post_to_gas({
+            "action": approve_action,
+            "target_sheet_url": target_sheet_url,
+            "row_index": row_id,
+            "updated_row": updated_row,
+        })
+        if res.get("status") == "success":
+            st.session_state.pop(session_key, None)
+            read_csv_cached.clear()
+            st.toast("重複していたため、転記せずにこの申請を終了しました。", icon="🗑️")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error(f"処理に失敗しました: {res.get('message')}")
+
+
 def handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_action):
     """管理職が自分の承認を取り消し、申請中の状態に戻す（TAB2用）。
     承認時刻・承認コメントもクリアし、TAB1の差戻し一覧には出さない

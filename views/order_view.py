@@ -14,6 +14,7 @@ from views.maint_common import (
     send_staff_comment, render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
     render_internal_note, render_tab4_own_checks_section, is_already_transferred,
+    render_duplicate_transfer_guard,
 )
 
 ORDER_MODE_NAME = "商品発注"
@@ -996,6 +997,11 @@ def render_product_order_tabs():
                             if app_com_val.strip():
                                 st.text_area("申請者コメント", value=app_com_val, disabled=True, key=f"v_com_{row_id}")
 
+                            render_duplicate_transfer_guard(
+                                f"ord_dup_pending_{row_id}", row, row_id, ORDER_CHECK_COL,
+                                TARGET_SHEET_URL, "APPROVE_MAINTENANCE",
+                            )
+
                             with st.form(key=f"transfer_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -1018,7 +1024,8 @@ def render_product_order_tabs():
                                     #    表示される不具合の原因だった）。転記直前に最新状態を読み直す。
                                     read_csv_cached.clear()
                                     if is_already_transferred(DEST_SHEET_CSV, ORDER_CHECK_COL, cust_code, timestamp):
-                                        st.error("⚠️ この申請はすでに業務担当へ転記済みです（二重転記防止のため中止しました）。画面を更新してください。")
+                                        st.session_state[f"ord_dup_pending_{row_id}"] = True
+                                        st.rerun()
                                     else:
                                         clean_base_row = [
                                             "" if i >= len(row) or pd.isna(row.iloc[i]) else str(row.iloc[i])
