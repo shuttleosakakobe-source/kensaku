@@ -15,6 +15,7 @@ from views.maint_common import (
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
     render_internal_note, render_tab4_own_checks_section, is_already_transferred,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
+    render_tab1_notifications_section,
 )
 
 ORDER_MODE_NAME = "商品発注"
@@ -47,7 +48,7 @@ TARGET_ROW_BASE_WIDTH = 33
 # TAB2「自分が承認した申請」・TAB3「自分が転記した申請」共通処理（maint_common.py）に
 # 渡すための簡易的な列マップをここで組み立てる。
 ORDER_CHECK_COL = {
-    "timestamp": 0, "cust_code": 2, "cust_name": 3,
+    "timestamp": 0, "applicant": 1, "cust_code": 2, "cust_name": 3,
     "comment": 29, "status_sign": 30, "approval_time": 31, "approval_comment": 32,
     "rejector_name": 33, "reject_date": 34,
     "process_time": 33, "process_user": OP_USER_COL_IDX,
@@ -353,6 +354,7 @@ def render_product_order_tabs():
     # ==========================================
     def _tab1_body():
         st.subheader("📝 メンテナンス / 差戻し修正")
+        render_tab1_notifications_section(ORDER_MODE_NAME)
         with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
             col_search_input, col_search_btn = st.columns([4, 1])
@@ -899,6 +901,15 @@ def render_product_order_tabs():
                                     }
                                     res = post_to_gas(payload)
                                     if res.get("status") == "success":
+                                        # 💡 差戻しの場合、申請者本人にも気付けるよう通知する
+                                        # （以前は承認者・業務担当には通知が届いても、申請者
+                                        # 自身は画面を開いて確認しない限り気付けなかった）。
+                                        if btn_reject and edit_app.strip():
+                                            send_staff_comment(
+                                                ORDER_MODE_NAME, edit_ccode, edit_cname, edit_app.strip(),
+                                                f"【管理職による差戻し】{mgr_comment}" if mgr_comment.strip() else "管理職により差し戻されました。内容をご確認のうえ、再申請してください。",
+                                                mgr_name,
+                                            )
                                         st.toast("処理が完了しました！")
                                         time.sleep(1)
                                         st.rerun()
@@ -1093,6 +1104,14 @@ def render_product_order_tabs():
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
                                             read_csv_cached.clear()
+                                            # 💡 差戻しの場合、申請者本人にも気付けるよう通知する。
+                                            applicant_name = str(row.iloc[1]) if pd.notna(row.iloc[1]) else ""
+                                            if applicant_name.strip():
+                                                send_staff_comment(
+                                                    ORDER_MODE_NAME, cust_code, cust_name, applicant_name.strip(),
+                                                    f"【業務担当による差戻し】{op_reject_reason}",
+                                                    op_user,
+                                                )
                                             st.toast("申請を差し戻しました。", icon="↩️")
                                             time.sleep(1)
                                             st.rerun()

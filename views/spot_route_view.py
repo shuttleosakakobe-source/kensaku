@@ -16,6 +16,7 @@ from views.maint_common import (
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
     render_internal_note, render_tab4_own_checks_section, is_already_transferred,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
+    render_tab1_notifications_section,
 )
 
 SR_MODE_NAME = "単発ルート変更"
@@ -246,6 +247,7 @@ def render_spot_route_change_tabs():
     # ==========================================
     def _tab1_body():
         st.subheader("📝 メンテナンス / 差戻し修正")
+        render_tab1_notifications_section(SR_MODE_NAME)
         with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
             col_search_input, col_search_btn = st.columns([4, 1])
@@ -590,6 +592,15 @@ def render_spot_route_change_tabs():
                                     }
                                     res = post_to_gas(payload)
                                     if res.get("status") == "success":
+                                        # 💡 差戻しの場合、申請者本人にも気付けるよう通知する
+                                        # （以前は承認者・業務担当には通知が届いても、申請者
+                                        # 自身は画面を開いて確認しない限り気付けなかった）。
+                                        if btn_reject and edit_app.strip():
+                                            send_staff_comment(
+                                                SR_MODE_NAME, edit_ccode, edit_cname, edit_app.strip(),
+                                                f"【管理職による差戻し】{mgr_comment}" if mgr_comment.strip() else "管理職により差し戻されました。内容をご確認のうえ、再申請してください。",
+                                                mgr_name,
+                                            )
                                         st.toast("処理が完了しました！")
                                         time.sleep(1)
                                         st.rerun()
@@ -766,6 +777,14 @@ def render_spot_route_change_tabs():
                                         res = post_to_gas(payload)
                                         if res.get("status") == "success":
                                             read_csv_cached.clear()
+                                            # 💡 差戻しの場合、申請者本人にも気付けるよう通知する。
+                                            applicant_name = _v("applicant")
+                                            if applicant_name.strip():
+                                                send_staff_comment(
+                                                    SR_MODE_NAME, _v("cust_code"), _v("cust_name"), applicant_name.strip(),
+                                                    f"【業務担当による差戻し】{op_reject_reason}",
+                                                    op_user,
+                                                )
                                             st.toast("申請を差し戻しました。", icon="↩️")
                                             time.sleep(1)
                                             st.rerun()

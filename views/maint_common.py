@@ -642,6 +642,25 @@ def handle_tab4_reject(
             staff_name=checker_name,
         )
 
+    # 💡 申請者本人への差戻しの場合は、申請者自身にも気付けるよう通知する
+    # （以前は承認者には通知が届いても、申請者自身は画面を開いて確認しない
+    # 限り気付けなかった）。
+    if mode_name and reject_target == "申請者":
+        applicant_idx = col.get("applicant")
+        applicant_name = (
+            str(target_row.iloc[applicant_idx])
+            if applicant_idx is not None and applicant_idx < len(target_row) and pd.notna(target_row.iloc[applicant_idx])
+            else ""
+        ).strip()
+        if applicant_name:
+            send_staff_comment(
+                mode_name=mode_name,
+                cust_code=cust_code, cust_name=_v("cust_name"),
+                applicant=applicant_name,
+                comment=f"【メンテナンスチェックによる差戻し】{reject_reason}",
+                staff_name=checker_name,
+            )
+
     return True, f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）"
 
 
@@ -847,6 +866,42 @@ def render_tab2_notifications_section(mode_name):
                 st.caption(f"記入者: {c['staff_name']}")
                 st.write(c["comment"])
                 if st.button("✅ 確認しました", key=f"confirm_mgr_notice_{mode_name}_{c['row_index']}"):
+                    res = confirm_staff_comment(c["row_index"])
+                    if res.get("status") == "success":
+                        st.toast("確認しました！", icon="✅")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"確認処理に失敗しました: {res.get('message')}")
+
+
+def render_tab1_notifications_section(mode_name):
+    """TAB1（申請・差戻し修正）に、自分が申請した案件について管理職・業務担当・
+    メンテナンスチェックから届いた差戻し・連絡の通知を一覧表示する。
+    💡 以前は、申請者本人への差戻しが起きても、申請者自身はTAB1を開いて
+    「差戻し・再修正が必要なデータ」一覧を自分で探さない限り気付けなかった。
+    render_tab2_notifications_sectionと同じ仕組み（STAFF_COMMENT_SHEET）を
+    使い、申請者本人にも気付けるようにする。"""
+    user_name = str(st.session_state.get("user_name", "")).strip()
+    if not user_name:
+        return
+    comments = [c for c in get_unconfirmed_staff_comments(user_name) if c["mode_name"] == mode_name]
+    if not comments:
+        return
+
+    st.markdown(
+        f"<div style='border:3px solid #e53935;border-radius:10px;padding:8px 14px;"
+        f"background:#fff5f5;margin-bottom:12px;color:#b91c1c;font-weight:600;'>"
+        f"🔔 あなたが申請した内容について、差戻し・連絡が{len(comments)}件あります</div>",
+        unsafe_allow_html=True,
+    )
+    with st.expander(f"🔔 差戻し・連絡のお知らせ（{len(comments)}件）", expanded=True):
+        for c in comments:
+            with st.container(border=True):
+                st.write(f"**{c['cust_name']}**（{c['cust_code']}） ｜ {c['timestamp']}")
+                st.caption(f"記入者: {c['staff_name']}")
+                st.write(c["comment"])
+                if st.button("✅ 確認しました", key=f"confirm_applicant_notice_{mode_name}_{c['row_index']}"):
                     res = confirm_staff_comment(c["row_index"])
                     if res.get("status") == "success":
                         st.toast("確認しました！", icon="✅")
