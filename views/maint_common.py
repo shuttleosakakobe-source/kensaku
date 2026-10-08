@@ -655,6 +655,30 @@ def _safe_col_series(df, col_idx):
     return pd.Series([""] * len(df), index=df.index)
 
 
+def is_already_transferred(dest_sheet_csv, col, cust_code, timestamp):
+    """TAB3「📋 別シートへ出力・転記」の二重クリックや、複数の業務担当が同じ
+    承認済み申請をほぼ同時に開いて転記した場合に、DEST_SHEET側へ同じ申請
+    （顧客コード＋タイムスタンプの組み合わせ）が重複して追加（appendRow）
+    されるのを防ぐための事前チェック。転記直前に最新のDEST_SHEETを読み直し、
+    一致する行が既にあればTrueを返す（＝転記を中止させる）。
+    💡 印刷画面で同じ顧客が複数スロットに表示される不具合の実例があり、
+    原因はDEST_SHEET側の重複行だった。GAS側のappendRowは重複チェックを
+    しないため、アプリ側で転記前に止める必要がある。"""
+    try:
+        df = read_csv_cached(dest_sheet_csv)
+    except Exception:
+        return False
+    if df.empty:
+        return False
+    cust_code_series = _safe_col_series(df, col["cust_code"])
+    timestamp_series = _safe_col_series(df, col["timestamp"])
+    matched = df[
+        (cust_code_series == str(cust_code).strip()) &
+        (timestamp_series == str(timestamp).strip())
+    ]
+    return not matched.empty
+
+
 def handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_action):
     """管理職が自分の承認を取り消し、申請中の状態に戻す（TAB2用）。
     承認時刻・承認コメントもクリアし、TAB1の差戻し一覧には出さない

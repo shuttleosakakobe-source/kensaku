@@ -13,7 +13,7 @@ from views.maint_common import (
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
     send_staff_comment, render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
-    render_internal_note, render_tab4_own_checks_section,
+    render_internal_note, render_tab4_own_checks_section, is_already_transferred,
 )
 
 ORDER_MODE_NAME = "商品発注"
@@ -1013,47 +1013,54 @@ def render_product_order_tabs():
                                 op_user = st.session_state["user_name"]
 
                                 if btn_transfer:
-                                    clean_base_row = [
-                                        "" if i >= len(row) or pd.isna(row.iloc[i]) else str(row.iloc[i])
-                                        for i in range(TARGET_ROW_BASE_WIDTH)
-                                    ]
-                                    if staff_comment_val.strip():
-                                        _note = f"【業務担当】{staff_comment_val.strip()}"
-                                        _orig_note = clean_base_row[ORDER_CHECK_COL["approval_comment"]]
-                                        clean_base_row[ORDER_CHECK_COL["approval_comment"]] = (
-                                            f"{_orig_note}\n{_note}" if _orig_note.strip() else _note
-                                        )
-                                    transfer_row = clean_base_row + [action_time, op_user, ""]
+                                    # 💡 二重クリックや複数人の同時操作で同じ申請がDEST_SHEETに
+                                    #    重複登録されるのを防ぐ（印刷時に同じ顧客が複数スロットに
+                                    #    表示される不具合の原因だった）。転記直前に最新状態を読み直す。
+                                    read_csv_cached.clear()
+                                    if is_already_transferred(DEST_SHEET_CSV, ORDER_CHECK_COL, cust_code, timestamp):
+                                        st.error("⚠️ この申請はすでに業務担当へ転記済みです（二重転記防止のため中止しました）。画面を更新してください。")
+                                    else:
+                                        clean_base_row = [
+                                            "" if i >= len(row) or pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                            for i in range(TARGET_ROW_BASE_WIDTH)
+                                        ]
+                                        if staff_comment_val.strip():
+                                            _note = f"【業務担当】{staff_comment_val.strip()}"
+                                            _orig_note = clean_base_row[ORDER_CHECK_COL["approval_comment"]]
+                                            clean_base_row[ORDER_CHECK_COL["approval_comment"]] = (
+                                                f"{_orig_note}\n{_note}" if _orig_note.strip() else _note
+                                            )
+                                        transfer_row = clean_base_row + [action_time, op_user, ""]
 
-                                    payload = {
-                                        "action": "TRANSFER_TO_OPERATOR",
-                                        "target_sheet_url": TARGET_SHEET_URL,
-                                        "dest_sheet_url": DEST_SHEET_URL,
-                                        "row_index": row_id,
-                                        "transfer_row": transfer_row,
-                                        "op_user": op_user,
-                                        "action_time": action_time
-                                    }
+                                        payload = {
+                                            "action": "TRANSFER_TO_OPERATOR",
+                                            "target_sheet_url": TARGET_SHEET_URL,
+                                            "dest_sheet_url": DEST_SHEET_URL,
+                                            "row_index": row_id,
+                                            "transfer_row": transfer_row,
+                                            "op_user": op_user,
+                                            "action_time": action_time
+                                        }
 
-                                    with st.spinner("業務シートへ転記中..."):
-                                        res = post_to_gas(payload)
-                                        if res.get("status") == "success":
-                                            read_csv_cached.clear()
-                                            if staff_comment_val.strip():
-                                                send_staff_comment(
-                                                    mode_name="商品発注",
-                                                    cust_code=cust_code, cust_name=cust_name,
-                                                    applicant=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
-                                                    comment=staff_comment_val,
-                                                    staff_name=op_user,
-                                                    extra_recipient=mgr_name,
-                                                )
-                                            st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
-                                            time.sleep(1.5)
-                                            st.rerun()
+                                        with st.spinner("業務シートへ転記中..."):
+                                            res = post_to_gas(payload)
+                                            if res.get("status") == "success":
+                                                read_csv_cached.clear()
+                                                if staff_comment_val.strip():
+                                                    send_staff_comment(
+                                                        mode_name="商品発注",
+                                                        cust_code=cust_code, cust_name=cust_name,
+                                                        applicant=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
+                                                        comment=staff_comment_val,
+                                                        staff_name=op_user,
+                                                        extra_recipient=mgr_name,
+                                                    )
+                                                st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
+                                                time.sleep(1.5)
+                                                st.rerun()
 
-                                        else:
-                                            st.error(f"処理に失敗しました: {res.get('message')}")
+                                            else:
+                                                st.error(f"処理に失敗しました: {res.get('message')}")
                                 elif btn_op_reject:
                                     if not op_reject_reason.strip():
                                         st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")

@@ -17,7 +17,7 @@ from views.maint_common import (
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
     render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
-    render_internal_note, render_tab4_own_checks_section,
+    render_internal_note, render_tab4_own_checks_section, is_already_transferred,
 )
 from views.contract_view import (
     get_contract_products, _cc_product_labels, _cc_hide_zero, _cc_sum4,
@@ -891,45 +891,52 @@ def render_delivery_qty_change_tabs():
                                 op_user = st.session_state["user_name"]
 
                                 if btn_transfer:
-                                    clean_base_row = [
-                                        "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
-                                        for i in range(DQ_COL["status_sign"] + 3)
-                                    ]
-                                    if staff_comment_val.strip():
-                                        _note = f"【業務担当】{staff_comment_val.strip()}"
-                                        _orig_note = clean_base_row[DQ_COL["approval_comment"]]
-                                        clean_base_row[DQ_COL["approval_comment"]] = (
-                                            f"{_orig_note}\n{_note}" if _orig_note.strip() else _note
-                                        )
-                                    transfer_row = clean_base_row + [action_time, op_user]
+                                    # 💡 二重クリックや複数人の同時操作で同じ申請がDEST_SHEETに
+                                    #    重複登録されるのを防ぐ（印刷時に同じ顧客が複数スロットに
+                                    #    表示される不具合の原因だった）。転記直前に最新状態を読み直す。
+                                    read_csv_cached.clear()
+                                    if is_already_transferred(DQ_DEST_SHEET_CSV, DQ_COL, _v("cust_code"), _v("timestamp")):
+                                        st.error("⚠️ この申請はすでに業務担当へ転記済みです（二重転記防止のため中止しました）。画面を更新してください。")
+                                    else:
+                                        clean_base_row = [
+                                            "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                            for i in range(DQ_COL["status_sign"] + 3)
+                                        ]
+                                        if staff_comment_val.strip():
+                                            _note = f"【業務担当】{staff_comment_val.strip()}"
+                                            _orig_note = clean_base_row[DQ_COL["approval_comment"]]
+                                            clean_base_row[DQ_COL["approval_comment"]] = (
+                                                f"{_orig_note}\n{_note}" if _orig_note.strip() else _note
+                                            )
+                                        transfer_row = clean_base_row + [action_time, op_user]
 
-                                    payload = {
-                                        "action": "TRANSFER_DELIVERY_QTY_TO_OPERATOR",
-                                        "target_sheet_url": DQ_TARGET_SHEET_URL,
-                                        "dest_sheet_url": DQ_DEST_SHEET_URL,
-                                        "row_index": row_id,
-                                        "transfer_row": transfer_row,
-                                        "status_col": DQ_COL["status_sign"] + 1,
-                                    }
+                                        payload = {
+                                            "action": "TRANSFER_DELIVERY_QTY_TO_OPERATOR",
+                                            "target_sheet_url": DQ_TARGET_SHEET_URL,
+                                            "dest_sheet_url": DQ_DEST_SHEET_URL,
+                                            "row_index": row_id,
+                                            "transfer_row": transfer_row,
+                                            "status_col": DQ_COL["status_sign"] + 1,
+                                        }
 
-                                    with st.spinner("業務シートへ転記中..."):
-                                        res = post_to_gas(payload)
-                                        if res.get("status") == "success":
-                                            read_csv_cached.clear()
-                                            if staff_comment_val.strip():
-                                                send_staff_comment(
-                                                    mode_name="納品数量変更",
-                                                    cust_code=_v("cust_code"), cust_name=_v("cust_name"),
-                                                    applicant=_v("applicant"),
-                                                    comment=staff_comment_val,
-                                                    staff_name=op_user,
-                                                    extra_recipient=mgr_name,
-                                                )
-                                            st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
-                                            time.sleep(1.5)
-                                            st.rerun()
-                                        else:
-                                            st.error(f"転記失敗: {res.get('message')}")
+                                        with st.spinner("業務シートへ転記中..."):
+                                            res = post_to_gas(payload)
+                                            if res.get("status") == "success":
+                                                read_csv_cached.clear()
+                                                if staff_comment_val.strip():
+                                                    send_staff_comment(
+                                                        mode_name="納品数量変更",
+                                                        cust_code=_v("cust_code"), cust_name=_v("cust_name"),
+                                                        applicant=_v("applicant"),
+                                                        comment=staff_comment_val,
+                                                        staff_name=op_user,
+                                                        extra_recipient=mgr_name,
+                                                    )
+                                                st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
+                                                time.sleep(1.5)
+                                                st.rerun()
+                                            else:
+                                                st.error(f"転記失敗: {res.get('message')}")
 
                                 elif btn_op_reject:
                                     if not op_reject_reason.strip():
