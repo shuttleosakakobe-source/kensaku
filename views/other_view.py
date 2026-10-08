@@ -15,7 +15,7 @@ from views.maint_common import (
     render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
     render_internal_note, render_tab4_own_checks_section, is_already_transferred,
-    render_duplicate_transfer_guard,
+    render_duplicate_transfer_guard, render_tab5_own_prints_section,
 )
 
 OT_MODE_NAME = "その他"
@@ -885,6 +885,7 @@ def render_other_maintenance_tabs():
             _tab4_body()
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
+        render_tab5_own_prints_section(OT_MODE_NAME, OT_COL, OT_DEST_SHEET_CSV, OT_DEST_SHEET_URL)
 
         try:
             df_print = read_csv_cached(OT_DEST_SHEET_CSV)

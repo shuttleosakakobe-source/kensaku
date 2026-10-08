@@ -992,6 +992,81 @@ def render_tab4_own_checks_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
                     st.error(f"取り消しに失敗しました: {res.get('message')}")
 
 
+def handle_tab5_cancel_print(row_id, col, dest_sheet_url):
+    """業務担当が、印刷済みマークを解除し、もう一度TAB5の印刷対象（未印刷一覧）に
+    戻す。印刷済みマークを付けるMARK_PRINTEDアクションをそのまま再利用し、
+    print_time列だけを空文字に書き戻す（他の列には一切触れない）。"""
+    payload = {
+        "action": "MARK_PRINTED",
+        "target_sheet_url": dest_sheet_url,
+        "row_indices": [row_id],
+        "print_time": "",
+        "print_col": col["print_time"] + 1,
+    }
+    return post_to_gas(payload)
+
+
+def render_tab5_own_prints_section(mode_name, col, dest_sheet_csv, dest_sheet_url):
+    """TAB5（加盟店別印刷画面）に、すでに印刷済みの申請一覧を表示し、
+    「🔄 印刷済みを解除」ボタンでもう一度印刷対象に戻せるようにする
+    （TAB2の承認取り消し・TAB3の転記取り消し・TAB4のチェック取り消しと同じ考え方）。
+    💡 print_timeには「差戻し済みのため印刷対象外」という印刷しない目的の印も
+    入ることがある（TAB4差戻し時の重複防止用・handle_tab4_reject参照）。これは
+    実際に印刷したわけではないため、ここには出さない（出して解除できてしまうと、
+    印刷重複防止の仕組みを無効化してしまうことになる）。"""
+    user_name = str(st.session_state.get("user_name", "")).strip()
+    if not user_name:
+        return
+    try:
+        df = read_csv_cached(dest_sheet_csv)
+    except Exception:
+        return
+    if df.empty:
+        return
+
+    print_time_series = _safe_col_series(df, col["print_time"])
+    printed_df = df[
+        (print_time_series != "") &
+        (~print_time_series.str.contains("差戻し済みのため印刷対象外", na=False))
+    ]
+
+    with st.expander(f"📋 印刷済みの申請（{len(printed_df)}件・もう一度印刷したい場合はここから解除できます）"):
+        if printed_df.empty:
+            st.caption("現在、印刷済みの申請はありません。")
+        search_kw = st.text_input(
+            "🔍 顧客名・顧客コードで検索", key=f"tab5_search_{mode_name}",
+            placeholder="検索したい顧客名または顧客コードを入力",
+        ).strip()
+        if search_kw:
+            name_series = printed_df.iloc[:, col["cust_name"]].astype(str)
+            code_series = printed_df.iloc[:, col["cust_code"]].astype(str)
+            printed_df = printed_df[
+                name_series.str.contains(search_kw, case=False, na=False) |
+                code_series.str.contains(search_kw, case=False, na=False)
+            ]
+            if printed_df.empty:
+                st.info("該当する申請が見つかりませんでした。")
+
+        for idx, row in printed_df.iloc[::-1].iterrows():
+            row_id = idx + 2
+
+            def _v(col_key, r=row):
+                i = col[col_key]
+                return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+            c1, c2 = st.columns([4, 1])
+            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 印刷日時: {_v('print_time')}")
+            if c2.button("🔄 印刷済みを解除", key=f"cancel_print_{mode_name}_{row_id}"):
+                res = handle_tab5_cancel_print(row_id, col, dest_sheet_url)
+                if res.get("status") == "success":
+                    read_csv_cached.clear()
+                    st.toast("印刷済みを解除しました。もう一度印刷対象に表示されます。", icon="🔄")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(f"解除に失敗しました: {res.get('message')}")
+
+
 def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, print_col, tab_visible_nums):
     """TAB2（管理職チェック/承認待ち）=黄、TAB3（業務担当メンテナンス処理/転記待ち）=緑、
     TAB4（メンテナンスチェック/未チェック）=赤、TAB5（加盟店別印刷/未印刷）=ピンクで、
