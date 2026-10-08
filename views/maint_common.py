@@ -648,7 +648,10 @@ def _safe_col_series(df, col_idx):
     len(df.columns)<=col["check_time"]になり、TAB3の「転記済み一覧」が
     0件ですらなく、セクションごと出てこなくなる不具合が起きる。"""
     if len(df.columns) > col_idx:
-        return df.iloc[:, col_idx].astype(str).str.strip()
+        # 💡 空欄セルはCSV読み込み時にNaNになる。fillna("")を先にかけないと
+        # astype(str)で文字列"nan"になってしまい、== ""判定に一致せず
+        # 「未チェック」が「チェック済み」として誤判定されてしまう。
+        return df.iloc[:, col_idx].fillna("").astype(str).str.strip()
     return pd.Series([""] * len(df), index=df.index)
 
 
