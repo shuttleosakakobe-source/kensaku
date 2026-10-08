@@ -15,8 +15,11 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
     render_tab_header_pending_css, handle_tab4_reject,
+    render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
 )
 from views.contract_view import get_contract_products, _cc_product_labels
+
+KZ_MODE_NAME = "客中残訂正"
 
 
 # ==========================================
@@ -559,6 +562,10 @@ def render_customer_balance_correction_tabs():
             _tab1_body()
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
+        render_tab2_notifications_section(KZ_MODE_NAME)
+        render_tab2_own_approvals_section(
+            KZ_MODE_NAME, KZ_COL, KZ_TARGET_SHEET_CSV, KZ_TARGET_SHEET_URL, "RESUBMIT_CUSTOMER_BALANCE_CHANGE",
+        )
         try:
             df = read_csv_cached(KZ_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > KZ_COL["status_sign"]:
@@ -655,6 +662,11 @@ def render_customer_balance_correction_tabs():
             _tab2_body()
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
+        render_tab3_own_transfers_section(
+            KZ_MODE_NAME, KZ_COL, KZ_DEST_SHEET_CSV, KZ_TARGET_SHEET_CSV,
+            KZ_TARGET_SHEET_URL, KZ_DEST_SHEET_URL,
+            "APPROVE_CUSTOMER_BALANCE_CHANGE", "REJECT_CUSTOMER_BALANCE_CHANGE", "UPDATE_CUSTOMER_BALANCE_CHECK",
+        )
         try:
             df = read_csv_cached(KZ_TARGET_SHEET_CSV)
 
@@ -751,6 +763,7 @@ def render_customer_balance_correction_tabs():
                                                     applicant=_v("applicant"),
                                                     comment=staff_comment_val,
                                                     staff_name=op_user,
+                                                    extra_recipient=mgr_name,
                                                 )
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
@@ -930,6 +943,7 @@ def render_customer_balance_correction_tabs():
                                         st.session_state["user_name"],
                                         KZ_COL, KZ_TARGET_SHEET_CSV, KZ_TARGET_SHEET_URL, KZ_DEST_SHEET_URL,
                                         "APPROVE_CUSTOMER_BALANCE_CHANGE", "REJECT_CUSTOMER_BALANCE_CHANGE", "UPDATE_CUSTOMER_BALANCE_CHECK",
+                                        KZ_MODE_NAME,
                                     )
                                     if ok:
                                         read_csv_cached.clear()

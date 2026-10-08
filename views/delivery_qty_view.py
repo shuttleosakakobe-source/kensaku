@@ -16,10 +16,13 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
     render_tab_header_pending_css, handle_tab4_reject,
+    render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
 )
 from views.contract_view import (
     get_contract_products, _cc_product_labels, _cc_hide_zero, _cc_sum4,
 )
+
+DQ_MODE_NAME = "納品数量変更"
 
 
 # ==========================================
@@ -694,6 +697,10 @@ def render_delivery_qty_change_tabs():
             _tab1_body()
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
+        render_tab2_notifications_section(DQ_MODE_NAME)
+        render_tab2_own_approvals_section(
+            DQ_MODE_NAME, DQ_COL, DQ_TARGET_SHEET_CSV, DQ_TARGET_SHEET_URL, "RESUBMIT_DELIVERY_QTY_CHANGE",
+        )
         try:
             df = read_csv_cached(DQ_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > DQ_COL["status_sign"]:
@@ -792,6 +799,11 @@ def render_delivery_qty_change_tabs():
             _tab2_body()
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
+        render_tab3_own_transfers_section(
+            DQ_MODE_NAME, DQ_COL, DQ_DEST_SHEET_CSV, DQ_TARGET_SHEET_CSV,
+            DQ_TARGET_SHEET_URL, DQ_DEST_SHEET_URL,
+            "APPROVE_DELIVERY_QTY_CHANGE", "REJECT_DELIVERY_QTY_CHANGE", "UPDATE_DELIVERY_QTY_CHECK",
+        )
         try:
             df = read_csv_cached(DQ_TARGET_SHEET_CSV)
 
@@ -903,6 +915,7 @@ def render_delivery_qty_change_tabs():
                                                     applicant=_v("applicant"),
                                                     comment=staff_comment_val,
                                                     staff_name=op_user,
+                                                    extra_recipient=mgr_name,
                                                 )
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
@@ -1088,6 +1101,7 @@ def render_delivery_qty_change_tabs():
                                         st.session_state["user_name"],
                                         DQ_COL, DQ_TARGET_SHEET_CSV, DQ_TARGET_SHEET_URL, DQ_DEST_SHEET_URL,
                                         "APPROVE_DELIVERY_QTY_CHANGE", "REJECT_DELIVERY_QTY_CHANGE", "UPDATE_DELIVERY_QTY_CHECK",
+                                        DQ_MODE_NAME,
                                     )
                                     if ok:
                                         read_csv_cached.clear()

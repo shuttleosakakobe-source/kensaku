@@ -6,6 +6,7 @@ import requests
 import json
 import os
 import re
+import time
 import concurrent.futures
 from datetime import timezone, timedelta, datetime, date
 
@@ -272,17 +273,31 @@ def get_route_dates_for_code(route_code):
     return [d.strftime("%Y/%m/%d") for d in sorted(found_dates)]
 
 
-def send_staff_comment(mode_name, cust_code, cust_name, applicant, comment, staff_name):
+def send_staff_comment(mode_name, cust_code, cust_name, applicant, comment, staff_name, extra_recipient=None):
     """業務担当（TAB3）から、差戻しとは別に申請者への連絡コメントを送る。
     差戻しと違って申請のステータスは一切変更せず、共有のSTAFF_COMMENT_SHEETに
-    1行追加するだけ（申請者側はメイン画面の通知バッジで気付いて確認する）。"""
+    1行追加するだけ（申請者側はメイン画面の通知バッジで気付いて確認する）。
+    extra_recipientを指定すると（申請者とは別の宛先として）同じ内容をもう1行追加する。
+    💡 管理職が承認した申請について、業務担当からのコメントや差戻しを管理職自身にも
+    気付けるようにするために使う（承認者名をextra_recipientとして渡す）。"""
     now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
     full_row = [now_str, mode_name, cust_code, cust_name, applicant, comment, staff_name, "", ""]
-    return post_to_gas({
+    res = post_to_gas({
         "action": "SEND_STAFF_COMMENT",
         "target_sheet_url": STAFF_COMMENT_SHEET_URL,
         "full_row": full_row,
     })
+
+    extra_recipient = str(extra_recipient or "").strip()
+    if extra_recipient and extra_recipient != str(applicant).strip():
+        extra_row = [now_str, mode_name, cust_code, cust_name, extra_recipient, comment, staff_name, "", ""]
+        post_to_gas({
+            "action": "SEND_STAFF_COMMENT",
+            "target_sheet_url": STAFF_COMMENT_SHEET_URL,
+            "full_row": extra_row,
+        })
+
+    return res
 
 
 def get_unconfirmed_staff_comments(user_name):
@@ -495,6 +510,7 @@ def handle_tab4_reject(
     row, row_id, reject_target, reject_reason, checker_name,
     col, target_sheet_csv, target_sheet_url, dest_sheet_url,
     reopen_action, applicant_reject_action, update_check_action,
+    mode_name=None,
 ):
     """TAB4（メンテナンスチェック画面）の「↩️ 指定先へ差戻し」共通処理。
     以前はボタンを押してもトーストが出るだけで実際には何も更新されず、
@@ -595,7 +611,165 @@ def handle_tab4_reject(
     if check_res.get("status") != "success":
         return False, f"差戻し失敗（チェック画面側の更新）: {check_res.get('message')}"
 
+    # 💡 自分（管理職）が承認した申請が差戻しになったことに気付けるよう、承認者にも通知する。
+    mgr_name_val = _v("status_sign")
+    if mode_name and mgr_name_val and mgr_name_val != checker_name:
+        send_staff_comment(
+            mode_name=mode_name,
+            cust_code=cust_code, cust_name=_v("cust_name"),
+            applicant=mgr_name_val,
+            comment=f"【{reject_target}への差戻し】{reject_reason}",
+            staff_name=checker_name,
+        )
+
     return True, f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）"
+
+
+def handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_action):
+    """管理職が自分の承認を取り消し、申請中の状態に戻す（TAB2用）。
+    承認時刻・承認コメントもクリアし、TAB1の差戻し一覧には出さない
+    （rejector_name・reject_dateも空にする＝差戻しではなく取り消しのため）。"""
+    base_width = col["reject_date"] + 1
+    base_row = [
+        "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+        for i in range(min(base_width, len(row)))
+    ]
+    while len(base_row) < base_width:
+        base_row.append("")
+
+    base_row[col["status_sign"]] = "申請中"
+    base_row[col["approval_time"]] = ""
+    base_row[col["approval_comment"]] = ""
+    base_row[col["rejector_name"]] = ""
+    base_row[col["reject_date"]] = ""
+
+    payload = {
+        "action": resubmit_action,
+        "target_sheet_url": target_sheet_url,
+        "row_index": row_id,
+        "updated_row": base_row,
+    }
+    return post_to_gas(payload)
+
+
+def render_tab2_own_approvals_section(mode_name, col, target_sheet_csv, target_sheet_url, resubmit_action):
+    """TAB2（管理職チェック）に、自分が承認済み・まだ業務担当に転記されていない
+    申請の一覧を表示し、「承認を取り消す」ボタンでいつでも申請中に戻せるようにする。"""
+    user_name = str(st.session_state.get("user_name", "")).strip()
+    if not user_name:
+        return
+    try:
+        df = read_csv_cached(target_sheet_csv)
+    except Exception:
+        return
+    if df.empty or len(df.columns) <= col["status_sign"]:
+        return
+
+    status_series = df.iloc[:, col["status_sign"]].astype(str).str.strip()
+    mine_df = df[status_series == user_name]
+    if mine_df.empty:
+        return
+
+    with st.expander(f"📋 自分が承認した申請（転記待ち・{len(mine_df)}件）"):
+        for idx, row in mine_df.iloc[::-1].iterrows():
+            row_id = idx + 2
+
+            def _v(col_key, r=row):
+                i = col[col_key]
+                return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+            c1, c2 = st.columns([4, 1])
+            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 承認日時: {_v('approval_time')}")
+            if c2.button("🗑️ 承認を取り消す", key=f"cancel_approval_{mode_name}_{row_id}"):
+                res = handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_action)
+                if res.get("status") == "success":
+                    read_csv_cached.clear()
+                    st.toast("承認を取り消し、申請中に戻しました。", icon="🗑️")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(f"取り消しに失敗しました: {res.get('message')}")
+
+
+def render_tab2_notifications_section(mode_name):
+    """TAB2（管理職チェック）に、自分が承認した申請について業務担当から届いた
+    コメントや、メンテナンスチェックでの差戻しの通知を一覧表示する。"""
+    user_name = str(st.session_state.get("user_name", "")).strip()
+    if not user_name:
+        return
+    comments = [c for c in get_unconfirmed_staff_comments(user_name) if c["mode_name"] == mode_name]
+    if not comments:
+        return
+
+    st.markdown(
+        f"<div style='border:3px solid #f1c40f;border-radius:10px;padding:8px 14px;"
+        f"background:#fffbea;margin-bottom:12px;color:#92700a;font-weight:600;'>"
+        f"🔔 自分が承認した申請について、業務担当からの未確認コメント・差戻しが{len(comments)}件あります</div>",
+        unsafe_allow_html=True,
+    )
+    with st.expander(f"🔔 業務担当からの通知（{len(comments)}件）", expanded=True):
+        for c in comments:
+            with st.container(border=True):
+                st.write(f"**{c['cust_name']}**（{c['cust_code']}） ｜ {c['timestamp']}")
+                st.caption(f"記入者: {c['staff_name']}")
+                st.write(c["comment"])
+                if st.button("✅ 確認しました", key=f"confirm_mgr_notice_{mode_name}_{c['row_index']}"):
+                    res = confirm_staff_comment(c["row_index"])
+                    if res.get("status") == "success":
+                        st.toast("確認しました！", icon="✅")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"確認処理に失敗しました: {res.get('message')}")
+
+
+def render_tab3_own_transfers_section(
+    mode_name, col, dest_sheet_csv, target_sheet_csv, target_sheet_url, dest_sheet_url,
+    reopen_action, applicant_reject_action, update_check_action,
+):
+    """TAB3（業務担当メンテナンス処理）に、自分が転記済みでまだチェックされていない
+    申請の一覧を表示し、「転記を取り消す」ボタンでTAB3の転記待ちに戻せるようにする。
+    内部的にはhandle_tab4_reject()の「業務担当への差戻し」と同じ処理を再利用する。"""
+    user_name = str(st.session_state.get("user_name", "")).strip()
+    if not user_name:
+        return
+    try:
+        df = read_csv_cached(dest_sheet_csv)
+    except Exception:
+        return
+    if df.empty or len(df.columns) <= col["check_time"]:
+        return
+
+    process_user_series = df.iloc[:, col["process_user"]].astype(str).str.strip()
+    check_time_series = df.iloc[:, col["check_time"]].astype(str).str.strip()
+    mine_df = df[(process_user_series == user_name) & (check_time_series == "")]
+    if mine_df.empty:
+        return
+
+    with st.expander(f"📋 自分が転記した申請（チェック待ち・{len(mine_df)}件）"):
+        for idx, row in mine_df.iloc[::-1].iterrows():
+            row_id = idx + 2
+
+            def _v(col_key, r=row):
+                i = col[col_key]
+                return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
+
+            c1, c2 = st.columns([4, 1])
+            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 転記日時: {_v('process_time')}")
+            if c2.button("🗑️ 転記を取り消す", key=f"cancel_transfer_{mode_name}_{row_id}"):
+                ok, msg = handle_tab4_reject(
+                    row, row_id, "業務担当", "業務担当による転記取り消し", user_name,
+                    col, target_sheet_csv, target_sheet_url, dest_sheet_url,
+                    reopen_action, applicant_reject_action, update_check_action,
+                    mode_name,
+                )
+                if ok:
+                    read_csv_cached.clear()
+                    st.toast("転記を取り消し、転記待ちに戻しました。", icon="🗑️")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(msg)
 
 
 def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, print_col, tab_visible_nums):

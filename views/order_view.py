@@ -12,7 +12,10 @@ from views.maint_common import (
     tab_visible, RESTRICTED_TAB_MSG,
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
     send_staff_comment, render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
+    render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
 )
+
+ORDER_MODE_NAME = "商品発注"
 
 
 TARGET_SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fwdtp6ZLvbg3_ksslQgHPcL0CENZ4JXjZ2cInvWlhXo/edit?gid=0#gid=0"
@@ -37,6 +40,17 @@ PRINT_TIME_COL_IDX = 37   # AL列：印刷日時（TAB5で反映が完了した�
 # ずれて（AI列ではなくAJ・AK列に入ってしまい）、チェック未処理のはずの行が
 # 「チェック済み」として誤判定される不具合が起きる。
 TARGET_ROW_BASE_WIDTH = 33
+
+# 💡 商品発注は他モードと違いCOL辞書を持たず生のインデックスを直接使っているため、
+# TAB2「自分が承認した申請」・TAB3「自分が転記した申請」共通処理（maint_common.py）に
+# 渡すための簡易的な列マップをここで組み立てる。
+ORDER_CHECK_COL = {
+    "timestamp": 0, "cust_code": 2, "cust_name": 3,
+    "comment": 29, "status_sign": 30, "approval_time": 31, "approval_comment": 32,
+    "rejector_name": 33, "reject_date": 34,
+    "process_time": 33, "process_user": OP_USER_COL_IDX,
+    "check_time": CHECK_TIME_COL_IDX, "check_user": CHECK_USER_COL_IDX,
+}
 
 
 def _get_past_order_items_for_ai(cust_code):
@@ -677,6 +691,10 @@ def render_product_order_tabs():
             _tab1_body()
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
+        render_tab2_notifications_section(ORDER_MODE_NAME)
+        render_tab2_own_approvals_section(
+            ORDER_MODE_NAME, ORDER_CHECK_COL, TARGET_SHEET_CSV, TARGET_SHEET_URL, "RESUBMIT_MAINTENANCE",
+        )
         try:
             df = read_csv_cached(TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) >= 30:
@@ -895,6 +913,11 @@ def render_product_order_tabs():
             _tab2_body()
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
+        render_tab3_own_transfers_section(
+            ORDER_MODE_NAME, ORDER_CHECK_COL, DEST_SHEET_CSV, TARGET_SHEET_CSV,
+            TARGET_SHEET_URL, DEST_SHEET_URL,
+            "APPROVE_MAINTENANCE", "REJECT_MAINTENANCE", "UPDATE_MAINTENANCE_CHECK",
+        )
         try:
             df = read_csv_cached(TARGET_SHEET_CSV)
 
@@ -1014,6 +1037,7 @@ def render_product_order_tabs():
                                                     applicant=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "",
                                                     comment=staff_comment_val,
                                                     staff_name=op_user,
+                                                    extra_recipient=mgr_name,
                                                 )
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
@@ -1205,14 +1229,10 @@ def render_product_order_tabs():
                                     ok, msg = handle_tab4_reject(
                                         row, row_id, reject_target, reject_reason,
                                         st.session_state["user_name"],
-                                        {
-                                            "cust_code": 2, "timestamp": 0, "comment": 29,
-                                            "status_sign": 30, "approval_time": 31, "approval_comment": 32,
-                                            "rejector_name": 33, "reject_date": 34,
-                                            "check_time": CHECK_TIME_COL_IDX, "check_user": CHECK_USER_COL_IDX,
-                                        },
+                                        ORDER_CHECK_COL,
                                         TARGET_SHEET_CSV, TARGET_SHEET_URL, DEST_SHEET_URL,
                                         "APPROVE_MAINTENANCE", "REJECT_MAINTENANCE", "UPDATE_MAINTENANCE_CHECK",
+                                        ORDER_MODE_NAME,
                                     )
                                     if ok:
                                         read_csv_cached.clear()

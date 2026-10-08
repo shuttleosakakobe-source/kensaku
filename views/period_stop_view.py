@@ -13,7 +13,10 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
     render_tab_header_pending_css, handle_tab4_reject,
+    render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
 )
+
+PS_MODE_NAME = "期間ストップ"
 
 
 # ==========================================
@@ -440,6 +443,10 @@ def render_period_stop_tabs():
             _tab1_body()
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
+        render_tab2_notifications_section(PS_MODE_NAME)
+        render_tab2_own_approvals_section(
+            PS_MODE_NAME, PS_COL, PS_TARGET_SHEET_CSV, PS_TARGET_SHEET_URL, "RESUBMIT_PERIOD_STOP_CHANGE",
+        )
         try:
             df = read_csv_cached(PS_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > PS_COL["status_sign"]:
@@ -530,6 +537,11 @@ def render_period_stop_tabs():
             _tab2_body()
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
+        render_tab3_own_transfers_section(
+            PS_MODE_NAME, PS_COL, PS_DEST_SHEET_CSV, PS_TARGET_SHEET_CSV,
+            PS_TARGET_SHEET_URL, PS_DEST_SHEET_URL,
+            "APPROVE_PERIOD_STOP_CHANGE", "REJECT_PERIOD_STOP_CHANGE", "UPDATE_PERIOD_STOP_CHECK",
+        )
         try:
             df = read_csv_cached(PS_TARGET_SHEET_CSV)
 
@@ -628,6 +640,7 @@ def render_period_stop_tabs():
                                                     applicant=_v("applicant"),
                                                     comment=staff_comment_val,
                                                     staff_name=op_user,
+                                                    extra_recipient=mgr_name,
                                                 )
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
@@ -808,6 +821,7 @@ def render_period_stop_tabs():
                                         st.session_state["user_name"],
                                         PS_COL, PS_TARGET_SHEET_CSV, PS_TARGET_SHEET_URL, PS_DEST_SHEET_URL,
                                         "APPROVE_PERIOD_STOP_CHANGE", "REJECT_PERIOD_STOP_CHANGE", "UPDATE_PERIOD_STOP_CHECK",
+                                        PS_MODE_NAME,
                                     )
                                     if ok:
                                         read_csv_cached.clear()

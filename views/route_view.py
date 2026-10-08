@@ -12,7 +12,10 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, _load_contract_df, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code, send_staff_comment,
     render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
+    render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
 )
+
+ROUTE_MODE_NAME = "ルート変更"
 
 
 # ==========================================
@@ -615,6 +618,10 @@ def render_route_change_tabs():
             _tab1_body()
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
+        render_tab2_notifications_section(ROUTE_MODE_NAME)
+        render_tab2_own_approvals_section(
+            ROUTE_MODE_NAME, ROUTE_COL, ROUTE_TARGET_SHEET_CSV, ROUTE_TARGET_SHEET_URL, "RESUBMIT_ROUTE_CHANGE",
+        )
         try:
             df = read_csv_cached(ROUTE_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > ROUTE_COL["status_sign"]:
@@ -724,6 +731,11 @@ def render_route_change_tabs():
             _tab2_body()
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
+        render_tab3_own_transfers_section(
+            ROUTE_MODE_NAME, ROUTE_COL, ROUTE_DEST_SHEET_CSV, ROUTE_TARGET_SHEET_CSV,
+            ROUTE_TARGET_SHEET_URL, ROUTE_DEST_SHEET_URL,
+            "APPROVE_ROUTE_CHANGE", "REJECT_ROUTE_CHANGE", "UPDATE_ROUTE_CHECK",
+        )
         try:
             df = read_csv_cached(ROUTE_TARGET_SHEET_CSV)
 
@@ -838,6 +850,7 @@ def render_route_change_tabs():
                                                     applicant=_v("applicant"),
                                                     comment=staff_comment_val,
                                                     staff_name=op_user,
+                                                    extra_recipient=mgr_name,
                                                 )
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
@@ -1032,6 +1045,7 @@ def render_route_change_tabs():
                                         st.session_state["user_name"],
                                         ROUTE_COL, ROUTE_TARGET_SHEET_CSV, ROUTE_TARGET_SHEET_URL, ROUTE_DEST_SHEET_URL,
                                         "APPROVE_ROUTE_CHANGE", "REJECT_ROUTE_CHANGE", "UPDATE_ROUTE_CHECK",
+                                        ROUTE_MODE_NAME,
                                     )
                                     if ok:
                                         read_csv_cached.clear()

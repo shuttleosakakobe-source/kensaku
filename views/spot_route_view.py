@@ -13,7 +13,10 @@ from views.maint_common import (
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code, send_staff_comment,
     render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
+    render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
 )
+
+SR_MODE_NAME = "単発ルート変更"
 from views.route_view import get_route_lookup
 
 
@@ -493,6 +496,10 @@ def render_spot_route_change_tabs():
             _tab1_body()
     def _tab2_body():
         st.subheader("🔍 管理職チェック")
+        render_tab2_notifications_section(SR_MODE_NAME)
+        render_tab2_own_approvals_section(
+            SR_MODE_NAME, SR_COL, SR_TARGET_SHEET_CSV, SR_TARGET_SHEET_URL, "RESUBMIT_SPOT_ROUTE_CHANGE",
+        )
         try:
             df = read_csv_cached(SR_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > SR_COL["status_sign"]:
@@ -592,6 +599,11 @@ def render_spot_route_change_tabs():
             _tab2_body()
     def _tab3_body():
         st.subheader("🚚 業務担当メンテナンス処理")
+        render_tab3_own_transfers_section(
+            SR_MODE_NAME, SR_COL, SR_DEST_SHEET_CSV, SR_TARGET_SHEET_CSV,
+            SR_TARGET_SHEET_URL, SR_DEST_SHEET_URL,
+            "APPROVE_SPOT_ROUTE_CHANGE", "REJECT_SPOT_ROUTE_CHANGE", "UPDATE_SPOT_ROUTE_CHECK",
+        )
         try:
             df = read_csv_cached(SR_TARGET_SHEET_CSV)
 
@@ -697,6 +709,7 @@ def render_spot_route_change_tabs():
                                                     applicant=_v("applicant"),
                                                     comment=staff_comment_val,
                                                     staff_name=op_user,
+                                                    extra_recipient=mgr_name,
                                                 )
                                             st.toast("🎉 業務用スプレッドシートへの転記が完了しました！", icon="🎉")
                                             time.sleep(1.5)
@@ -880,6 +893,7 @@ def render_spot_route_change_tabs():
                                         st.session_state["user_name"],
                                         SR_COL, SR_TARGET_SHEET_CSV, SR_TARGET_SHEET_URL, SR_DEST_SHEET_URL,
                                         "APPROVE_SPOT_ROUTE_CHANGE", "REJECT_SPOT_ROUTE_CHANGE", "UPDATE_SPOT_ROUTE_CHECK",
+                                        SR_MODE_NAME,
                                     )
                                     if ok:
                                         read_csv_cached.clear()
