@@ -666,8 +666,11 @@ def handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_act
 
 
 def render_tab2_own_approvals_section(mode_name, col, target_sheet_csv, target_sheet_url, resubmit_action):
-    """TAB2（管理職チェック）に、自分が承認済み・まだ業務担当に転記されていない
-    申請の一覧を表示し、「承認を取り消す」ボタンでいつでも申請中に戻せるようにする。"""
+    """TAB2（管理職チェック）に、承認済み・まだ業務担当に転記されていない申請の
+    一覧を表示し、「承認を取り消す」ボタンでいつでも申請中に戻せるようにする。
+    💡 以前は「自分が承認したもの」だけに絞っていたが、他の管理職が承認した
+    ものでも、次のセクション（TAB3の転記）がまだ終わっていなければ、ここから
+    誰でも取り消せるように変更した（承認者名は一覧に表示して分かるようにする）。"""
     user_name = str(st.session_state.get("user_name", "")).strip()
     if not user_name:
         return
@@ -679,31 +682,36 @@ def render_tab2_own_approvals_section(mode_name, col, target_sheet_csv, target_s
         return
 
     status_series = df.iloc[:, col["status_sign"]].astype(str).str.strip()
-    mine_df = df[status_series == user_name]
+    # TAB3の承認済み一覧（approved_df）と同じ判定条件＝「申請中・差戻し・削除・
+    # 業務転記済・空」のいずれでもない＝承認済みでまだ転記されていない状態。
+    pending_df = df[
+        (~df.iloc[:, col["status_sign"]].isna()) &
+        (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
+    ]
 
     # 💡 以前は対象が0件のときセクションごと何も表示しなかったため、「そもそも機能が
     #    存在しない」ように見えてしまっていた。0件でも見出し自体は必ず表示する。
-    with st.expander(f"📋 自分が承認した申請（転記待ち・{len(mine_df)}件）"):
-        if mine_df.empty:
-            st.caption("現在、転記待ちで自分が承認した申請はありません。")
+    with st.expander(f"📋 承認済みの申請（転記待ち・{len(pending_df)}件）"):
+        if pending_df.empty:
+            st.caption("現在、転記待ちの承認済み申請はありません。")
         # 💡 業務担当が転記（次のセクションでの処理）を終えると、この行はstatus_signが
-        #    「業務転記済」に変わってmine_dfの対象から自動的に外れるため、検索範囲も
+        #    「業務転記済」に変わってpending_dfの対象から自動的に外れるため、検索範囲も
         #    自然に「まだ転記されていないもの」だけに限定される。
         search_kw = st.text_input(
             "🔍 顧客名・顧客コードで検索", key=f"tab2_search_{mode_name}",
             placeholder="検索したい顧客名または顧客コードを入力",
         ).strip()
         if search_kw:
-            name_series = mine_df.iloc[:, col["cust_name"]].astype(str)
-            code_series = mine_df.iloc[:, col["cust_code"]].astype(str)
-            mine_df = mine_df[
+            name_series = pending_df.iloc[:, col["cust_name"]].astype(str)
+            code_series = pending_df.iloc[:, col["cust_code"]].astype(str)
+            pending_df = pending_df[
                 name_series.str.contains(search_kw, case=False, na=False) |
                 code_series.str.contains(search_kw, case=False, na=False)
             ]
-            if mine_df.empty:
+            if pending_df.empty:
                 st.info("該当する申請が見つかりませんでした。")
 
-        for idx, row in mine_df.iloc[::-1].iterrows():
+        for idx, row in pending_df.iloc[::-1].iterrows():
             row_id = idx + 2
 
             def _v(col_key, r=row):
@@ -711,7 +719,7 @@ def render_tab2_own_approvals_section(mode_name, col, target_sheet_csv, target_s
                 return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
 
             c1, c2 = st.columns([4, 1])
-            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 承認日時: {_v('approval_time')}")
+            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 承認者: {_v('status_sign')} ｜ 承認日時: {_v('approval_time')}")
             if c2.button("🗑️ 承認を取り消す", key=f"cancel_approval_{mode_name}_{row_id}"):
                 res = handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_action)
                 if res.get("status") == "success":
@@ -759,9 +767,12 @@ def render_tab3_own_transfers_section(
     mode_name, col, dest_sheet_csv, target_sheet_csv, target_sheet_url, dest_sheet_url,
     reopen_action, applicant_reject_action, update_check_action,
 ):
-    """TAB3（業務担当メンテナンス処理）に、自分が転記済みでまだチェックされていない
+    """TAB3（業務担当メンテナンス処理）に、転記済みでまだチェックされていない
     申請の一覧を表示し、「転記を取り消す」ボタンでTAB3の転記待ちに戻せるようにする。
-    内部的にはhandle_tab4_reject()の「業務担当への差戻し」と同じ処理を再利用する。"""
+    内部的にはhandle_tab4_reject()の「業務担当への差戻し」と同じ処理を再利用する。
+    💡 以前は「自分が転記したもの」だけに絞っていたが、他の業務担当が転記した
+    ものでも、次のセクション（TAB4のチェック）がまだ終わっていなければ、ここから
+    誰でも取り消せるように変更した（転記者名は一覧に表示して分かるようにする）。"""
     user_name = str(st.session_state.get("user_name", "")).strip()
     if not user_name:
         return
@@ -772,33 +783,32 @@ def render_tab3_own_transfers_section(
     if df.empty or len(df.columns) <= col["check_time"]:
         return
 
-    process_user_series = df.iloc[:, col["process_user"]].astype(str).str.strip()
     check_time_series = df.iloc[:, col["check_time"]].astype(str).str.strip()
-    mine_df = df[(process_user_series == user_name) & (check_time_series == "")]
+    pending_df = df[check_time_series == ""]
 
     # 💡 以前は対象が0件のときセクションごと何も表示しなかったため、「そもそも機能が
     #    存在しない」ように見えてしまっていた。0件でも見出し自体は必ず表示する。
-    with st.expander(f"📋 自分が転記した申請（チェック待ち・{len(mine_df)}件）"):
-        if mine_df.empty:
-            st.caption("現在、チェック待ちで自分が転記した申請はありません。")
+    with st.expander(f"📋 転記済みの申請（チェック待ち・{len(pending_df)}件）"):
+        if pending_df.empty:
+            st.caption("現在、チェック待ちの転記済み申請はありません。")
         # 💡 TAB4で次のセクションでのチェックが完了すると、この行はcheck_timeに
-        #    日時が入ってmine_dfの対象から自動的に外れるため、検索範囲も自然に
+        #    日時が入ってpending_dfの対象から自動的に外れるため、検索範囲も自然に
         #    「まだチェックされていないもの」だけに限定される。
         search_kw = st.text_input(
             "🔍 顧客名・顧客コードで検索", key=f"tab3_search_{mode_name}",
             placeholder="検索したい顧客名または顧客コードを入力",
         ).strip()
         if search_kw:
-            name_series = mine_df.iloc[:, col["cust_name"]].astype(str)
-            code_series = mine_df.iloc[:, col["cust_code"]].astype(str)
-            mine_df = mine_df[
+            name_series = pending_df.iloc[:, col["cust_name"]].astype(str)
+            code_series = pending_df.iloc[:, col["cust_code"]].astype(str)
+            pending_df = pending_df[
                 name_series.str.contains(search_kw, case=False, na=False) |
                 code_series.str.contains(search_kw, case=False, na=False)
             ]
-            if mine_df.empty:
+            if pending_df.empty:
                 st.info("該当する申請が見つかりませんでした。")
 
-        for idx, row in mine_df.iloc[::-1].iterrows():
+        for idx, row in pending_df.iloc[::-1].iterrows():
             row_id = idx + 2
 
             def _v(col_key, r=row):
@@ -806,7 +816,7 @@ def render_tab3_own_transfers_section(
                 return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
 
             c1, c2 = st.columns([4, 1])
-            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 転記日時: {_v('process_time')}")
+            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 転記者: {_v('process_user')} ｜ 転記日時: {_v('process_time')}")
             if c2.button("🗑️ 転記を取り消す", key=f"cancel_transfer_{mode_name}_{row_id}"):
                 ok, msg = handle_tab4_reject(
                     row, row_id, "業務担当", "業務担当による転記取り消し", user_name,
@@ -842,9 +852,12 @@ def handle_tab4_cancel_check(row, row_id, col, dest_sheet_url, update_check_acti
 
 
 def render_tab4_own_checks_section(mode_name, col, dest_sheet_csv, dest_sheet_url, update_check_action):
-    """TAB4（メンテナンスチェック画面）に、自分がチェック完了済み・まだ印刷されて
-    いない申請の一覧を表示し、「チェックを取り消す」ボタンで未チェックの状態に
-    戻せるようにする（TAB2の承認取り消し・TAB3の転記取り消しと同じ考え方）。"""
+    """TAB4（メンテナンスチェック画面）に、チェック完了済み・まだ印刷されていない
+    申請の一覧を表示し、「チェックを取り消す」ボタンで未チェックの状態に
+    戻せるようにする（TAB2の承認取り消し・TAB3の転記取り消しと同じ考え方）。
+    💡 以前は「自分がチェックしたもの」だけに絞っていたが、他の担当者がチェック
+    したものでも、次のセクション（TAB5の印刷）がまだ終わっていなければ、ここから
+    誰でも取り消せるように変更した（チェック者名は一覧に表示して分かるようにする）。"""
     user_name = str(st.session_state.get("user_name", "")).strip()
     if not user_name:
         return
@@ -855,32 +868,31 @@ def render_tab4_own_checks_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
     if df.empty or len(df.columns) <= col["print_time"]:
         return
 
-    check_user_series = df.iloc[:, col["check_user"]].astype(str).str.strip()
     check_time_series = df.iloc[:, col["check_time"]].astype(str).str.strip()
     print_time_series = df.iloc[:, col["print_time"]].astype(str).str.strip()
-    mine_df = df[(check_user_series == user_name) & (check_time_series != "") & (print_time_series == "")]
+    pending_df = df[(check_time_series != "") & (print_time_series == "")]
 
     # 💡 TAB5で次のセクションでの印刷が完了すると、この行はprint_timeに日時が入って
-    #    mine_dfの対象から自動的に外れるため、検索範囲も自然に「まだ印刷されて
+    #    pending_dfの対象から自動的に外れるため、検索範囲も自然に「まだ印刷されて
     #    いないもの」だけに限定される。0件でも見出し自体は必ず表示する。
-    with st.expander(f"📋 自分がチェック完了した申請（印刷待ち・{len(mine_df)}件）"):
-        if mine_df.empty:
-            st.caption("現在、印刷待ちで自分がチェック完了した申請はありません。")
+    with st.expander(f"📋 チェック完了済みの申請（印刷待ち・{len(pending_df)}件）"):
+        if pending_df.empty:
+            st.caption("現在、印刷待ちのチェック完了済み申請はありません。")
         search_kw = st.text_input(
             "🔍 顧客名・顧客コードで検索", key=f"tab4_search_{mode_name}",
             placeholder="検索したい顧客名または顧客コードを入力",
         ).strip()
         if search_kw:
-            name_series = mine_df.iloc[:, col["cust_name"]].astype(str)
-            code_series = mine_df.iloc[:, col["cust_code"]].astype(str)
-            mine_df = mine_df[
+            name_series = pending_df.iloc[:, col["cust_name"]].astype(str)
+            code_series = pending_df.iloc[:, col["cust_code"]].astype(str)
+            pending_df = pending_df[
                 name_series.str.contains(search_kw, case=False, na=False) |
                 code_series.str.contains(search_kw, case=False, na=False)
             ]
-            if mine_df.empty:
+            if pending_df.empty:
                 st.info("該当する申請が見つかりませんでした。")
 
-        for idx, row in mine_df.iloc[::-1].iterrows():
+        for idx, row in pending_df.iloc[::-1].iterrows():
             row_id = idx + 2
 
             def _v(col_key, r=row):
@@ -888,7 +900,7 @@ def render_tab4_own_checks_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
                 return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
 
             c1, c2 = st.columns([4, 1])
-            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ チェック日時: {_v('check_time')}")
+            c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ チェック者: {_v('check_user')} ｜ チェック日時: {_v('check_time')}")
             if c2.button("🗑️ チェックを取り消す", key=f"cancel_check_{mode_name}_{row_id}"):
                 res = handle_tab4_cancel_check(row, row_id, col, dest_sheet_url, update_check_action)
                 if res.get("status") == "success":
