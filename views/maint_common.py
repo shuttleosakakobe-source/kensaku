@@ -638,6 +638,20 @@ def handle_tab4_reject(
     return True, f"【{reject_target}】へ差戻しを行いました（理由: {reject_reason}）"
 
 
+def _safe_col_series(df, col_idx):
+    """dfのcol_idx列目をSeriesとして返すが、CSVの末尾の列が全行空欄だと
+    Googleスプレッドシートの書き出し（gviz/tq）側でその列ごと省略され、
+    df.columnsがcol_idxまで届かないことがある。その場合は全行空文字列として
+    扱う（＝「全員まだ未処理」として扱う。実際その通りであることが多い）。
+    💡 これが無いと、例えば商品発注でまだ誰もチェックしていない転記データ
+    しか無いとき、check_time列自体がCSVから丸ごと消えて
+    len(df.columns)<=col["check_time"]になり、TAB3の「転記済み一覧」が
+    0件ですらなく、セクションごと出てこなくなる不具合が起きる。"""
+    if len(df.columns) > col_idx:
+        return df.iloc[:, col_idx].astype(str).str.strip()
+    return pd.Series([""] * len(df), index=df.index)
+
+
 def handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_action):
     """管理職が自分の承認を取り消し、申請中の状態に戻す（TAB2用）。
     承認時刻・承認コメントもクリアし、TAB1の差戻し一覧には出さない
@@ -678,16 +692,13 @@ def render_tab2_own_approvals_section(mode_name, col, target_sheet_csv, target_s
         df = read_csv_cached(target_sheet_csv)
     except Exception:
         return
-    if df.empty or len(df.columns) <= col["status_sign"]:
+    if df.empty:
         return
 
-    status_series = df.iloc[:, col["status_sign"]].astype(str).str.strip()
+    status_series = _safe_col_series(df, col["status_sign"])
     # TAB3の承認済み一覧（approved_df）と同じ判定条件＝「申請中・差戻し・削除・
     # 業務転記済・空」のいずれでもない＝承認済みでまだ転記されていない状態。
-    pending_df = df[
-        (~df.iloc[:, col["status_sign"]].isna()) &
-        (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"]))
-    ]
+    pending_df = df[~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"])]
 
     # 💡 以前は対象が0件のときセクションごと何も表示しなかったため、「そもそも機能が
     #    存在しない」ように見えてしまっていた。0件でも見出し自体は必ず表示する。
@@ -780,10 +791,10 @@ def render_tab3_own_transfers_section(
         df = read_csv_cached(dest_sheet_csv)
     except Exception:
         return
-    if df.empty or len(df.columns) <= col["check_time"]:
+    if df.empty:
         return
 
-    check_time_series = df.iloc[:, col["check_time"]].astype(str).str.strip()
+    check_time_series = _safe_col_series(df, col["check_time"])
     pending_df = df[check_time_series == ""]
 
     # 💡 以前は対象が0件のときセクションごと何も表示しなかったため、「そもそも機能が
@@ -865,11 +876,11 @@ def render_tab4_own_checks_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
         df = read_csv_cached(dest_sheet_csv)
     except Exception:
         return
-    if df.empty or len(df.columns) <= col["print_time"]:
+    if df.empty:
         return
 
-    check_time_series = df.iloc[:, col["check_time"]].astype(str).str.strip()
-    print_time_series = df.iloc[:, col["print_time"]].astype(str).str.strip()
+    check_time_series = _safe_col_series(df, col["check_time"])
+    print_time_series = _safe_col_series(df, col["print_time"])
     pending_df = df[(check_time_series != "") & (print_time_series == "")]
 
     # 💡 TAB5で次のセクションでの印刷が完了すると、この行はprint_timeに日時が入って
