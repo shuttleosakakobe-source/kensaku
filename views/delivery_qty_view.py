@@ -508,11 +508,15 @@ def render_delivery_qty_change_tabs():
                 row1 = st.columns(4)
 
                 pick_idx = row1[0].selectbox(
-                    "商品記号", [None] + list(range(len(products))),
-                    format_func=lambda i: "" if i is None else product_labels[i],
+                    "商品記号",
+                    list(range(len(products))),
+                    index=None,
+                    accept_new_options=True,
+                    format_func=lambda i: product_labels[i] if isinstance(i, int) else str(i),
+                    placeholder="選択 or 入力",
                     key=f"dq_code_{n}{rclear}", on_change=_make_pick_cb(),
                 )
-                item_code = products[pick_idx]["code"] if isinstance(pick_idx, int) else ""
+                item_code = products[pick_idx]["code"] if isinstance(pick_idx, int) else (pick_idx or "")
                 item_count = row1[1].text_input("契約数", key=f"dq_count_{n}{rclear}", disabled=True)
                 item_price = row1[2].text_input("単価", key=f"dq_price_{n}{rclear}", disabled=True)
                 item_change_qty = row1[3].text_input("変更数", key=f"dq_change_qty_{n}{rclear}")
