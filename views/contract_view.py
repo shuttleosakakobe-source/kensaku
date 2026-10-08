@@ -675,7 +675,14 @@ def render_contract_change_tabs():
         try:
             df = read_csv_cached(CC_TARGET_SHEET_CSV)
             if not df.empty and len(df.columns) > CC_COL["status_sign"]:
-                rejected_df = df[df.iloc[:, CC_COL["status_sign"]].astype(str).str.strip() == "差戻し"]
+                # 💡 差戻し一覧は「自分が申請したもの」だけに絞る。以前は絞り込みが無く、
+                # 他のスタッフが申請して差し戻された案件まで全員の画面に出てしまい、
+                # 本人以外が気づいて触ってしまう不具合があった。
+                _current_user = str(st.session_state.get("user_name", "")).strip()
+                rejected_df = df[
+                    (df.iloc[:, CC_COL["status_sign"]].astype(str).str.strip() == "差戻し") &
+                    (df.iloc[:, CC_COL["applicant"]].astype(str).str.strip() == _current_user)
+                ]
                 render_section_pending_banner("差戻し", len(rejected_df))
                 if rejected_df.empty:
                     st.info("現在、差戻しデータはありません。")
