@@ -609,10 +609,17 @@ def handle_tab4_reject(
         return False, f"差戻し失敗（元データの更新）: {res.get('message')}"
 
     check_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
-    while len(check_row) < col["check_user"] + 1:
+    while len(check_row) < col["print_time"] + 1:
         check_row.append("")
     check_row[col["check_time"]] = now_str
     check_row[col["check_user"]] = f"↩️ 差戻し（{reject_target}）: {reject_reason}"
+    # 💡 この行はここで役目を終える（業務担当へ戻した場合は再度転記され、申請者へ
+    #    戻した場合は再申請されるため、別の新しい行がこの先できる）。
+    #    check_timeだけ埋めてもTAB5の印刷対象（チェック済み・未印刷）の条件に
+    #    一致してしまい、後で再転記された本物の行と一緒に同じ顧客が印刷画面に
+    #    2件表示される不具合があったため、print_timeにも印刷対象外である旨の
+    #    印を付けて、TAB5の「未印刷」一覧から確実に除外する。
+    check_row[col["print_time"]] = f"（差戻し済みのため印刷対象外・{now_str}）"
 
     check_payload = {
         "action": update_check_action,
