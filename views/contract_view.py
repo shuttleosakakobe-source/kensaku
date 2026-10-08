@@ -12,7 +12,7 @@ from views.maint_common import (
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
     render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
-    render_internal_note,
+    render_internal_note, render_tab4_own_checks_section,
 )
 
 CC_MODE_NAME = "契約内容変更"
@@ -1059,6 +1059,9 @@ def render_contract_change_tabs():
             _tab3_body()
     def _tab4_body():
         st.subheader("✅ メンテナンスチェック画面")
+        render_tab4_own_checks_section(
+            CC_MODE_NAME, CC_COL, CC_DEST_SHEET_CSV, CC_DEST_SHEET_URL, "UPDATE_CONTRACT_CHANGE_CHECK",
+        )
 
         try:
             df_dest = read_csv_cached(CC_DEST_SHEET_CSV)

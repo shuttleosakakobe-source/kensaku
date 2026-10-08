@@ -13,7 +13,7 @@ from views.maint_common import (
     tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code, send_staff_comment,
     render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
-    render_internal_note,
+    render_internal_note, render_tab4_own_checks_section,
 )
 
 ROUTE_MODE_NAME = "ルート変更"
@@ -903,6 +903,9 @@ def render_route_change_tabs():
             _tab3_body()
     def _tab4_body():
         st.subheader("✅ メンテナンスチェック画面")
+        render_tab4_own_checks_section(
+            ROUTE_MODE_NAME, ROUTE_COL, ROUTE_DEST_SHEET_CSV, ROUTE_DEST_SHEET_URL, "UPDATE_ROUTE_CHECK",
+        )
 
         try:
             df_dest = read_csv_cached(ROUTE_DEST_SHEET_CSV)

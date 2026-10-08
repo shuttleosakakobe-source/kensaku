@@ -16,7 +16,7 @@ from views.maint_common import (
     tab_visible, RESTRICTED_TAB_MSG, send_staff_comment, render_section_pending_banner,
     render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
-    render_internal_note,
+    render_internal_note, render_tab4_own_checks_section,
 )
 from views.contract_view import get_contract_products, _cc_product_labels
 
@@ -816,6 +816,9 @@ def render_customer_balance_correction_tabs():
             _tab3_body()
     def _tab4_body():
         st.subheader("✅ メンテナンスチェック画面")
+        render_tab4_own_checks_section(
+            KZ_MODE_NAME, KZ_COL, KZ_DEST_SHEET_CSV, KZ_DEST_SHEET_URL, "UPDATE_CUSTOMER_BALANCE_CHECK",
+        )
 
         try:
             df_dest = read_csv_cached(KZ_DEST_SHEET_CSV)

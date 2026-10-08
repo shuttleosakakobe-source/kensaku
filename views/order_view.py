@@ -13,7 +13,7 @@ from views.maint_common import (
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
     send_staff_comment, render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
-    render_internal_note,
+    render_internal_note, render_tab4_own_checks_section,
 )
 
 ORDER_MODE_NAME = "商品発注"
@@ -51,6 +51,7 @@ ORDER_CHECK_COL = {
     "rejector_name": 33, "reject_date": 34,
     "process_time": 33, "process_user": OP_USER_COL_IDX,
     "check_time": CHECK_TIME_COL_IDX, "check_user": CHECK_USER_COL_IDX,
+    "print_time": PRINT_TIME_COL_IDX,
 }
 
 
@@ -1088,6 +1089,9 @@ def render_product_order_tabs():
             _tab3_body()
     def _tab4_body():
         st.subheader("✅ メンテナンスチェック画面")
+        render_tab4_own_checks_section(
+            ORDER_MODE_NAME, ORDER_CHECK_COL, DEST_SHEET_CSV, DEST_SHEET_URL, "UPDATE_MAINTENANCE_CHECK",
+        )
 
         try:
             df_dest = read_csv_cached(DEST_SHEET_CSV)
