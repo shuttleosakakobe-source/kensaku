@@ -684,6 +684,23 @@ def render_tab2_own_approvals_section(mode_name, col, target_sheet_csv, target_s
         return
 
     with st.expander(f"📋 自分が承認した申請（転記待ち・{len(mine_df)}件）"):
+        # 💡 業務担当が転記（次のセクションでの処理）を終えると、この行はstatus_signが
+        #    「業務転記済」に変わってmine_dfの対象から自動的に外れるため、検索範囲も
+        #    自然に「まだ転記されていないもの」だけに限定される。
+        search_kw = st.text_input(
+            "🔍 顧客名・顧客コードで検索", key=f"tab2_search_{mode_name}",
+            placeholder="検索したい顧客名または顧客コードを入力",
+        ).strip()
+        if search_kw:
+            name_series = mine_df.iloc[:, col["cust_name"]].astype(str)
+            code_series = mine_df.iloc[:, col["cust_code"]].astype(str)
+            mine_df = mine_df[
+                name_series.str.contains(search_kw, case=False, na=False) |
+                code_series.str.contains(search_kw, case=False, na=False)
+            ]
+            if mine_df.empty:
+                st.info("該当する申請が見つかりませんでした。")
+
         for idx, row in mine_df.iloc[::-1].iterrows():
             row_id = idx + 2
 
@@ -760,6 +777,23 @@ def render_tab3_own_transfers_section(
         return
 
     with st.expander(f"📋 自分が転記した申請（チェック待ち・{len(mine_df)}件）"):
+        # 💡 TAB4で次のセクションでのチェックが完了すると、この行はcheck_timeに
+        #    日時が入ってmine_dfの対象から自動的に外れるため、検索範囲も自然に
+        #    「まだチェックされていないもの」だけに限定される。
+        search_kw = st.text_input(
+            "🔍 顧客名・顧客コードで検索", key=f"tab3_search_{mode_name}",
+            placeholder="検索したい顧客名または顧客コードを入力",
+        ).strip()
+        if search_kw:
+            name_series = mine_df.iloc[:, col["cust_name"]].astype(str)
+            code_series = mine_df.iloc[:, col["cust_code"]].astype(str)
+            mine_df = mine_df[
+                name_series.str.contains(search_kw, case=False, na=False) |
+                code_series.str.contains(search_kw, case=False, na=False)
+            ]
+            if mine_df.empty:
+                st.info("該当する申請が見つかりませんでした。")
+
         for idx, row in mine_df.iloc[::-1].iterrows():
             row_id = idx + 2
 
