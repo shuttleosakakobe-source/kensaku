@@ -885,7 +885,7 @@ def render_other_maintenance_tabs():
             _tab4_body()
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
-        render_tab5_own_prints_section(OT_MODE_NAME, OT_COL, OT_DEST_SHEET_CSV, OT_DEST_SHEET_URL)
+        render_tab5_own_prints_section(OT_MODE_NAME, OT_COL, OT_DEST_SHEET_CSV, OT_DEST_SHEET_URL, "UPDATE_OTHER_MAINTENANCE_CHECK")
 
         try:
             df_print = read_csv_cached(OT_DEST_SHEET_CSV)

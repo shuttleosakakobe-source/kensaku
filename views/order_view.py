@@ -1280,7 +1280,7 @@ def render_product_order_tabs():
             _tab4_body()
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
-        render_tab5_own_prints_section(ORDER_MODE_NAME, ORDER_CHECK_COL, DEST_SHEET_CSV, DEST_SHEET_URL)
+        render_tab5_own_prints_section(ORDER_MODE_NAME, ORDER_CHECK_COL, DEST_SHEET_CSV, DEST_SHEET_URL, "UPDATE_MAINTENANCE_CHECK")
 
         try:
             df_print = read_csv_cached(DEST_SHEET_CSV)

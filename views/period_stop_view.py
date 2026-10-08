@@ -868,7 +868,7 @@ def render_period_stop_tabs():
             _tab4_body()
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
-        render_tab5_own_prints_section(PS_MODE_NAME, PS_COL, PS_DEST_SHEET_CSV, PS_DEST_SHEET_URL)
+        render_tab5_own_prints_section(PS_MODE_NAME, PS_COL, PS_DEST_SHEET_CSV, PS_DEST_SHEET_URL, "UPDATE_PERIOD_STOP_CHECK")
 
         try:
             df_print = read_csv_cached(PS_DEST_SHEET_CSV)

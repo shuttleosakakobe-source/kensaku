@@ -1016,21 +1016,33 @@ def render_tab4_own_checks_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
                     st.error(f"取り消しに失敗しました: {res.get('message')}")
 
 
-def handle_tab5_cancel_print(row_id, col, dest_sheet_url):
+def handle_tab5_cancel_print(row, row_id, col, dest_sheet_url, update_check_action):
     """業務担当が、印刷済みマークを解除し、もう一度TAB5の印刷対象（未印刷一覧）に
-    戻す。印刷済みマークを付けるMARK_PRINTEDアクションをそのまま再利用し、
-    print_time列だけを空文字に書き戻す（他の列には一切触れない）。"""
+    戻す。
+    💡 当初はMARK_PRINTEDアクション（印刷済みにする時に使うもの）をそのまま
+    再利用し、print_timeだけ空文字で送って解除しようとしたが、GAS側の実装が
+    `data.print_time || 現在時刻`という書き方になっており、空文字はJSで
+    falsy（＝「指定なし」）と判定されてしまうため、空文字を送っても実際には
+    現在時刻で上書きされてしまい、print_timeが一切クリアされず「解除しても
+    印刷済みのまま」になってしまうバグがあった。
+    そのため、TAB4のチェック取り消し（handle_tab4_cancel_check）と同じ、
+    行全体を明示的にsetValuesで上書きするUPDATE_X_CHECK系アクションを
+    再利用し、print_time列を確実に空文字へ書き戻す（他の列には触れない）。"""
+    base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(row))]
+    while len(base_row) < col["print_time"] + 1:
+        base_row.append("")
+    base_row[col["print_time"]] = ""
+
     payload = {
-        "action": "MARK_PRINTED",
+        "action": update_check_action,
         "target_sheet_url": dest_sheet_url,
-        "row_indices": [row_id],
-        "print_time": "",
-        "print_col": col["print_time"] + 1,
+        "row_index": row_id,
+        "updated_row": base_row,
     }
     return post_to_gas(payload)
 
 
-def render_tab5_own_prints_section(mode_name, col, dest_sheet_csv, dest_sheet_url):
+def render_tab5_own_prints_section(mode_name, col, dest_sheet_csv, dest_sheet_url, update_check_action):
     """TAB5（加盟店別印刷画面）に、すでに印刷済みの申請一覧を表示し、
     「🔄 印刷済みを解除」ボタンでもう一度印刷対象に戻せるようにする
     （TAB2の承認取り消し・TAB3の転記取り消し・TAB4のチェック取り消しと同じ考え方）。
@@ -1084,7 +1096,7 @@ def render_tab5_own_prints_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
             c1, c2 = st.columns([4, 1])
             c1.write(f"**{_v('cust_name')}**（{_v('cust_code')}） ｜ 印刷日時: {_v('print_time')}")
             if c2.button("🔄 印刷済みを解除", key=f"cancel_print_{mode_name}_{row_id}"):
-                res = handle_tab5_cancel_print(row_id, col, dest_sheet_url)
+                res = handle_tab5_cancel_print(row, row_id, col, dest_sheet_url, update_check_action)
                 if res.get("status") == "success":
                     read_csv_cached.clear()
                     st.toast("印刷済みを解除しました。もう一度印刷対象に表示されます。", icon="🔄")

@@ -1148,7 +1148,7 @@ def render_delivery_qty_change_tabs():
             _tab4_body()
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
-        render_tab5_own_prints_section(DQ_MODE_NAME, DQ_COL, DQ_DEST_SHEET_CSV, DQ_DEST_SHEET_URL)
+        render_tab5_own_prints_section(DQ_MODE_NAME, DQ_COL, DQ_DEST_SHEET_CSV, DQ_DEST_SHEET_URL, "UPDATE_DELIVERY_QTY_CHECK")
 
         try:
             df_print = read_csv_cached(DQ_DEST_SHEET_CSV)

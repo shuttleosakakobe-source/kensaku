@@ -990,7 +990,7 @@ def render_customer_balance_correction_tabs():
             _tab4_body()
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
-        render_tab5_own_prints_section(KZ_MODE_NAME, KZ_COL, KZ_DEST_SHEET_CSV, KZ_DEST_SHEET_URL)
+        render_tab5_own_prints_section(KZ_MODE_NAME, KZ_COL, KZ_DEST_SHEET_CSV, KZ_DEST_SHEET_URL, "UPDATE_CUSTOMER_BALANCE_CHECK")
 
         try:
             df_print = read_csv_cached(KZ_DEST_SHEET_CSV)

@@ -940,7 +940,7 @@ def render_spot_route_change_tabs():
             _tab4_body()
     def _tab5_body():
         st.subheader("🖨️ 加盟店別 印刷")
-        render_tab5_own_prints_section(SR_MODE_NAME, SR_COL, SR_DEST_SHEET_CSV, SR_DEST_SHEET_URL)
+        render_tab5_own_prints_section(SR_MODE_NAME, SR_COL, SR_DEST_SHEET_CSV, SR_DEST_SHEET_URL, "UPDATE_SPOT_ROUTE_CHECK")
 
         try:
             df_print = read_csv_cached(SR_DEST_SHEET_CSV)
