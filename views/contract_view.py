@@ -584,12 +584,12 @@ def render_contract_change_tabs():
                 before_code = before_code_manual.strip() or (
                     products[before_idx]["code"] if isinstance(before_idx, int) else ""
                 )
-                before_price = b_row1[2].text_input("単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
-                before_cycle = b_row1[3].text_input("周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
-                before_a = b_row2[0].text_input("A", key=f"cc_before_a_{n}{rclear}", disabled=True)
-                before_b = b_row2[1].text_input("B", key=f"cc_before_b_{n}{rclear}", disabled=True)
-                before_c = b_row2[2].text_input("C", key=f"cc_before_c_{n}{rclear}", disabled=True)
-                before_d = b_row2[3].text_input("D", key=f"cc_before_d_{n}{rclear}", disabled=True)
+                before_price = b_row1[2].text_input("単価", key=f"cc_before_price_{n}{rclear}")
+                before_cycle = b_row1[3].text_input("周期", key=f"cc_before_cycle_{n}{rclear}")
+                before_a = b_row2[0].text_input("A", key=f"cc_before_a_{n}{rclear}")
+                before_b = b_row2[1].text_input("B", key=f"cc_before_b_{n}{rclear}")
+                before_c = b_row2[2].text_input("C", key=f"cc_before_c_{n}{rclear}")
+                before_d = b_row2[3].text_input("D", key=f"cc_before_d_{n}{rclear}")
 
                 before_count = _cc_sum4(before_a, before_b, before_c, before_d)
                 st.session_state[f"cc_before_count_{n}{rclear}"] = before_count

@@ -523,8 +523,8 @@ def render_delivery_qty_change_tabs():
                 item_code = item_code_manual.strip() or (
                     products[pick_idx]["code"] if isinstance(pick_idx, int) else ""
                 )
-                item_count = row1[1].text_input("契約数", key=f"dq_count_{n}{rclear}", disabled=True)
-                item_price = row1[2].text_input("単価", key=f"dq_price_{n}{rclear}", disabled=True)
+                item_count = row1[1].text_input("契約数", key=f"dq_count_{n}{rclear}")
+                item_price = row1[2].text_input("単価", key=f"dq_price_{n}{rclear}")
                 item_change_qty = row1[3].text_input("変更数", key=f"dq_change_qty_{n}{rclear}")
 
                 items_data.append({
