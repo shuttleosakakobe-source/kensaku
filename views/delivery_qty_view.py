@@ -508,15 +508,21 @@ def render_delivery_qty_change_tabs():
                 row1 = st.columns(4)
 
                 pick_idx = row1[0].selectbox(
-                    "商品記号",
-                    list(range(len(products))),
-                    index=None,
-                    accept_new_options=True,
-                    format_func=lambda i: product_labels[i] if isinstance(i, int) else str(i),
-                    placeholder="選択 or 入力",
+                    "商品記号", [None] + list(range(len(products))),
+                    format_func=lambda i: "" if i is None else product_labels[i],
                     key=f"dq_code_{n}{rclear}", on_change=_make_pick_cb(),
                 )
-                item_code = products[pick_idx]["code"] if isinstance(pick_idx, int) else (pick_idx or "")
+                # 💡 プルダウンの代わりに手入力でも商品記号を指定できるよう、別枠の
+                # テキスト入力を用意する（accept_new_options方式のプルダウン一体型は
+                # スマホ・タブレットで文字入力ができない不具合があったため、確実に
+                # 入力できる通常のテキスト欄に分離した）。入力されていればこちらを優先。
+                item_code_manual = st.text_input(
+                    "商品記号（一覧に無い場合はここに直接入力。入力時はこちらが優先されます）",
+                    key=f"dq_code_manual_{n}{rclear}",
+                )
+                item_code = item_code_manual.strip() or (
+                    products[pick_idx]["code"] if isinstance(pick_idx, int) else ""
+                )
                 item_count = row1[1].text_input("契約数", key=f"dq_count_{n}{rclear}", disabled=True)
                 item_price = row1[2].text_input("単価", key=f"dq_price_{n}{rclear}", disabled=True)
                 item_change_qty = row1[3].text_input("変更数", key=f"dq_change_qty_{n}{rclear}")

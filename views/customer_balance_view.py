@@ -370,21 +370,25 @@ def render_customer_balance_correction_tabs():
             for n in range(KZ_ITEM_COUNT):
                 st.markdown(f"**商品 {n + 1}**")
 
-                # ---- 商品記号はプルダウンから選ぶだけでなく、無い商品記号を直接入力することもできる
-                # （契約内容変更の「変更後」商品記号ピッカーと同じ accept_new_options 方式）。
+                # ---- 商品記号はプルダウンから選ぶだけでなく、一覧に無い商品記号を直接入力する
+                # こともできる。以前はaccept_new_options方式（プルダウンと入力欄が一体化した
+                # もの）だったが、スマホ・タブレットで文字入力ができない不具合があったため、
+                # 通常のプルダウン＋別枠の手入力テキスト欄に分離した（手入力時はそちらを優先）。
                 # 単価・周期などの自動抽出は行わず、「現在の客中残」「変更後の客中残」は手入力。 ----
                 row1 = st.columns(3)
 
                 pick = row1[0].selectbox(
-                    "商品記号",
-                    list(range(len(products))),
-                    index=None,
-                    accept_new_options=True,
-                    format_func=lambda i: product_labels[i] if isinstance(i, int) else str(i),
-                    placeholder="選択 or 入力",
+                    "商品記号", [None] + list(range(len(products))),
+                    format_func=lambda i: "" if i is None else product_labels[i],
                     key=f"kz_code_{n}{rclear}",
                 )
-                item_code = products[pick]["code"] if isinstance(pick, int) else (pick or "")
+                item_code_manual = st.text_input(
+                    "商品記号（一覧に無い場合はここに直接入力。入力時はこちらが優先されます）",
+                    key=f"kz_code_manual_{n}{rclear}",
+                )
+                item_code = item_code_manual.strip() or (
+                    products[pick]["code"] if isinstance(pick, int) else ""
+                )
                 item_current = row1[1].text_input("現在の客中残", key=f"kz_cur_{n}{rclear}")
                 item_new = row1[2].text_input("変更後の客中残", key=f"kz_new_{n}{rclear}")
 

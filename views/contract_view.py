@@ -569,15 +569,21 @@ def render_contract_change_tabs():
                 b_row2 = st.columns(4)
 
                 before_idx = b_row1[0].selectbox(
-                    "商品記号",
-                    list(range(len(products))),
-                    index=None,
-                    accept_new_options=True,
-                    format_func=lambda i: product_labels[i] if isinstance(i, int) else str(i),
-                    placeholder="選択 or 入力",
+                    "商品記号", [None] + list(range(len(products))),
+                    format_func=lambda i: "" if i is None else product_labels[i],
                     key=f"cc_before_code_{n}{rclear}", on_change=_make_before_cb(),
                 )
-                before_code = products[before_idx]["code"] if isinstance(before_idx, int) else (before_idx or "")
+                # 💡 プルダウンの代わりに手入力でも商品記号を指定できるよう、別枠の
+                # テキスト入力を用意する（accept_new_options方式のプルダウン一体型は
+                # スマホ・タブレットで文字入力ができない不具合があったため、確実に
+                # 入力できる通常のテキスト欄に分離した）。入力されていればこちらを優先。
+                before_code_manual = st.text_input(
+                    "商品記号（一覧に無い場合はここに直接入力。入力時はこちらが優先されます）",
+                    key=f"cc_before_code_manual_{n}{rclear}",
+                )
+                before_code = before_code_manual.strip() or (
+                    products[before_idx]["code"] if isinstance(before_idx, int) else ""
+                )
                 before_price = b_row1[2].text_input("単価", key=f"cc_before_price_{n}{rclear}", disabled=True)
                 before_cycle = b_row1[3].text_input("周期", key=f"cc_before_cycle_{n}{rclear}", disabled=True)
                 before_a = b_row2[0].text_input("A", key=f"cc_before_a_{n}{rclear}", disabled=True)
@@ -594,15 +600,21 @@ def render_contract_change_tabs():
                 a_row2 = st.columns(4)
 
                 after_pick = a_row1[0].selectbox(
-                    "商品記号",
-                    list(range(len(products))),
-                    index=None,
-                    accept_new_options=True,
-                    format_func=lambda i: product_labels[i] if isinstance(i, int) else str(i),
-                    placeholder="選択 or 入力",
+                    "商品記号", [None] + list(range(len(products))),
+                    format_func=lambda i: "" if i is None else product_labels[i],
                     key=f"cc_after_code_{n}{rclear}",
                 )
-                after_code = products[after_pick]["code"] if isinstance(after_pick, int) else (after_pick or "")
+                # 💡 プルダウンの代わりに手入力でも商品記号を指定できるよう、別枠の
+                # テキスト入力を用意する（accept_new_options方式のプルダウン一体型は
+                # スマホ・タブレットで文字入力ができない不具合があったため、確実に
+                # 入力できる通常のテキスト欄に分離した）。入力されていればこちらを優先。
+                after_code_manual = st.text_input(
+                    "商品記号（一覧に無い場合はここに直接入力。入力時はこちらが優先されます）",
+                    key=f"cc_after_code_manual_{n}{rclear}",
+                )
+                after_code = after_code_manual.strip() or (
+                    products[after_pick]["code"] if isinstance(after_pick, int) else ""
+                )
                 after_price = a_row1[2].text_input("単価", key=f"cc_after_price_{n}{rclear}")
                 after_cycle = a_row1[3].text_input("周期", key=f"cc_after_cycle_{n}{rclear}")
                 after_a = a_row2[0].text_input("A", key=f"cc_after_a_{n}{rclear}")
