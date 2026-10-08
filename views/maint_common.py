@@ -662,6 +662,13 @@ def _safe_col_series(df, col_idx):
     return pd.Series([""] * len(df), index=df.index)
 
 
+def _today_jst_str():
+    """JSTでの「今日」の日付文字列（YYYY/MM/DD）を返す。
+    各タイムスタンプ列は常にYYYY/MM/DD HH:MM:SS形式で保存されているため、
+    この文字列で前方一致させれば「当日処理したものだけ」に絞り込める。"""
+    return datetime.now(JST).strftime("%Y/%m/%d")
+
+
 def is_already_transferred(dest_sheet_csv, col, cust_code, timestamp):
     """TAB3「📋 別シートへ出力・転記」の二重クリックや、複数の業務担当が同じ
     承認済み申請をほぼ同時に開いて転記した場合に、DEST_SHEET側へ同じ申請
@@ -765,9 +772,15 @@ def render_tab2_own_approvals_section(mode_name, col, target_sheet_csv, target_s
         return
 
     status_series = _safe_col_series(df, col["status_sign"])
+    approval_time_series = _safe_col_series(df, col["approval_time"])
     # TAB3の承認済み一覧（approved_df）と同じ判定条件＝「申請中・差戻し・削除・
     # 業務転記済・空」のいずれでもない＝承認済みでまだ転記されていない状態。
-    pending_df = df[~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"])]
+    # 💡 取り消しは当日処理したものだけに限定する（日をまたいだ古い承認を
+    # 誤って取り消してしまう事故を防ぐため）。
+    pending_df = df[
+        (~status_series.isin(["", "申請中", "差戻し", "削除", "業務転記済", "nan"])) &
+        (approval_time_series.str.startswith(_today_jst_str()))
+    ]
 
     # 💡 以前は対象が0件のときセクションごと何も表示しなかったため、「そもそも機能が
     #    存在しない」ように見えてしまっていた。0件でも見出し自体は必ず表示する。
@@ -864,7 +877,13 @@ def render_tab3_own_transfers_section(
         return
 
     check_time_series = _safe_col_series(df, col["check_time"])
-    pending_df = df[check_time_series == ""]
+    process_time_series = _safe_col_series(df, col["process_time"])
+    # 💡 取り消しは当日処理したものだけに限定する（日をまたいだ古い転記を
+    # 誤って取り消してしまう事故を防ぐため）。
+    pending_df = df[
+        (check_time_series == "") &
+        (process_time_series.str.startswith(_today_jst_str()))
+    ]
 
     # 💡 以前は対象が0件のときセクションごと何も表示しなかったため、「そもそも機能が
     #    存在しない」ように見えてしまっていた。0件でも見出し自体は必ず表示する。
@@ -950,7 +969,12 @@ def render_tab4_own_checks_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
 
     check_time_series = _safe_col_series(df, col["check_time"])
     print_time_series = _safe_col_series(df, col["print_time"])
-    pending_df = df[(check_time_series != "") & (print_time_series == "")]
+    # 💡 取り消しは当日処理したものだけに限定する（日をまたいだ古いチェックを
+    # 誤って取り消してしまう事故を防ぐため）。
+    pending_df = df[
+        (check_time_series != "") & (print_time_series == "") &
+        (check_time_series.str.startswith(_today_jst_str()))
+    ]
 
     # 💡 TAB5で次のセクションでの印刷が完了すると、この行はprint_timeに日時が入って
     #    pending_dfの対象から自動的に外れるため、検索範囲も自然に「まだ印刷されて
@@ -1025,9 +1049,12 @@ def render_tab5_own_prints_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
         return
 
     print_time_series = _safe_col_series(df, col["print_time"])
+    # 💡 解除は当日処理したものだけに限定する（日をまたいだ古い印刷済みデータを
+    # 誤って解除してしまう事故を防ぐため）。
     printed_df = df[
         (print_time_series != "") &
-        (~print_time_series.str.contains("差戻し済みのため印刷対象外", na=False))
+        (~print_time_series.str.contains("差戻し済みのため印刷対象外", na=False)) &
+        (print_time_series.str.startswith(_today_jst_str()))
     ]
 
     with st.expander(f"📋 印刷済みの申請（{len(printed_df)}件・もう一度印刷したい場合はここから解除できます）"):
