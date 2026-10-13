@@ -11,11 +11,7 @@ import concurrent.futures
 from datetime import timezone, timedelta, datetime, date
 
 
-# 💡【京都中央店用・要設定】この下のGAS_URLは神戸中央店のGAS Webアプリのままです。
-# 京都中央店専用のGoogle Apps Scriptプロジェクトを新規作成・デプロイしたあと、
-# 発行されたWebアプリのURL（.../exec）に書き換えてください。手順はリポジトリ直下の
-# kyoto_chuo/SETUP_README.md を参照してください。
-GAS_URL = "★★ここに京都中央店用GAS WebアプリのURLを貼り付けてください（例: https://script.google.com/macros/s/XXXXXXXX/exec）★★"
+GAS_URL = "https://script.google.com/macros/s/AKfycbyX7prYQJtvvb6d3qHyFcVK3XzcsGh36mTgoGRXDnxlBgCSVNBMRJYhKEOLUNBEpx0/exec"
 CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/gviz/tq?tqx=out:csv&gid=127347205"
 CUSTOMER_MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/edit?gid=127347205#gid=127347205"
 
