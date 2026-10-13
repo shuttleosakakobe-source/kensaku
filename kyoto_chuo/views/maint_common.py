@@ -12,8 +12,10 @@ from datetime import timezone, timedelta, datetime, date
 
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbyX7prYQJtvvb6d3qHyFcVK3XzcsGh36mTgoGRXDnxlBgCSVNBMRJYhKEOLUNBEpx0/exec"
-CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/gviz/tq?tqx=out:csv&gid=127347205"
-CUSTOMER_MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/edit?gid=127347205#gid=127347205"
+# 「顧客データ(京都)」シート（gid=291761179）に、京都中央店の実データが既に入っているため、
+# 空の「顧客データ(京都中央店)」（gid=127347205）ではなくこちらを参照する。
+CUSTOMER_MASTER_CSV = "https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/gviz/tq?tqx=out:csv&gid=291761179"
+CUSTOMER_MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/edit?gid=291761179#gid=291761179"
 
 # ご契約データ（顧客コードごとの契約週・曜日・担当者コードからルートコードを計算するための参照シート）
 CONTRACT_DATA_CSV = "https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/gviz/tq?tqx=out:csv&gid=2011677989"

@@ -164,7 +164,7 @@ function doPost(e) {
 
     // ==========================================
     // 6. 顧客・契約データ管理画面用（権限3／権限0専用）
-    // 対象: https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/edit?gid=127347205#gid=127347205（顧客マスター）
+    // 対象: https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/edit?gid=291761179#gid=291761179（顧客マスター）
     //       https://docs.google.com/spreadsheets/d/1psNFcJnLEtKA5aV8L1S2lz1Lf43CbMtHgK3wiYQjm3M/edit?gid=2011677989#gid=2011677989（ご契約データ）
     // Excelから貼り付けた表（data.rows：行×列の2次元配列）で、対象シートの中身をまるごと置き換える。
     // 既存データへの部分マージではなく、シート全体を一旦クリアしてから貼り付け内容を書き込む
