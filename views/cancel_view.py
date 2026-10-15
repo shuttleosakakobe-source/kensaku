@@ -565,7 +565,8 @@ def render_cancel_tabs():
                                         "row_index": row_id,
                                         "updated_row": updated_row
                                     }
-                                    res = post_to_gas(payload)
+                                    with st.spinner("処理中..."):
+                                        res = post_to_gas(payload)
                                     if res.get("status") == "success":
                                         # 💡 差戻しの場合、申請者本人にも気付けるよう通知する
                                         # （以前は承認者・業務担当には通知が届いても、申請者
