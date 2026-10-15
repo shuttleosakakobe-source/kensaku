@@ -486,7 +486,18 @@ def render_delivery_qty_change_tabs():
 
             items_data = []
 
+            # 💡 商品入力欄は最初は1件だけ表示し、「➕ 商品を追加」で1件ずつ増やす
+            #    （最大5件まるごと表示すると、1件だけ変更したい時でも画面が長くなり
+            #    入力しづらいため）。
+            dq_visible_key = f"dq_new_visible_rows{rclear}"
+            if dq_visible_key not in st.session_state:
+                st.session_state[dq_visible_key] = 1
+            dq_visible_rows = st.session_state[dq_visible_key]
+
             for n in range(DQ_ITEM_COUNT):
+                if n >= dq_visible_rows:
+                    items_data.append({f: "" for f in DQ_ITEM_FIELDS})
+                    continue
                 st.markdown(f"**商品 {n + 1}**")
 
                 def _make_pick_cb(_n=n, _rclear=rclear):
@@ -535,6 +546,11 @@ def render_delivery_qty_change_tabs():
                 })
 
                 st.write("---")
+
+            if dq_visible_rows < DQ_ITEM_COUNT:
+                if st.button("➕ 商品を追加", key=f"dq_add_row{rclear}"):
+                    st.session_state[dq_visible_key] = dq_visible_rows + 1
+                    st.rerun()
 
             with st.form("dq_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
