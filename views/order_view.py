@@ -357,13 +357,23 @@ def render_product_order_tabs():
         render_tab1_notifications_section(ORDER_MODE_NAME)
         with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
-            col_search_input, col_search_btn = st.columns([4, 1])
+            col_search_input, col_search_btn, col_search_clear = st.columns([4, 1, 1])
             cust_code_input = col_search_input.text_input(
-                "🔍 顧客コード入力", 
-                value=st.session_state["searched_ccode"], 
+                "🔍 顧客コード入力",
+                value=st.session_state["searched_ccode"],
                 key=f"cust_code_search{clear_suffix}"
             )
             btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary")
+            btn_search_clear = col_search_clear.button("✖️ クリア", use_container_width=True, key=f"cust_code_clear{clear_suffix}")
+
+            if btn_search_clear:
+                st.session_state["searched_ccode"] = ""
+                st.session_state.pop(f"cust_code_search{clear_suffix}", None)
+                st.session_state.pop(f"ccode{clear_suffix}", None)
+                st.session_state.pop(f"sname{clear_suffix}", None)
+                st.session_state.pop(f"cname{clear_suffix}", None)
+                st.session_state.pop(f"scode{clear_suffix}", None)
+                st.rerun()
 
             if btn_search:
                 if cust_code_input:

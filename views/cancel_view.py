@@ -259,13 +259,23 @@ def render_cancel_tabs():
         render_tab1_notifications_section(CX_MODE_NAME)
         with st.expander("➕ 新規申請フォームを開く", expanded=True):
 
-            col_search_input, col_search_btn = st.columns([4, 1])
+            col_search_input, col_search_btn, col_search_clear = st.columns([4, 1, 1])
             cust_code_input = col_search_input.text_input(
                 "🔍 顧客コード入力",
                 value=st.session_state["cx_searched_ccode"],
                 key=f"cx_cust_code_search{rclear}"
             )
             btn_search = col_search_btn.button("🔍 検索", use_container_width=True, type="secondary", key=f"cx_search_btn{rclear}")
+            btn_search_clear = col_search_clear.button("✖️ クリア", use_container_width=True, key=f"cx_cust_code_clear{rclear}")
+
+            if btn_search_clear:
+                st.session_state["cx_searched_ccode"] = ""
+                st.session_state.pop(f"cx_cust_code_search{rclear}", None)
+                st.session_state.pop(f"cx_ccode{rclear}", None)
+                st.session_state.pop(f"cx_sname{rclear}", None)
+                st.session_state.pop(f"cx_cname{rclear}", None)
+                st.session_state.pop(f"cx_scode{rclear}", None)
+                st.rerun()
 
             if btn_search:
                 if cust_code_input:
