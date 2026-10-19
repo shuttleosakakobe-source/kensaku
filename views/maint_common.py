@@ -279,19 +279,21 @@ def get_staff_by_route_code(route_code):
     一致した列の1行目（担当者名）・2行目（担当者コード）を返す。
     「変更後ルート」を入力した時点で、ルートコード検索なしに担当者コード・担当者名を
     自動入力できるようにするために使う（ルート変更モードのTAB1）。
-    戻り値: (担当者コード, 担当者名) のタプル。コードが3桁未満・該当なし・
-    担当表が読み込めない場合は ("", "") を返す。"""
+    戻り値: (担当者コード, 担当者名, エラー理由) のタプル。
+    成功時はエラー理由=""。見つからない・読み込めない等で失敗した場合は
+    担当者コード・担当者名=""とし、エラー理由に具体的な原因を入れる
+    （呼び出し側で画面に表示し、「反応しない」ように見えるのを防ぐため）。"""
     route_code = str(route_code).strip()
     if len(route_code) < 3:
-        return "", ""
+        return "", "", "ルートコードが短すぎます（3桁以上の数字が必要です）"
     staff_code_candidate = route_code[-3:]
 
     try:
         df = read_csv_cached(ROUTE_ROSTER_CSV, header=None)
-    except Exception:
-        return "", ""
+    except Exception as e:
+        return "", "", f"ルート担当表の読み込みに失敗しました（{e}）"
     if df.empty or len(df) < 2:
-        return "", ""
+        return "", "", "ルート担当表にデータがありません"
 
     header = df.iloc[0]
     code_row = df.iloc[1]
@@ -300,8 +302,8 @@ def get_staff_by_route_code(route_code):
         if pd.notna(cell) and str(cell).strip().zfill(3) == staff_code_candidate.zfill(3):
             name = str(header.iloc[col_idx]).strip() if col_idx < len(header) and pd.notna(header.iloc[col_idx]) else ""
             code = str(cell).strip()
-            return code, name
-    return "", ""
+            return code, name, ""
+    return "", "", f"担当者コード「{staff_code_candidate}」に一致する担当者がルート担当表に見つかりませんでした"
 
 
 def send_staff_comment(mode_name, cust_code, cust_name, applicant, comment, staff_name, extra_recipient=None):

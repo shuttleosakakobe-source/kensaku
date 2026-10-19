@@ -391,10 +391,15 @@ def render_route_change_tabs():
             def _make_rt_rafter_on_change(input_key, _rclear=rclear):
                 def _handler():
                     route_val = st.session_state.get(input_key, "").strip()
-                    code, name = get_staff_by_route_code(route_val) if route_val else ("", "")
+                    if not route_val:
+                        return
+                    code, name, err = get_staff_by_route_code(route_val)
                     if code or name:
                         st.session_state[f"rt_oafter_code{_rclear}"] = code
                         st.session_state[f"rt_oafter_name{_rclear}"] = name
+                        st.toast(f"担当者を自動入力しました: {name}（{code}）", icon="✅")
+                    elif err:
+                        st.toast(f"⚠️ 担当者の自動入力ができませんでした: {err}", icon="⚠️")
                 return _handler
 
             route_pairs = st.session_state.get(f"rt_rbefore_pairs{rclear}", [])
