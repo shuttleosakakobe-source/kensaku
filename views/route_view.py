@@ -10,7 +10,7 @@ from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     CONTRACT_COL_CUST_CODE, CONTRACT_WEEK_COLS,
     post_to_gas, build_print_pdf_url, _load_contract_df, read_csv_cached,
-    tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code, send_staff_comment,
+    tab_visible, RESTRICTED_TAB_MSG, get_route_dates_for_code, get_staff_by_route_code, send_staff_comment,
     render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
     render_internal_note, render_tab4_own_checks_section, is_already_transferred,
@@ -385,6 +385,18 @@ def render_route_change_tabs():
             #    ルートごとに同じ行に並べる（どの変更前ルートに対する変更後ルートかが
             #    分かるように）。担当者は多くの場合ルートが複数あっても同じ1人なので、
             #    ルートごとに繰り返さず、下にまとめて1行だけ表示する。
+            # 💡 「変更後ルート」（5桁＝基本ルート2桁＋担当者コード3桁）を入力すると、
+            #    下3桁をルート担当表と照合して「変更後担当者コード」「変更後担当者」を
+            #    自動入力する（一致しない場合は手入力に任せるため、何もしない）。
+            def _make_rt_rafter_on_change(input_key, _rclear=rclear):
+                def _handler():
+                    route_val = st.session_state.get(input_key, "").strip()
+                    code, name = get_staff_by_route_code(route_val) if route_val else ("", "")
+                    if code or name:
+                        st.session_state[f"rt_oafter_code{_rclear}"] = code
+                        st.session_state[f"rt_oafter_name{_rclear}"] = name
+                return _handler
+
             route_pairs = st.session_state.get(f"rt_rbefore_pairs{rclear}", [])
             route_after_list = []
             if route_pairs:
@@ -396,14 +408,20 @@ def render_route_change_tabs():
                         "変更前ルート", value=_pair["route_code"], disabled=True,
                         key=f"rt_rbefore_{_i}{rclear}",
                     )
+                    _rafter_key = f"rt_rafter_{_i}{rclear}"
                     _rafter_val = rp_col2.text_input(
-                        "変更後ルート", value="", key=f"rt_rafter_{_i}{rclear}",
+                        "変更後ルート", value="", key=_rafter_key,
+                        on_change=_make_rt_rafter_on_change(_rafter_key),
                     )
                     route_after_list.append(_rafter_val)
             else:
                 rp_col1, rp_col2 = st.columns(2)
                 rp_col1.text_input("変更前ルート", value="", disabled=True, key=f"rt_rbefore_empty{rclear}")
-                _rafter_val = rp_col2.text_input("変更後ルート", value="", key=f"rt_rafter_empty{rclear}")
+                _rafter_key = f"rt_rafter_empty{rclear}"
+                _rafter_val = rp_col2.text_input(
+                    "変更後ルート", value="", key=_rafter_key,
+                    on_change=_make_rt_rafter_on_change(_rafter_key),
+                )
                 route_after_list.append(_rafter_val)
 
             # 💡 GAS側に送る「変更前ルート」「変更後ルート」は従来通り1つの列に入れる必要が
