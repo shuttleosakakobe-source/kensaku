@@ -273,6 +273,37 @@ def get_route_dates_for_code(route_code):
     return [d.strftime("%Y/%m/%d") for d in sorted(found_dates)]
 
 
+def get_staff_by_route_code(route_code):
+    """変更後ルートコード（5桁＝基本ルート2桁＋担当者コード3桁）の下3桁を、
+    ルート担当表（ROUTE_ROSTER_CSV）の2行目（担当者コード行）と照合し、
+    一致した列の1行目（担当者名）・2行目（担当者コード）を返す。
+    「変更後ルート」を入力した時点で、ルートコード検索なしに担当者コード・担当者名を
+    自動入力できるようにするために使う（ルート変更モードのTAB1）。
+    戻り値: (担当者コード, 担当者名) のタプル。コードが3桁未満・該当なし・
+    担当表が読み込めない場合は ("", "") を返す。"""
+    route_code = str(route_code).strip()
+    if len(route_code) < 3:
+        return "", ""
+    staff_code_candidate = route_code[-3:]
+
+    try:
+        df = read_csv_cached(ROUTE_ROSTER_CSV, header=None)
+    except Exception:
+        return "", ""
+    if df.empty or len(df) < 2:
+        return "", ""
+
+    header = df.iloc[0]
+    code_row = df.iloc[1]
+    for col_idx in range(ROUTE_ROSTER_STAFF_COL_START, len(code_row)):
+        cell = code_row.iloc[col_idx]
+        if pd.notna(cell) and str(cell).strip().zfill(3) == staff_code_candidate.zfill(3):
+            name = str(header.iloc[col_idx]).strip() if col_idx < len(header) and pd.notna(header.iloc[col_idx]) else ""
+            code = str(cell).strip()
+            return code, name
+    return "", ""
+
+
 def send_staff_comment(mode_name, cust_code, cust_name, applicant, comment, staff_name, extra_recipient=None):
     """業務担当（TAB3）から、差戻しとは別に申請者への連絡コメントを送る。
     差戻しと違って申請のステータスは一切変更せず、共有のSTAFF_COMMENT_SHEETに
