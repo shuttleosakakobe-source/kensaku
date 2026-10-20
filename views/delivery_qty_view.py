@@ -562,6 +562,9 @@ def render_delivery_qty_change_tabs():
                     st.session_state[dq_visible_key] = dq_visible_rows + 1
                     st.rerun()
 
+            if "dq_submitting" not in st.session_state:
+                st.session_state["dq_submitting"] = False
+
             with st.form("dq_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -572,26 +575,35 @@ def render_delivery_qty_change_tabs():
                 dq_comment = st.text_area("特記事項", key=f"dq_comment{rclear}")
                 dq_contact = st.text_input("連絡担当者様", key=f"dq_contact{rclear}")
 
-                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+                btn_submit = st.form_submit_button(
+                    "新規申請を送信", type="primary",
+                    disabled=st.session_state["dq_submitting"],
+                )
 
                 if btn_submit:
                     if not customer_code.strip():
                         st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
                     else:
-                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                        st.session_state["dq_submitting"] = True
+                        try:
+                            now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                        full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
-                        for item in items_data:
-                            for f in DQ_ITEM_FIELDS:
-                                full_row.append(item[f])
-                        full_row += [dq_route, dq_delivery_date, dq_reason, dq_comment, dq_contact, "申請中", "", ""]
+                            full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
+                            for item in items_data:
+                                for f in DQ_ITEM_FIELDS:
+                                    full_row.append(item[f])
+                            full_row += [dq_route, dq_delivery_date, dq_reason, dq_comment, dq_contact, "申請中", "", ""]
 
-                        payload = {
-                            "action": "SUBMIT_DELIVERY_QTY_CHANGE",
-                            "target_sheet_url": DQ_TARGET_SHEET_URL,
-                            "full_row": full_row
-                        }
-                        res = post_to_gas(payload)
+                            payload = {
+                                "action": "SUBMIT_DELIVERY_QTY_CHANGE",
+                                "target_sheet_url": DQ_TARGET_SHEET_URL,
+                                "full_row": full_row
+                            }
+                            with st.spinner("送信しています..."):
+                                res = post_to_gas(payload)
+                        finally:
+                            st.session_state["dq_submitting"] = False
+
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             st.session_state["dq_searched_ccode"] = ""
@@ -636,6 +648,10 @@ def render_delivery_qty_change_tabs():
                             if not df_items.empty:
                                 st.dataframe(df_items, use_container_width=True, hide_index=True)
 
+                            dq_re_submitting_key = f"dq_re_submitting_{row_id}"
+                            if dq_re_submitting_key not in st.session_state:
+                                st.session_state[dq_re_submitting_key] = False
+
                             with st.form(key=f"dq_resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -658,33 +674,45 @@ def render_delivery_qty_change_tabs():
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"dq_re_comment_{row_id}")
                                 edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"dq_re_contact_{row_id}")
 
-                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
-                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
+                                btn_resubmit = st.form_submit_button(
+                                    "🔄 修正して再申請", type="primary",
+                                    disabled=st.session_state[dq_re_submitting_key],
+                                )
+                                btn_withdraw = st.form_submit_button(
+                                    "🗑️ 削除（この申請を取り下げる）",
+                                    disabled=st.session_state[dq_re_submitting_key],
+                                )
 
                                 if btn_resubmit:
                                     if not edit_cust_code.strip():
                                         st.error("⚠️ 「顧客コード」は必須項目です。")
                                     else:
-                                        item_values = []
-                                        for item in items:
-                                            for f in DQ_ITEM_FIELDS:
-                                                item_values.append(item[f])
+                                        st.session_state[dq_re_submitting_key] = True
+                                        try:
+                                            item_values = []
+                                            for item in items:
+                                                for f in DQ_ITEM_FIELDS:
+                                                    item_values.append(item[f])
 
-                                        updated_row = [
-                                            _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code
-                                        ] + item_values + [
-                                            edit_route, edit_delivery_date, edit_reason, edit_comment, edit_contact,
-                                            "申請中", "", "", rejector_name, reject_date,
-                                        ]
+                                            updated_row = [
+                                                _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
+                                                edit_store_name, edit_store_code
+                                            ] + item_values + [
+                                                edit_route, edit_delivery_date, edit_reason, edit_comment, edit_contact,
+                                                "申請中", "", "", rejector_name, reject_date,
+                                            ]
 
-                                        payload = {
-                                            "action": "RESUBMIT_DELIVERY_QTY_CHANGE",
-                                            "target_sheet_url": DQ_TARGET_SHEET_URL,
-                                            "row_index": row_id,
-                                            "updated_row": updated_row
-                                        }
-                                        res = post_to_gas(payload)
+                                            payload = {
+                                                "action": "RESUBMIT_DELIVERY_QTY_CHANGE",
+                                                "target_sheet_url": DQ_TARGET_SHEET_URL,
+                                                "row_index": row_id,
+                                                "updated_row": updated_row
+                                            }
+                                            with st.spinner("送信しています..."):
+                                                res = post_to_gas(payload)
+                                        finally:
+                                            st.session_state[dq_re_submitting_key] = False
+
                                         if res.get("status") == "success":
                                             if rejector_name:
                                                 send_staff_comment(
@@ -699,26 +727,32 @@ def render_delivery_qty_change_tabs():
                                             st.error(f"処理に失敗しました: {res.get('message')}")
 
                                 elif btn_withdraw:
-                                    item_values = []
-                                    for item in items:
-                                        for f in DQ_ITEM_FIELDS:
-                                            item_values.append(item[f])
-                                    withdrawn_row = [
-                                        _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
-                                        _v("store_name"), _v("store_code")
-                                    ] + item_values + [
-                                        _v("route"), _v("delivery_date"), _v("reason"), _v("comment"), _v("contact_person"),
-                                        "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
-                                        rejector_name, reject_date,
-                                    ]
+                                    st.session_state[dq_re_submitting_key] = True
+                                    try:
+                                        item_values = []
+                                        for item in items:
+                                            for f in DQ_ITEM_FIELDS:
+                                                item_values.append(item[f])
+                                        withdrawn_row = [
+                                            _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
+                                            _v("store_name"), _v("store_code")
+                                        ] + item_values + [
+                                            _v("route"), _v("delivery_date"), _v("reason"), _v("comment"), _v("contact_person"),
+                                            "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
+                                            rejector_name, reject_date,
+                                        ]
 
-                                    payload = {
-                                        "action": "DELETE_DELIVERY_QTY_CHANGE",
-                                        "target_sheet_url": DQ_TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": withdrawn_row,
-                                    }
-                                    res = post_to_gas(payload)
+                                        payload = {
+                                            "action": "DELETE_DELIVERY_QTY_CHANGE",
+                                            "target_sheet_url": DQ_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": withdrawn_row,
+                                        }
+                                        with st.spinner("処理中..."):
+                                            res = post_to_gas(payload)
+                                    finally:
+                                        st.session_state[dq_re_submitting_key] = False
+
                                     if res.get("status") == "success":
                                         if rejector_name:
                                             send_staff_comment(

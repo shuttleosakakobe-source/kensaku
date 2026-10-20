@@ -672,6 +672,9 @@ def render_contract_change_tabs():
             m2.metric("変更後 合計金額", f"{total_after:,.0f}")
             m3.metric("増減金額（変更後－変更前）", _cc_format_yen(amount_diff))
 
+            if "cc_submitting" not in st.session_state:
+                st.session_state["cc_submitting"] = False
+
             with st.form("cc_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -681,26 +684,35 @@ def render_contract_change_tabs():
                 cc_nvisit_val = st.date_input("次回訪問日", value=None, key=f"cc_nvisit{rclear}")
                 cc_nvisit = cc_nvisit_val.strftime("%Y/%m/%d") if cc_nvisit_val else ""
 
-                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+                btn_submit = st.form_submit_button(
+                    "新規申請を送信", type="primary",
+                    disabled=st.session_state["cc_submitting"],
+                )
 
                 if btn_submit:
                     if not customer_code.strip():
                         st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
                     else:
-                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                        st.session_state["cc_submitting"] = True
+                        try:
+                            now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                        full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
-                        for item in items_data:
-                            for f in CC_ITEM_FIELDS:
-                                full_row.append(item[f])
-                        full_row += [cc_reason, cc_contact, cc_comment, f"{amount_diff:.0f}", cc_nvisit, "申請中", "", ""]
+                            full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
+                            for item in items_data:
+                                for f in CC_ITEM_FIELDS:
+                                    full_row.append(item[f])
+                            full_row += [cc_reason, cc_contact, cc_comment, f"{amount_diff:.0f}", cc_nvisit, "申請中", "", ""]
 
-                        payload = {
-                            "action": "SUBMIT_CONTRACT_CHANGE",
-                            "target_sheet_url": CC_TARGET_SHEET_URL,
-                            "full_row": full_row
-                        }
-                        res = post_to_gas(payload)
+                            payload = {
+                                "action": "SUBMIT_CONTRACT_CHANGE",
+                                "target_sheet_url": CC_TARGET_SHEET_URL,
+                                "full_row": full_row
+                            }
+                            with st.spinner("送信しています..."):
+                                res = post_to_gas(payload)
+                        finally:
+                            st.session_state["cc_submitting"] = False
+
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             st.session_state["cc_searched_ccode"] = ""
@@ -745,6 +757,10 @@ def render_contract_change_tabs():
                             if not df_items.empty:
                                 st.dataframe(df_items, use_container_width=True, hide_index=True)
 
+                            cc_re_submitting_key = f"cc_re_submitting_{row_id}"
+                            if cc_re_submitting_key not in st.session_state:
+                                st.session_state[cc_re_submitting_key] = False
+
                             with st.form(key=f"cc_resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -766,33 +782,45 @@ def render_contract_change_tabs():
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"cc_re_comment_{row_id}")
                                 edit_nvisit = st.text_input("次回訪問日", value=_v("next_visit"), key=f"cc_re_nvisit_{row_id}")
 
-                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
-                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
+                                btn_resubmit = st.form_submit_button(
+                                    "🔄 修正して再申請", type="primary",
+                                    disabled=st.session_state[cc_re_submitting_key],
+                                )
+                                btn_withdraw = st.form_submit_button(
+                                    "🗑️ 削除（この申請を取り下げる）",
+                                    disabled=st.session_state[cc_re_submitting_key],
+                                )
 
                                 if btn_resubmit:
                                     if not edit_cust_code.strip():
                                         st.error("⚠️ 「顧客コード」は必須項目です。")
                                     else:
-                                        item_values = []
-                                        for item in items:
-                                            for f in CC_ITEM_FIELDS:
-                                                item_values.append(item[f])
+                                        st.session_state[cc_re_submitting_key] = True
+                                        try:
+                                            item_values = []
+                                            for item in items:
+                                                for f in CC_ITEM_FIELDS:
+                                                    item_values.append(item[f])
 
-                                        updated_row = [
-                                            _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code
-                                        ] + item_values + [
-                                            edit_reason, edit_contact, edit_comment, _v("amount_diff"), edit_nvisit,
-                                            "申請中", "", "", rejector_name, reject_date,
-                                        ]
+                                            updated_row = [
+                                                _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
+                                                edit_store_name, edit_store_code
+                                            ] + item_values + [
+                                                edit_reason, edit_contact, edit_comment, _v("amount_diff"), edit_nvisit,
+                                                "申請中", "", "", rejector_name, reject_date,
+                                            ]
 
-                                        payload = {
-                                            "action": "RESUBMIT_CONTRACT_CHANGE",
-                                            "target_sheet_url": CC_TARGET_SHEET_URL,
-                                            "row_index": row_id,
-                                            "updated_row": updated_row
-                                        }
-                                        res = post_to_gas(payload)
+                                            payload = {
+                                                "action": "RESUBMIT_CONTRACT_CHANGE",
+                                                "target_sheet_url": CC_TARGET_SHEET_URL,
+                                                "row_index": row_id,
+                                                "updated_row": updated_row
+                                            }
+                                            with st.spinner("送信しています..."):
+                                                res = post_to_gas(payload)
+                                        finally:
+                                            st.session_state[cc_re_submitting_key] = False
+
                                         if res.get("status") == "success":
                                             if rejector_name:
                                                 send_staff_comment(
@@ -807,26 +835,32 @@ def render_contract_change_tabs():
                                             st.error(f"処理に失敗しました: {res.get('message')}")
 
                                 elif btn_withdraw:
-                                    item_values = []
-                                    for item in items:
-                                        for f in CC_ITEM_FIELDS:
-                                            item_values.append(item[f])
-                                    withdrawn_row = [
-                                        _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
-                                        _v("store_name"), _v("store_code")
-                                    ] + item_values + [
-                                        _v("reason"), _v("contact_person"), _v("comment"), _v("amount_diff"), _v("next_visit"),
-                                        "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
-                                        rejector_name, reject_date,
-                                    ]
+                                    st.session_state[cc_re_submitting_key] = True
+                                    try:
+                                        item_values = []
+                                        for item in items:
+                                            for f in CC_ITEM_FIELDS:
+                                                item_values.append(item[f])
+                                        withdrawn_row = [
+                                            _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
+                                            _v("store_name"), _v("store_code")
+                                        ] + item_values + [
+                                            _v("reason"), _v("contact_person"), _v("comment"), _v("amount_diff"), _v("next_visit"),
+                                            "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
+                                            rejector_name, reject_date,
+                                        ]
 
-                                    payload = {
-                                        "action": "DELETE_CONTRACT_CHANGE",
-                                        "target_sheet_url": CC_TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": withdrawn_row,
-                                    }
-                                    res = post_to_gas(payload)
+                                        payload = {
+                                            "action": "DELETE_CONTRACT_CHANGE",
+                                            "target_sheet_url": CC_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": withdrawn_row,
+                                        }
+                                        with st.spinner("処理中..."):
+                                            res = post_to_gas(payload)
+                                    finally:
+                                        st.session_state[cc_re_submitting_key] = False
+
                                     if res.get("status") == "success":
                                         if rejector_name:
                                             send_staff_comment(

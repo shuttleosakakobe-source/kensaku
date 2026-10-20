@@ -330,6 +330,9 @@ def render_cancel_tabs():
 
             st.write("---")
 
+            if "cx_submitting" not in st.session_state:
+                st.session_state["cx_submitting"] = False
+
             with st.form("cx_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -340,26 +343,35 @@ def render_cancel_tabs():
                 cx_collection_route = st.text_input("回収ルート", key=f"cx_collection_route{rclear}")
                 cx_comment = st.text_area("特記事項", key=f"cx_comment{rclear}")
 
-                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+                btn_submit = st.form_submit_button(
+                    "新規申請を送信", type="primary",
+                    disabled=st.session_state["cx_submitting"],
+                )
 
                 if btn_submit:
                     if not customer_code.strip():
                         st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
                     else:
-                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                        st.session_state["cx_submitting"] = True
+                        try:
+                            now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                        full_row = [
-                            now_str, applicant, customer_code, customer_name, store_name, store_code,
-                            cx_base_sales, cx_reason, cx_contact, cx_collection_date, cx_collection_route, cx_comment,
-                            "申請中", "", ""
-                        ]
+                            full_row = [
+                                now_str, applicant, customer_code, customer_name, store_name, store_code,
+                                cx_base_sales, cx_reason, cx_contact, cx_collection_date, cx_collection_route, cx_comment,
+                                "申請中", "", ""
+                            ]
 
-                        payload = {
-                            "action": "SUBMIT_CANCEL_CHANGE",
-                            "target_sheet_url": CX_TARGET_SHEET_URL,
-                            "full_row": full_row
-                        }
-                        res = post_to_gas(payload)
+                            payload = {
+                                "action": "SUBMIT_CANCEL_CHANGE",
+                                "target_sheet_url": CX_TARGET_SHEET_URL,
+                                "full_row": full_row
+                            }
+                            with st.spinner("送信しています..."):
+                                res = post_to_gas(payload)
+                        finally:
+                            st.session_state["cx_submitting"] = False
+
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             st.session_state["cx_searched_ccode"] = ""
@@ -398,6 +410,10 @@ def render_cancel_tabs():
                         reject_date = _v("reject_date") or _v("approval_time")
 
                         with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
+                            cx_re_submitting_key = f"cx_re_submitting_{row_id}"
+                            if cx_re_submitting_key not in st.session_state:
+                                st.session_state[cx_re_submitting_key] = False
+
                             with st.form(key=f"cx_resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -422,28 +438,40 @@ def render_cancel_tabs():
                                 edit_collection_route = st.text_input("回収ルート", value=_v("collection_route"), key=f"cx_re_collection_route_{row_id}")
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"cx_re_comment_{row_id}")
 
-                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
-                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
+                                btn_resubmit = st.form_submit_button(
+                                    "🔄 修正して再申請", type="primary",
+                                    disabled=st.session_state[cx_re_submitting_key],
+                                )
+                                btn_withdraw = st.form_submit_button(
+                                    "🗑️ 削除（この申請を取り下げる）",
+                                    disabled=st.session_state[cx_re_submitting_key],
+                                )
 
                                 if btn_resubmit:
                                     if not edit_cust_code.strip():
                                         st.error("⚠️ 「顧客コード」は必須項目です。")
                                     else:
-                                        updated_row = [
-                                            _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code,
-                                            edit_base_sales, edit_reason, edit_contact,
-                                            edit_collection_date, edit_collection_route, edit_comment,
-                                            "申請中", "", "", rejector_name, reject_date,
-                                        ]
+                                        st.session_state[cx_re_submitting_key] = True
+                                        try:
+                                            updated_row = [
+                                                _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
+                                                edit_store_name, edit_store_code,
+                                                edit_base_sales, edit_reason, edit_contact,
+                                                edit_collection_date, edit_collection_route, edit_comment,
+                                                "申請中", "", "", rejector_name, reject_date,
+                                            ]
 
-                                        payload = {
-                                            "action": "RESUBMIT_CANCEL_CHANGE",
-                                            "target_sheet_url": CX_TARGET_SHEET_URL,
-                                            "row_index": row_id,
-                                            "updated_row": updated_row
-                                        }
-                                        res = post_to_gas(payload)
+                                            payload = {
+                                                "action": "RESUBMIT_CANCEL_CHANGE",
+                                                "target_sheet_url": CX_TARGET_SHEET_URL,
+                                                "row_index": row_id,
+                                                "updated_row": updated_row
+                                            }
+                                            with st.spinner("送信しています..."):
+                                                res = post_to_gas(payload)
+                                        finally:
+                                            st.session_state[cx_re_submitting_key] = False
+
                                         if res.get("status") == "success":
                                             if rejector_name:
                                                 send_staff_comment(
@@ -458,22 +486,28 @@ def render_cancel_tabs():
                                             st.error(f"処理に失敗しました: {res.get('message')}")
 
                                 elif btn_withdraw:
-                                    withdrawn_row = [
-                                        _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
-                                        _v("store_name"), _v("store_code"),
-                                        _v("base_sales"), _v("reason"), _v("contact_person"),
-                                        _v("collection_date"), _v("collection_route"), _v("comment"),
-                                        "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
-                                        rejector_name, reject_date,
-                                    ]
+                                    st.session_state[cx_re_submitting_key] = True
+                                    try:
+                                        withdrawn_row = [
+                                            _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
+                                            _v("store_name"), _v("store_code"),
+                                            _v("base_sales"), _v("reason"), _v("contact_person"),
+                                            _v("collection_date"), _v("collection_route"), _v("comment"),
+                                            "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
+                                            rejector_name, reject_date,
+                                        ]
 
-                                    payload = {
-                                        "action": "DELETE_CANCEL_CHANGE",
-                                        "target_sheet_url": CX_TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": withdrawn_row,
-                                    }
-                                    res = post_to_gas(payload)
+                                        payload = {
+                                            "action": "DELETE_CANCEL_CHANGE",
+                                            "target_sheet_url": CX_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": withdrawn_row,
+                                        }
+                                        with st.spinner("処理中..."):
+                                            res = post_to_gas(payload)
+                                    finally:
+                                        st.session_state[cx_re_submitting_key] = False
+
                                     if res.get("status") == "success":
                                         if rejector_name:
                                             send_staff_comment(
