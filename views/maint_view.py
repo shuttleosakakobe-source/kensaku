@@ -20,7 +20,7 @@ from views.cancel_view import render_cancel_tabs, CX_COL, CX_TARGET_SHEET_CSV, C
 from views.maint_common import (
     get_pending_modes, get_current_role,
     get_unconfirmed_staff_comments, confirm_staff_comment,
-    read_csv_cached, pending_reason_color,
+    read_csv_cached, pending_reason_color, render_top_rejection_alerts,
 )
 import pandas as pd
 from views.navi_view import route_navigation_screen
@@ -177,6 +177,21 @@ def maintenance_admin_screen():
         </style>
     """, unsafe_allow_html=True)
 
+    # 💡 各モードに対応待ちのデータが残っているかどうかをまとめて判定
+    #    （読み込みに失敗したモードは「対応待ちなし」扱いにして、赤枠が出ないだけにする）
+    #    9モード分のシート読み込みをget_pending_modes()内で並列化し、キャッシュが切れた
+    #    直後でもボタン行の表示が長く待たされないようにしている。
+    #    画面の一番上で差戻しアラート（render_top_rejection_alerts）を出すのにも使うため、
+    #    モードボタンの赤枠付け（このすぐ下）よりも先にここで計算しておく。
+    try:
+        pending_modes = get_pending_modes(MODE_DEFS)
+    except Exception:
+        pending_modes = {}
+
+    # 💡 申請者本人の差戻し（未処理の間ずっと表示）・管理職向けの「自分が承認した申請が
+    #    差戻しになった」お知らせを、画面の一番上に表示する。
+    render_top_rejection_alerts(MODE_DEFS, pending_modes)
+
     st.markdown("#### 📦🗺️📋 メンテナンス業務")
 
     # 💡 業務担当・全権限向けの「未処理の赤枠」は、以前はここ（モード共通の最上部）に
@@ -188,7 +203,12 @@ def maintenance_admin_screen():
 
     # 💡 業務担当（TAB3）からの連絡コメント通知：ログイン中のユーザーが申請者になっている
     #    未確認コメントがあれば、バッジを出して一覧・確認ボタンを表示する。
-    unconfirmed_comments = get_unconfirmed_staff_comments(st.session_state.get("user_name", ""))
+    #    差戻し関連のコメント（「差戻し」を含むもの）は、上のrender_top_rejection_alertsで
+    #    既に表示済みのため、ここでは二重表示しないよう除外する。
+    unconfirmed_comments = [
+        c for c in get_unconfirmed_staff_comments(st.session_state.get("user_name", ""))
+        if "差戻し" not in c["comment"]
+    ]
     if unconfirmed_comments:
         if "show_staff_comments" not in st.session_state:
             st.session_state["show_staff_comments"] = False
@@ -290,16 +310,8 @@ def maintenance_admin_screen():
         """)
     st.markdown(f"<style>{''.join(card_css_parts)}</style>", unsafe_allow_html=True)
 
-    # 💡 各モードに対応待ちのデータが残っているかどうかをまとめて判定
-    #    （読み込みに失敗したモードは「対応待ちなし」扱いにして、赤枠が出ないだけにする）
-    #    9モード分のシート読み込みをget_pending_modes()内で並列化し、キャッシュが切れた
-    #    直後でもボタン行の表示が長く待たされないようにしている。
-    try:
-        pending_modes = get_pending_modes(MODE_DEFS)
-    except Exception:
-        pending_modes = {}
-
     # 💡 対応待ちがあるモードのボタンだけ、枠に色を付けるCSSを動的に追加する
+    #    （pending_modesは画面の一番上の差戻しアラート表示時に既に計算済みのものを再利用する）
     #    （st.container(key=...)で各ボタンをラップし、そのラッパーに付くst-key-<key>クラスを
     #    ピンポイントで狙う。対応待ちが無いモードは通常のボタンの見た目のまま＝枠は出さない。
     #    上のカード用CSSと詳細度が同じセレクタのため、これを後から出すことで確実に上書きする）

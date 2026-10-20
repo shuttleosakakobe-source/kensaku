@@ -447,8 +447,7 @@ def _pending_flag_from_dfs(df_t, df_d, status_col, check_col, print_col, applica
 
 
 # 理由の文言（_pending_reasons_from_dfsが返す文字列の先頭）と、タブ見出しの色分け
-# （render_tab_header_pending_css）を揃えた対応表。差戻し（TAB1）だけは色の指定が
-# 無いため、既存の赤をそのまま使う。
+# （render_tab_header_pending_css）を揃えた対応表。
 PENDING_REASON_COLORS = [
     ("差戻し", "#e53935"),
     ("承認待ち", "#f1c40f"),
@@ -504,6 +503,64 @@ def render_section_pending_banner(label, count):
         f"🔴 {label}で未処理が{count}件あります</div>",
         unsafe_allow_html=True,
     )
+
+
+def render_top_rejection_alerts(mode_defs, pending_modes):
+    """メンテナンス業務トップ画面の一番上に、差戻しに関するアラートを表示する。
+    ①申請者本人向け：get_pending_modes()の結果（pending_modes）から「差戻し」の
+      理由があるモードを抜き出して表示する。これはSTAFF_COMMENT_SHEETの通知と違い
+      「確認しました」で消せるものではなく、申請者が実際に再申請・取り下げを行って
+      元データ（TARGET_SHEET）側の差戻しが解消されるまでずっと表示され続ける
+      （ユーザーが望む「未処理の間は出続けるアラート」そのもの）。
+    ②管理職向け：自分が承認した申請が、業務担当への差戻しやメンテナンスチェックでの
+      差戻しになったときのお知らせ。既存のSTAFF_COMMENT_SHEET通知の仕組み（コメント文に
+      必ず「差戻し」という文言が入る）を利用し、通常の業務連絡コメントと区別して
+      ここにまとめて表示する（確認ボタンを押すまで表示され続ける）。"""
+    mode_label = {mk: label for mk, label, *_rest in mode_defs}
+
+    # 💡 get_pending_modes()は辞書を返す仕様だが、呼び出し元のテスト等で簡易的に
+    #    set()等が渡されることがあるため、辞書以外は「対応待ちなし」として安全に扱う。
+    my_rejection_items = [
+        f"{mode_label.get(mk, mk)}（{reason}）"
+        for mk, reasons in (pending_modes.items() if isinstance(pending_modes, dict) else [])
+        for reason in reasons
+        if reason.startswith("差戻し")
+    ]
+    if my_rejection_items:
+        st.markdown(
+            "<div style='border:3px solid #e53935;border-radius:10px;padding:10px 16px;"
+            "background:#fff5f5;margin-bottom:12px;color:#b91c1c;font-weight:700;'>"
+            f"⚠️ 差戻しされた申請があります：{'、'.join(my_rejection_items)}　"
+            "該当するモードを開いて再申請・修正してください。</div>",
+            unsafe_allow_html=True,
+        )
+
+    user_name = str(st.session_state.get("user_name", "")).strip()
+    mgr_notices = []
+    if user_name:
+        mgr_notices = [c for c in get_unconfirmed_staff_comments(user_name) if "差戻し" in c["comment"]]
+        if mgr_notices:
+            with st.container(border=True):
+                st.markdown(
+                    f"<div style='color:#b91c1c;font-weight:700;'>"
+                    f"⚠️ 自分が承認した申請が差戻しになりました（{len(mgr_notices)}件）</div>",
+                    unsafe_allow_html=True,
+                )
+                for _c in mgr_notices:
+                    st.write(f"**{_c['mode_name']}** ｜ {_c['cust_name']}（{_c['cust_code']}） ｜ {_c['timestamp']}")
+                    st.caption(f"{_c['staff_name']}より")
+                    st.write(_c["comment"])
+                    if st.button("✅ 確認しました", key=f"confirm_mgr_rejection_{_c['row_index']}"):
+                        _res = confirm_staff_comment(_c["row_index"])
+                        if _res.get("status") == "success":
+                            st.toast("確認しました！", icon="✅")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"確認処理に失敗しました: {_res.get('message')}")
+
+    if my_rejection_items or mgr_notices:
+        st.write("---")
 
 
 def render_internal_note(note):
@@ -1161,12 +1218,15 @@ def render_tab5_own_prints_section(mode_name, col, dest_sheet_csv, dest_sheet_ur
                     st.error(f"解除に失敗しました: {res.get('message')}")
 
 
-def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, print_col, tab_visible_nums):
-    """TAB2（管理職チェック/承認待ち）=黄、TAB3（業務担当メンテナンス処理/転記待ち）=緑、
-    TAB4（メンテナンスチェック/未チェック）=赤、TAB5（加盟店別印刷/未印刷）=ピンクで、
-    それぞれ未処理がある場合だけ、そのタブの見出し（st.tabsのタブボタン自体）に
-    色付きの枠をつける。render_section_pending_bannerはタブの中身に出す文言、
-    こちらはタブを開く前から見出し自体の色でひと目でわかるようにするためのもの。
+def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, print_col, tab_visible_nums, applicant_col=1):
+    """TAB1（メンテナンス/差戻し修正・差戻し）=赤、TAB2（管理職チェック/承認待ち）=黄、
+    TAB3（業務担当メンテナンス処理/転記待ち）=緑、TAB4（メンテナンスチェック/未チェック）=赤、
+    TAB5（加盟店別印刷/未印刷）=ピンクで、それぞれ未処理がある場合だけ、そのタブの見出し
+    （st.tabsのタブボタン自体）に色付きの枠をつける。render_section_pending_bannerはタブの
+    中身に出す文言、こちらはタブを開く前から見出し自体の色でひと目でわかるようにするためのもの。
+    💡 TAB1の差戻しは、ログイン中のユーザー（st.session_state の user_role / user_name）が
+    本人の申請分を持っている場合だけ対象にする（_pending_reasons_from_dfsと同じ絞り込み。
+    権限0は全員分を対象にする）。
     💡 st.tabsの各タブは個別のkeyを持てずCSSで直接狙えないため、実際に表示されている
     タブ番号の並び順（tab_visible_nums＝tab_visible()でフィルタ済みのもの）から、
     何番目のタブボタンか（nth-child）を逆算して当てる。権限によって表示されるタブの
@@ -1176,10 +1236,22 @@ def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, p
     df_t = _fetch_csv_or_none(target_csv)
     df_d = _fetch_csv_or_none(dest_csv)
 
-    pending = {2: False, 3: False, 4: False, 5: False}
+    user_role = str(st.session_state.get("user_role", "")).strip()
+    if user_role.endswith(".0"):
+        user_role = user_role[:-2]
+    my_name = str(st.session_state.get("user_name", "")).strip()
+
+    pending = {1: False, 2: False, 3: False, 4: False, 5: False}
     try:
         if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
             status_series = df_t.iloc[:, status_col].astype(str).str.strip()
+
+            if user_role == "0":
+                pending[1] = bool((status_series == "差戻し").any())
+            elif my_name and len(df_t.columns) > applicant_col:
+                applicant_series = df_t.iloc[:, applicant_col].astype(str).str.strip()
+                pending[1] = bool(((status_series == "差戻し") & (applicant_series == my_name)).any())
+
             pending[2] = bool((status_series == "申請中").any())
             pending_transfer = (
                 (~df_t.iloc[:, status_col].isna()) &
@@ -1200,7 +1272,7 @@ def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, p
     except Exception:
         pass
 
-    colors = {2: "#f1c40f", 3: "#22c55e", 4: "#e53935", 5: "#ec4899"}
+    colors = {1: "#e53935", 2: "#f1c40f", 3: "#22c55e", 4: "#e53935", 5: "#ec4899"}
     css_parts = []
     for tab_no, color in colors.items():
         if not pending[tab_no] or tab_no not in tab_visible_nums:
