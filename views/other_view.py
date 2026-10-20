@@ -527,6 +527,10 @@ def render_other_maintenance_tabs():
                             return str(r.iloc[i]) if len(r) > i and pd.notna(r.iloc[i]) else ""
 
                         with st.expander(f"⏳ 【承認待ち】{_v('cust_name')}（{_v('cust_code')}） | 行: {row_id}"):
+                            ot_mgr_submitting_key = f"ot_mgr_submitting_{row_id}"
+                            if ot_mgr_submitting_key not in st.session_state:
+                                st.session_state[ot_mgr_submitting_key] = False
+
                             with st.form(key=f"ot_mgr_edit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -551,39 +555,53 @@ def render_other_maintenance_tabs():
                                 mgr_comment = st.text_input("管理職コメント / 差戻し理由", key=f"ot_mgr_com_{row_id}")
 
                                 col_app, col_rej, col_del = st.columns(3)
-                                btn_approve = col_app.form_submit_button("✅ 承認（変更内容を反映）", type="primary", use_container_width=True)
-                                btn_reject = col_rej.form_submit_button("↩️ 差戻し", use_container_width=True)
-                                btn_delete = col_del.form_submit_button("🗑️ 削除", use_container_width=True)
+                                btn_approve = col_app.form_submit_button(
+                                    "✅ 承認（変更内容を反映）", type="primary", use_container_width=True,
+                                    disabled=st.session_state[ot_mgr_submitting_key],
+                                )
+                                btn_reject = col_rej.form_submit_button(
+                                    "↩️ 差戻し", use_container_width=True,
+                                    disabled=st.session_state[ot_mgr_submitting_key],
+                                )
+                                btn_delete = col_del.form_submit_button(
+                                    "🗑️ 削除", use_container_width=True,
+                                    disabled=st.session_state[ot_mgr_submitting_key],
+                                )
 
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
                                 if btn_approve or btn_reject or btn_delete:
-                                    updated_row = [
-                                        _v("timestamp"), edit_app, edit_ccode, edit_cname,
-                                        edit_sname, edit_scode,
-                                        edit_category, edit_category_detail, edit_content, edit_contact, edit_comment
-                                    ]
+                                    st.session_state[ot_mgr_submitting_key] = True
+                                    try:
+                                        updated_row = [
+                                            _v("timestamp"), edit_app, edit_ccode, edit_cname,
+                                            edit_sname, edit_scode,
+                                            edit_category, edit_category_detail, edit_content, edit_contact, edit_comment
+                                        ]
 
-                                    action_type = ""
-                                    if btn_approve:
-                                        action_type = "APPROVE_OTHER_MAINTENANCE_CHANGE"
-                                        updated_row.extend([mgr_name, now_str, mgr_comment, "", ""])
-                                    elif btn_reject:
-                                        action_type = "REJECT_OTHER_MAINTENANCE_CHANGE"
-                                        updated_row.extend(["差戻し", now_str, mgr_comment, mgr_name, now_str])
-                                    elif btn_delete:
-                                        action_type = "DELETE_OTHER_MAINTENANCE_CHANGE"
-                                        updated_row.extend(["削除", now_str, mgr_comment, "", ""])
+                                        action_type = ""
+                                        if btn_approve:
+                                            action_type = "APPROVE_OTHER_MAINTENANCE_CHANGE"
+                                            updated_row.extend([mgr_name, now_str, mgr_comment, "", ""])
+                                        elif btn_reject:
+                                            action_type = "REJECT_OTHER_MAINTENANCE_CHANGE"
+                                            updated_row.extend(["差戻し", now_str, mgr_comment, mgr_name, now_str])
+                                        elif btn_delete:
+                                            action_type = "DELETE_OTHER_MAINTENANCE_CHANGE"
+                                            updated_row.extend(["削除", now_str, mgr_comment, "", ""])
 
-                                    payload = {
-                                        "action": action_type,
-                                        "target_sheet_url": OT_TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": updated_row
-                                    }
-                                    with st.spinner("処理中..."):
-                                        res = post_to_gas(payload)
+                                        payload = {
+                                            "action": action_type,
+                                            "target_sheet_url": OT_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": updated_row
+                                        }
+                                        with st.spinner("処理中..."):
+                                            res = post_to_gas(payload)
+                                    finally:
+                                        st.session_state[ot_mgr_submitting_key] = False
+
                                     if res.get("status") == "success":
                                         # 💡 差戻しの場合、申請者本人にも気付けるよう通知する
                                         # （以前は承認者・業務担当には通知が届いても、申請者
