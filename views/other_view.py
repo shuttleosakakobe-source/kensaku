@@ -310,6 +310,9 @@ def render_other_maintenance_tabs():
 
             st.write("---")
 
+            if "ot_submitting" not in st.session_state:
+                st.session_state["ot_submitting"] = False
+
             with st.form("ot_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -317,26 +320,35 @@ def render_other_maintenance_tabs():
                 ot_contact = st.text_input("連絡担当者様", key=f"ot_contact{rclear}")
                 ot_comment = st.text_area("特記事項", key=f"ot_comment{rclear}")
 
-                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+                btn_submit = st.form_submit_button(
+                    "新規申請を送信", type="primary",
+                    disabled=st.session_state["ot_submitting"],
+                )
 
                 if btn_submit:
                     if not customer_code.strip():
                         st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
                     else:
-                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                        st.session_state["ot_submitting"] = True
+                        try:
+                            now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                        full_row = [
-                            now_str, applicant, customer_code, customer_name, store_name, store_code,
-                            ot_category, ot_category_detail, ot_content, ot_contact, ot_comment,
-                            "申請中", "", ""
-                        ]
+                            full_row = [
+                                now_str, applicant, customer_code, customer_name, store_name, store_code,
+                                ot_category, ot_category_detail, ot_content, ot_contact, ot_comment,
+                                "申請中", "", ""
+                            ]
 
-                        payload = {
-                            "action": "SUBMIT_OTHER_MAINTENANCE_CHANGE",
-                            "target_sheet_url": OT_TARGET_SHEET_URL,
-                            "full_row": full_row
-                        }
-                        res = post_to_gas(payload)
+                            payload = {
+                                "action": "SUBMIT_OTHER_MAINTENANCE_CHANGE",
+                                "target_sheet_url": OT_TARGET_SHEET_URL,
+                                "full_row": full_row
+                            }
+                            with st.spinner("送信しています..."):
+                                res = post_to_gas(payload)
+                        finally:
+                            st.session_state["ot_submitting"] = False
+
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             st.session_state["ot_searched_ccode"] = ""
@@ -375,6 +387,10 @@ def render_other_maintenance_tabs():
                         reject_date = _v("reject_date") or _v("approval_time")
 
                         with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
+                            ot_re_submitting_key = f"ot_re_submitting_{row_id}"
+                            if ot_re_submitting_key not in st.session_state:
+                                st.session_state[ot_re_submitting_key] = False
+
                             with st.form(key=f"ot_resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -397,27 +413,39 @@ def render_other_maintenance_tabs():
                                 edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"ot_re_contact_{row_id}")
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"ot_re_comment_{row_id}")
 
-                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
-                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
+                                btn_resubmit = st.form_submit_button(
+                                    "🔄 修正して再申請", type="primary",
+                                    disabled=st.session_state[ot_re_submitting_key],
+                                )
+                                btn_withdraw = st.form_submit_button(
+                                    "🗑️ 削除（この申請を取り下げる）",
+                                    disabled=st.session_state[ot_re_submitting_key],
+                                )
 
                                 if btn_resubmit:
                                     if not edit_cust_code.strip():
                                         st.error("⚠️ 「顧客コード」は必須項目です。")
                                     else:
-                                        updated_row = [
-                                            _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code,
-                                            edit_category, edit_category_detail, edit_content, edit_contact, edit_comment,
-                                            "申請中", "", "", rejector_name, reject_date,
-                                        ]
+                                        st.session_state[ot_re_submitting_key] = True
+                                        try:
+                                            updated_row = [
+                                                _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
+                                                edit_store_name, edit_store_code,
+                                                edit_category, edit_category_detail, edit_content, edit_contact, edit_comment,
+                                                "申請中", "", "", rejector_name, reject_date,
+                                            ]
 
-                                        payload = {
-                                            "action": "RESUBMIT_OTHER_MAINTENANCE_CHANGE",
-                                            "target_sheet_url": OT_TARGET_SHEET_URL,
-                                            "row_index": row_id,
-                                            "updated_row": updated_row
-                                        }
-                                        res = post_to_gas(payload)
+                                            payload = {
+                                                "action": "RESUBMIT_OTHER_MAINTENANCE_CHANGE",
+                                                "target_sheet_url": OT_TARGET_SHEET_URL,
+                                                "row_index": row_id,
+                                                "updated_row": updated_row
+                                            }
+                                            with st.spinner("送信しています..."):
+                                                res = post_to_gas(payload)
+                                        finally:
+                                            st.session_state[ot_re_submitting_key] = False
+
                                         if res.get("status") == "success":
                                             if rejector_name:
                                                 send_staff_comment(
@@ -432,21 +460,27 @@ def render_other_maintenance_tabs():
                                             st.error(f"処理に失敗しました: {res.get('message')}")
 
                                 elif btn_withdraw:
-                                    withdrawn_row = [
-                                        _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
-                                        _v("store_name"), _v("store_code"),
-                                        _v("category"), _v("category_detail"), _v("content"), _v("contact_person"), _v("comment"),
-                                        "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
-                                        rejector_name, reject_date,
-                                    ]
+                                    st.session_state[ot_re_submitting_key] = True
+                                    try:
+                                        withdrawn_row = [
+                                            _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
+                                            _v("store_name"), _v("store_code"),
+                                            _v("category"), _v("category_detail"), _v("content"), _v("contact_person"), _v("comment"),
+                                            "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
+                                            rejector_name, reject_date,
+                                        ]
 
-                                    payload = {
-                                        "action": "DELETE_OTHER_MAINTENANCE_CHANGE",
-                                        "target_sheet_url": OT_TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": withdrawn_row,
-                                    }
-                                    res = post_to_gas(payload)
+                                        payload = {
+                                            "action": "DELETE_OTHER_MAINTENANCE_CHANGE",
+                                            "target_sheet_url": OT_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": withdrawn_row,
+                                        }
+                                        with st.spinner("処理中..."):
+                                            res = post_to_gas(payload)
+                                    finally:
+                                        st.session_state[ot_re_submitting_key] = False
+
                                     if res.get("status") == "success":
                                         if rejector_name:
                                             send_staff_comment(

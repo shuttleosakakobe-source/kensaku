@@ -550,31 +550,43 @@ def render_product_order_tabs():
                     st.session_state[visible_key] = visible_rows + 1
                     st.rerun()
 
+            if "ord_submitting" not in st.session_state:
+                st.session_state["ord_submitting"] = False
+
             with st.form("submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                 st.write("---")
                 app_comment = st.text_area("申請コメント", placeholder="連絡事項や補足説明があれば入力してください", key=f"app_com{clear_suffix}")
 
-                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+                btn_submit = st.form_submit_button(
+                    "新規申請を送信", type="primary",
+                    disabled=st.session_state["ord_submitting"],
+                )
 
                 if btn_submit:
                     if not route_code.strip() or not delivery_date:
                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
                     else:
-                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
-                        
-                        full_row = [
-                            now_str, applicant, customer_code, customer_name,
-                            store_name, store_code, delivery_date, route_code, delivery_person
-                        ] + items_flat + [app_comment, "申請中", "", ""]
+                        st.session_state["ord_submitting"] = True
+                        try:
+                            now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                        payload = {
-                            "action": "SUBMIT_MAINTENANCE",
-                            "target_sheet_url": TARGET_SHEET_URL,
-                            "full_row": full_row
-                        }
-                        res = post_to_gas(payload)
+                            full_row = [
+                                now_str, applicant, customer_code, customer_name,
+                                store_name, store_code, delivery_date, route_code, delivery_person
+                            ] + items_flat + [app_comment, "申請中", "", ""]
+
+                            payload = {
+                                "action": "SUBMIT_MAINTENANCE",
+                                "target_sheet_url": TARGET_SHEET_URL,
+                                "full_row": full_row
+                            }
+                            with st.spinner("送信しています..."):
+                                res = post_to_gas(payload)
+                        finally:
+                            st.session_state["ord_submitting"] = False
+
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             st.session_state["searched_ccode"] = ""
@@ -658,6 +670,10 @@ def render_product_order_tabs():
                                     st.session_state[re_visible_key] = re_visible_rows + 1
                                     st.rerun()
 
+                            re_submitting_key = f"ord_re_submitting_{row_id}"
+                            if re_submitting_key not in st.session_state:
+                                st.session_state[re_submitting_key] = False
+
                             with st.form(key=f"resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -680,28 +696,40 @@ def render_product_order_tabs():
                                 st.write("---")
                                 edit_app_comment = st.text_area("申請コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"re_com_{row_id}")
 
-                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
-                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
+                                btn_resubmit = st.form_submit_button(
+                                    "🔄 修正して再申請", type="primary",
+                                    disabled=st.session_state[re_submitting_key],
+                                )
+                                btn_withdraw = st.form_submit_button(
+                                    "🗑️ 削除（この申請を取り下げる）",
+                                    disabled=st.session_state[re_submitting_key],
+                                )
 
                                 if btn_resubmit:
                                     if not edit_route_code.strip() or not edit_deliv_date.strip():
                                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。")
                                     else:
-                                        # 💡 col33（差し戻した管理職名）・col34（差戻し日時）は、ここでは
-                                        #    クリアせずそのまま引き継ぐ。「差戻し一覧」ページで、再申請済み
-                                        #    （再送）の行を元々の差戻し情報とともに表示できるようにするため。
-                                        updated_row = [
-                                            str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
-                                        ] + edit_items + [edit_app_comment, "申請中", "", "", rejector_name, reject_date]
+                                        st.session_state[re_submitting_key] = True
+                                        try:
+                                            # 💡 col33（差し戻した管理職名）・col34（差戻し日時）は、ここでは
+                                            #    クリアせずそのまま引き継ぐ。「差戻し一覧」ページで、再申請済み
+                                            #    （再送）の行を元々の差戻し情報とともに表示できるようにするため。
+                                            updated_row = [
+                                                str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
+                                                edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
+                                            ] + edit_items + [edit_app_comment, "申請中", "", "", rejector_name, reject_date]
 
-                                        payload = {
-                                            "action": "RESUBMIT_MAINTENANCE",
-                                            "target_sheet_url": TARGET_SHEET_URL,
-                                            "row_index": row_id,
-                                            "updated_row": updated_row
-                                        }
-                                        res = post_to_gas(payload)
+                                            payload = {
+                                                "action": "RESUBMIT_MAINTENANCE",
+                                                "target_sheet_url": TARGET_SHEET_URL,
+                                                "row_index": row_id,
+                                                "updated_row": updated_row
+                                            }
+                                            with st.spinner("送信しています..."):
+                                                res = post_to_gas(payload)
+                                        finally:
+                                            st.session_state[re_submitting_key] = False
+
                                         if res.get("status") == "success":
                                             if rejector_name:
                                                 send_staff_comment(
@@ -716,23 +744,29 @@ def render_product_order_tabs():
                                             st.error(f"処理に失敗しました: {res.get('message')}")
 
                                 elif btn_withdraw:
-                                    # 💡 列0〜29（基本情報・商品明細・申請コメント）は元のまま残し、
-                                    #    ステータス列（30〜34）だけ「削除」に書き換える（他の削除処理と同じやり方）。
-                                    #    col33・col34（差し戻した管理職名・差戻し日時）は引き継ぎ、
-                                    #    「差戻し一覧」ページでこの削除が差戻し由来だと分かるようにする。
-                                    withdrawn_row = [
-                                        str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
-                                        for i in range(30)
-                                    ]
-                                    withdrawn_row.extend(["削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "", rejector_name, reject_date])
+                                    st.session_state[re_submitting_key] = True
+                                    try:
+                                        # 💡 列0〜29（基本情報・商品明細・申請コメント）は元のまま残し、
+                                        #    ステータス列（30〜34）だけ「削除」に書き換える（他の削除処理と同じやり方）。
+                                        #    col33・col34（差し戻した管理職名・差戻し日時）は引き継ぎ、
+                                        #    「差戻し一覧」ページでこの削除が差戻し由来だと分かるようにする。
+                                        withdrawn_row = [
+                                            str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
+                                            for i in range(30)
+                                        ]
+                                        withdrawn_row.extend(["削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "", rejector_name, reject_date])
 
-                                    payload = {
-                                        "action": "DELETE_MAINTENANCE",
-                                        "target_sheet_url": TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": withdrawn_row,
-                                    }
-                                    res = post_to_gas(payload)
+                                        payload = {
+                                            "action": "DELETE_MAINTENANCE",
+                                            "target_sheet_url": TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": withdrawn_row,
+                                        }
+                                        with st.spinner("処理中..."):
+                                            res = post_to_gas(payload)
+                                    finally:
+                                        st.session_state[re_submitting_key] = False
+
                                     if res.get("status") == "success":
                                         if rejector_name:
                                             send_staff_comment(

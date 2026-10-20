@@ -426,6 +426,9 @@ def render_customer_balance_correction_tabs():
                     st.session_state[kz_visible_key] = kz_visible_rows + 1
                     st.rerun()
 
+            if "kz_submitting" not in st.session_state:
+                st.session_state["kz_submitting"] = False
+
             with st.form("kz_submit_form"):
                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -433,26 +436,35 @@ def render_customer_balance_correction_tabs():
                 kz_contact = st.text_input("連絡担当者様", key=f"kz_contact{rclear}")
                 kz_comment = st.text_area("特記事項", key=f"kz_comment{rclear}")
 
-                btn_submit = st.form_submit_button("新規申請を送信", type="primary")
+                btn_submit = st.form_submit_button(
+                    "新規申請を送信", type="primary",
+                    disabled=st.session_state["kz_submitting"],
+                )
 
                 if btn_submit:
                     if not customer_code.strip():
                         st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
                     else:
-                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                        st.session_state["kz_submitting"] = True
+                        try:
+                            now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                        full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
-                        for item in items_data:
-                            for f in KZ_ITEM_FIELDS:
-                                full_row.append(item[f])
-                        full_row += [kz_reason, kz_contact, kz_comment, "申請中", "", ""]
+                            full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
+                            for item in items_data:
+                                for f in KZ_ITEM_FIELDS:
+                                    full_row.append(item[f])
+                            full_row += [kz_reason, kz_contact, kz_comment, "申請中", "", ""]
 
-                        payload = {
-                            "action": "SUBMIT_CUSTOMER_BALANCE_CHANGE",
-                            "target_sheet_url": KZ_TARGET_SHEET_URL,
-                            "full_row": full_row
-                        }
-                        res = post_to_gas(payload)
+                            payload = {
+                                "action": "SUBMIT_CUSTOMER_BALANCE_CHANGE",
+                                "target_sheet_url": KZ_TARGET_SHEET_URL,
+                                "full_row": full_row
+                            }
+                            with st.spinner("送信しています..."):
+                                res = post_to_gas(payload)
+                        finally:
+                            st.session_state["kz_submitting"] = False
+
                         if res.get("status") == "success":
                             st.toast("新規申請を送信しました！", icon="🎉")
                             st.session_state["kz_searched_ccode"] = ""
@@ -497,6 +509,10 @@ def render_customer_balance_correction_tabs():
                             if not df_items.empty:
                                 st.dataframe(df_items, use_container_width=True, hide_index=True)
 
+                            kz_re_submitting_key = f"kz_re_submitting_{row_id}"
+                            if kz_re_submitting_key not in st.session_state:
+                                st.session_state[kz_re_submitting_key] = False
+
                             with st.form(key=f"kz_resubmit_form_{row_id}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
@@ -517,33 +533,45 @@ def render_customer_balance_correction_tabs():
                                 edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"kz_re_contact_{row_id}")
                                 edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"kz_re_comment_{row_id}")
 
-                                btn_resubmit = st.form_submit_button("🔄 修正して再申請", type="primary")
-                                btn_withdraw = st.form_submit_button("🗑️ 削除（この申請を取り下げる）")
+                                btn_resubmit = st.form_submit_button(
+                                    "🔄 修正して再申請", type="primary",
+                                    disabled=st.session_state[kz_re_submitting_key],
+                                )
+                                btn_withdraw = st.form_submit_button(
+                                    "🗑️ 削除（この申請を取り下げる）",
+                                    disabled=st.session_state[kz_re_submitting_key],
+                                )
 
                                 if btn_resubmit:
                                     if not edit_cust_code.strip():
                                         st.error("⚠️ 「顧客コード」は必須項目です。")
                                     else:
-                                        item_values = []
-                                        for item in items:
-                                            for f in KZ_ITEM_FIELDS:
-                                                item_values.append(item[f])
+                                        st.session_state[kz_re_submitting_key] = True
+                                        try:
+                                            item_values = []
+                                            for item in items:
+                                                for f in KZ_ITEM_FIELDS:
+                                                    item_values.append(item[f])
 
-                                        updated_row = [
-                                            _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
-                                            edit_store_name, edit_store_code
-                                        ] + item_values + [
-                                            edit_reason, edit_contact, edit_comment,
-                                            "申請中", "", "", rejector_name, reject_date,
-                                        ]
+                                            updated_row = [
+                                                _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
+                                                edit_store_name, edit_store_code
+                                            ] + item_values + [
+                                                edit_reason, edit_contact, edit_comment,
+                                                "申請中", "", "", rejector_name, reject_date,
+                                            ]
 
-                                        payload = {
-                                            "action": "RESUBMIT_CUSTOMER_BALANCE_CHANGE",
-                                            "target_sheet_url": KZ_TARGET_SHEET_URL,
-                                            "row_index": row_id,
-                                            "updated_row": updated_row
-                                        }
-                                        res = post_to_gas(payload)
+                                            payload = {
+                                                "action": "RESUBMIT_CUSTOMER_BALANCE_CHANGE",
+                                                "target_sheet_url": KZ_TARGET_SHEET_URL,
+                                                "row_index": row_id,
+                                                "updated_row": updated_row
+                                            }
+                                            with st.spinner("送信しています..."):
+                                                res = post_to_gas(payload)
+                                        finally:
+                                            st.session_state[kz_re_submitting_key] = False
+
                                         if res.get("status") == "success":
                                             if rejector_name:
                                                 send_staff_comment(
@@ -558,26 +586,32 @@ def render_customer_balance_correction_tabs():
                                             st.error(f"処理に失敗しました: {res.get('message')}")
 
                                 elif btn_withdraw:
-                                    item_values = []
-                                    for item in items:
-                                        for f in KZ_ITEM_FIELDS:
-                                            item_values.append(item[f])
-                                    withdrawn_row = [
-                                        _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
-                                        _v("store_name"), _v("store_code")
-                                    ] + item_values + [
-                                        _v("reason"), _v("contact_person"), _v("comment"),
-                                        "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
-                                        rejector_name, reject_date,
-                                    ]
+                                    st.session_state[kz_re_submitting_key] = True
+                                    try:
+                                        item_values = []
+                                        for item in items:
+                                            for f in KZ_ITEM_FIELDS:
+                                                item_values.append(item[f])
+                                        withdrawn_row = [
+                                            _v("timestamp"), _v("applicant"), _v("cust_code"), _v("cust_name"),
+                                            _v("store_name"), _v("store_code")
+                                        ] + item_values + [
+                                            _v("reason"), _v("contact_person"), _v("comment"),
+                                            "削除", datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S"), "",
+                                            rejector_name, reject_date,
+                                        ]
 
-                                    payload = {
-                                        "action": "DELETE_CUSTOMER_BALANCE_CHANGE",
-                                        "target_sheet_url": KZ_TARGET_SHEET_URL,
-                                        "row_index": row_id,
-                                        "updated_row": withdrawn_row,
-                                    }
-                                    res = post_to_gas(payload)
+                                        payload = {
+                                            "action": "DELETE_CUSTOMER_BALANCE_CHANGE",
+                                            "target_sheet_url": KZ_TARGET_SHEET_URL,
+                                            "row_index": row_id,
+                                            "updated_row": withdrawn_row,
+                                        }
+                                        with st.spinner("処理中..."):
+                                            res = post_to_gas(payload)
+                                    finally:
+                                        st.session_state[kz_re_submitting_key] = False
+
                                     if res.get("status") == "success":
                                         if rejector_name:
                                             send_staff_comment(
