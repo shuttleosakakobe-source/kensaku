@@ -1278,13 +1278,19 @@ def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, p
         if not pending[tab_no] or tab_no not in tab_visible_nums:
             continue
         position = tab_visible_nums.index(tab_no) + 1
-        # 💡 :nth-child ではなく :nth-of-type を使う。st.tabsのタブ一覧
-        # （div[data-baseweb="tab-list"]）には、選択中タブの下線などを描画する
-        # button以外の要素が混ざることがあり、:nth-childだと数がずれて
-        # 別のタブに色が付いてしまう不具合があった。:nth-of-typeなら
-        # button要素だけを数えるため、このズレが起きない。
+        # 💡 :nth-child ではなく :nth-of-type を使う。st.tabsのタブ一覧には、選択中タブの
+        # 下線などを描画する別要素が混ざることがあり、:nth-childだと数がずれて別のタブに
+        # 色が付いてしまう不具合があった。:nth-of-typeならタブ本体の要素だけを数えるため、
+        # このズレが起きない。
+        # 💡 StreamlitのバージョンによってタブのDOM構造が異なる（古いバージョンは
+        # button[data-baseweb="tab"]、新しいバージョン（react-aria化後）はdiv[role="tab"]
+        # [data-testid="stTab"]）ため、両方のセレクタを併記しておく。一致しない方は単に
+        # 何にもマッチしないだけなので無害（実際にこの不一致が原因で、Streamlitのバージョンが
+        # 上がった際にタブ見出しの色付けが丸ごと効かなくなる不具合が起きていたため、
+        # 両対応にして片方のStreamlitバージョンが変わっても追従できるようにしている）。
         css_parts.append(
-            f'div[data-baseweb="tab-list"] button[data-baseweb="tab"]:nth-of-type({position}) {{'
+            f'div[data-baseweb="tab-list"] button[data-baseweb="tab"]:nth-of-type({position}),'
+            f' div[role="tablist"] div[data-testid="stTab"]:nth-of-type({position}) {{'
             f' border: 3px solid {color} !important;'
             f' border-radius: 6px !important;'
             f' box-shadow: 0 0 0 1px {color} !important; }}'
