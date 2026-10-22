@@ -1,6 +1,7 @@
 """メンテナンス業務画面の入口。商品発注／ルート変更／契約内容変更をボタンで切り替える。"""
 import streamlit as st
 import time
+import html
 
 from views.route_view import render_route_change_tabs, ROUTE_COL, ROUTE_TARGET_SHEET_CSV, ROUTE_DEST_SHEET_CSV
 from views.contract_view import render_contract_change_tabs, CC_COL, CC_TARGET_SHEET_CSV, CC_DEST_SHEET_CSV
@@ -192,7 +193,21 @@ def maintenance_admin_screen():
     #    差戻しになった」お知らせを、画面の一番上に表示する。
     render_top_rejection_alerts(MODE_DEFS, pending_modes)
 
-    st.markdown("#### 📦🗺️📋 メンテナンス業務")
+    # 💡 見出しの右側に、ログイン中ユーザーの拠点名・氏名を表示する。
+    #    値はログイン時にスプレッドシートB列（拠点）・C列（名前）から取得し
+    #    session_stateに保存済み（app.py）のものをそのまま使う。
+    _branch = html.escape(st.session_state.get("user_branch", ""))
+    _user_name = html.escape(st.session_state.get("user_name", ""))
+    _who = "　".join(s for s in [_branch, _user_name] if s)
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div style="font-size:1.3rem;font-weight:700">📦🗺️📋 メンテナンス業務</div>
+            <div style="font-size:1rem;color:#5B6B7F">{_who}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # 💡 業務担当・全権限向けの「未処理の赤枠」は、以前はここ（モード共通の最上部）に
     #    3セクション分（メンテナンス処理・チェック・印刷）まとめて表示していたが、
