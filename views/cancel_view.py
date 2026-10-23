@@ -7,6 +7,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import hashlib
 from datetime import datetime
 import time
 
@@ -401,6 +402,19 @@ def render_cancel_tabs():
                 else:
                     for idx, row in rejected_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        # 💡 row_sigはこの行の内容のハッシュ。差戻し→再申請→（再び差戻し）を
+                        #    繰り返すとrow_idは使い回されるため、ウィジェットのkeyがrow_idだけ
+                        #    だとStreamlitが前回編集時の値をsession_stateに持ったままにしてしまい、
+                        #    2回目以降の差戻しで最新の差戻し理由・内容ではなく前回入力した古い値が
+                        #    フォームに残り続ける不具合があった（route_viewで先に対応済みの手法）。
+                        #    内容が変わるたびにrow_sigも変わるので、keyに含めることで確実に
+                        #    最新の内容でフォームが初期化される。
+                        row_sig = hashlib.md5(
+                            "|".join(
+                                "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                for i in range(len(row))
+                            ).encode("utf-8")
+                        ).hexdigest()[:8]
 
                         def _v(col_key, r=row):
                             i = CX_COL[col_key]
@@ -411,33 +425,33 @@ def render_cancel_tabs():
                         reject_date = _v("reject_date") or _v("approval_time")
 
                         with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
-                            cx_re_submitting_key = f"cx_re_submitting_{row_id}"
+                            cx_re_submitting_key = f"cx_re_submitting_{row_id}_{row_sig}"
                             if cx_re_submitting_key not in st.session_state:
                                 st.session_state[cx_re_submitting_key] = False
 
-                            with st.form(key=f"cx_resubmit_form_{row_id}"):
+                            with st.form(key=f"cx_resubmit_form_{row_id}_{row_sig}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報修正**")
 
                                 r1_1, r1_2, r1_3 = st.columns(3)
-                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"cx_re_ccode_{row_id}")
-                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"cx_re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"cx_re_scode_{row_id}")
+                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"cx_re_ccode_{row_id}_{row_sig}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"cx_re_cname_{row_id}_{row_sig}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"cx_re_scode_{row_id}_{row_sig}")
 
                                 r2_1, r2_2 = st.columns(2)
-                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"cx_re_sname_{row_id}")
-                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"cx_re_app_{row_id}")
+                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"cx_re_sname_{row_id}_{row_sig}")
+                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"cx_re_app_{row_id}_{row_sig}")
 
                                 edit_base_sales = st.text_input(
                                     "基礎売上（再計算する場合は再検索してください。手入力での修正も可能です）",
-                                    value=_v("base_sales"), key=f"cx_re_base_sales_{row_id}"
+                                    value=_v("base_sales"), key=f"cx_re_base_sales_{row_id}_{row_sig}"
                                 )
-                                edit_reason = st.text_area("解約理由", value=_v("reason"), key=f"cx_re_reason_{row_id}")
-                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"cx_re_contact_{row_id}")
-                                edit_collection_date = st.text_input("回収日", value=_v("collection_date"), key=f"cx_re_collection_date_{row_id}")
-                                edit_collection_route = st.text_input("回収ルート", value=_v("collection_route"), key=f"cx_re_collection_route_{row_id}")
-                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"cx_re_comment_{row_id}")
+                                edit_reason = st.text_area("解約理由", value=_v("reason"), key=f"cx_re_reason_{row_id}_{row_sig}")
+                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"cx_re_contact_{row_id}_{row_sig}")
+                                edit_collection_date = st.text_input("回収日", value=_v("collection_date"), key=f"cx_re_collection_date_{row_id}_{row_sig}")
+                                edit_collection_route = st.text_input("回収ルート", value=_v("collection_route"), key=f"cx_re_collection_route_{row_id}_{row_sig}")
+                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"cx_re_comment_{row_id}_{row_sig}")
 
                                 btn_resubmit = st.form_submit_button(
                                     "🔄 修正して再申請", type="primary",
