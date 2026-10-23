@@ -863,11 +863,24 @@ def render_duplicate_transfer_guard(
         "📝 既存データを上書きして終了（再転記）", key=f"{session_key}_overwrite_btn",
         use_container_width=True,
     ):
+        # 💡 上書き対象のDEST_SHEET行は「差戻しで一度チェック済み扱いになった古い行」の
+        #    ことが多く、check_time/check_user/print_time（チェック日時・チェック者・印刷日時）
+        #    に前回サイクルの値が残っている。transfer_rowは通常の新規appendRow用に作られて
+        #    おり、これらの列までは含まない（モードによってはcheck_timeすら含まない）ため、
+        #    そのままsetValuesで上書きすると末尾の古い値が消えずに残ってしまい、せっかく
+        #    内容を上書きしても「チェック済み／印刷対象外」のまま扱われ、メンテナンス
+        #    チェック（TAB4）の未チェック一覧に出てこなくなる。print_time列までを明示的に
+        #    空欄で埋めてから上書きすることで、再チェック・再印刷の対象に正しく戻す。
+        overwrite_row = list(transfer_row)
+        pad_to = col.get("print_time")
+        if pad_to is not None:
+            while len(overwrite_row) <= pad_to:
+                overwrite_row.append("")
         res1 = post_to_gas({
             "action": update_check_action,
             "target_sheet_url": dest_sheet_url,
             "row_index": dest_row_id,
-            "updated_row": transfer_row,
+            "updated_row": overwrite_row,
         })
         if res1.get("status") != "success":
             st.error(f"上書きに失敗しました: {res1.get('message')}")
