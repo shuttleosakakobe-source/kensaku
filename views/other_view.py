@@ -5,6 +5,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import hashlib
 from datetime import datetime
 import time
 
@@ -378,6 +379,19 @@ def render_other_maintenance_tabs():
                 else:
                     for idx, row in rejected_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        # 💡 row_sigはこの行の内容のハッシュ。差戻し→再申請→（再び差戻し）を
+                        #    繰り返すとrow_idは使い回されるため、ウィジェットのkeyがrow_idだけ
+                        #    だとStreamlitが前回編集時の値をsession_stateに持ったままにしてしまい、
+                        #    2回目以降の差戻しで最新の差戻し理由・内容ではなく前回入力した古い値が
+                        #    フォームに残り続ける不具合があった（route_viewで先に対応済みの手法）。
+                        #    内容が変わるたびにrow_sigも変わるので、keyに含めることで確実に
+                        #    最新の内容でフォームが初期化される。
+                        row_sig = hashlib.md5(
+                            "|".join(
+                                "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                for i in range(len(row))
+                            ).encode("utf-8")
+                        ).hexdigest()[:8]
 
                         def _v(col_key, r=row):
                             i = OT_COL[col_key]
@@ -388,31 +402,31 @@ def render_other_maintenance_tabs():
                         reject_date = _v("reject_date") or _v("approval_time")
 
                         with st.expander(f"🔴 【差戻し】{_v('cust_name')} (行: {row_id}) | 理由: {rej_comment}"):
-                            ot_re_submitting_key = f"ot_re_submitting_{row_id}"
+                            ot_re_submitting_key = f"ot_re_submitting_{row_id}_{row_sig}"
                             if ot_re_submitting_key not in st.session_state:
                                 st.session_state[ot_re_submitting_key] = False
 
-                            with st.form(key=f"ot_resubmit_form_{row_id}"):
+                            with st.form(key=f"ot_resubmit_form_{row_id}_{row_sig}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報修正**")
 
                                 r1_1, r1_2, r1_3 = st.columns(3)
-                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"ot_re_ccode_{row_id}")
-                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"ot_re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"ot_re_scode_{row_id}")
+                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"ot_re_ccode_{row_id}_{row_sig}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"ot_re_cname_{row_id}_{row_sig}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"ot_re_scode_{row_id}_{row_sig}")
 
                                 r2_1, r2_2 = st.columns(2)
-                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"ot_re_sname_{row_id}")
-                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"ot_re_app_{row_id}")
+                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"ot_re_sname_{row_id}_{row_sig}")
+                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"ot_re_app_{row_id}_{row_sig}")
 
                                 cur_category = _v("category")
                                 cat_index = OT_CATEGORY_OPTIONS.index(cur_category) if cur_category in OT_CATEGORY_OPTIONS else len(OT_CATEGORY_OPTIONS) - 1
-                                edit_category = st.selectbox("種別", OT_CATEGORY_OPTIONS, index=cat_index, key=f"ot_re_category_{row_id}")
-                                edit_category_detail = st.text_input("その他の内容（種別が「その他」の場合のみ入力）", value=_v("category_detail"), key=f"ot_re_category_detail_{row_id}")
-                                edit_content = st.text_area("内容", value=_v("content"), key=f"ot_re_content_{row_id}")
-                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"ot_re_contact_{row_id}")
-                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"ot_re_comment_{row_id}")
+                                edit_category = st.selectbox("種別", OT_CATEGORY_OPTIONS, index=cat_index, key=f"ot_re_category_{row_id}_{row_sig}")
+                                edit_category_detail = st.text_input("その他の内容（種別が「その他」の場合のみ入力）", value=_v("category_detail"), key=f"ot_re_category_detail_{row_id}_{row_sig}")
+                                edit_content = st.text_area("内容", value=_v("content"), key=f"ot_re_content_{row_id}_{row_sig}")
+                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"ot_re_contact_{row_id}_{row_sig}")
+                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"ot_re_comment_{row_id}_{row_sig}")
 
                                 btn_resubmit = st.form_submit_button(
                                     "🔄 修正して再申請", type="primary",

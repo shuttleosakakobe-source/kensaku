@@ -7,6 +7,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import hashlib
 from datetime import datetime
 import time
 
@@ -494,6 +495,19 @@ def render_customer_balance_correction_tabs():
                 else:
                     for idx, row in rejected_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        # 💡 row_sigはこの行の内容のハッシュ。差戻し→再申請→（再び差戻し）を
+                        #    繰り返すとrow_idは使い回されるため、ウィジェットのkeyがrow_idだけ
+                        #    だとStreamlitが前回編集時の値をsession_stateに持ったままにしてしまい、
+                        #    2回目以降の差戻しで最新の差戻し理由・内容ではなく前回入力した古い値が
+                        #    フォームに残り続ける不具合があった（route_viewで先に対応済みの手法）。
+                        #    内容が変わるたびにrow_sigも変わるので、keyに含めることで確実に
+                        #    最新の内容でフォームが初期化される。
+                        row_sig = hashlib.md5(
+                            "|".join(
+                                "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                for i in range(len(row))
+                            ).encode("utf-8")
+                        ).hexdigest()[:8]
 
                         def _v(col_key, r=row):
                             i = KZ_COL[col_key]
@@ -510,29 +524,29 @@ def render_customer_balance_correction_tabs():
                             if not df_items.empty:
                                 st.dataframe(df_items, use_container_width=True, hide_index=True)
 
-                            kz_re_submitting_key = f"kz_re_submitting_{row_id}"
+                            kz_re_submitting_key = f"kz_re_submitting_{row_id}_{row_sig}"
                             if kz_re_submitting_key not in st.session_state:
                                 st.session_state[kz_re_submitting_key] = False
 
-                            with st.form(key=f"kz_resubmit_form_{row_id}"):
+                            with st.form(key=f"kz_resubmit_form_{row_id}_{row_sig}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報修正**")
 
                                 r1_1, r1_2, r1_3 = st.columns(3)
-                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"kz_re_ccode_{row_id}")
-                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"kz_re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"kz_re_scode_{row_id}")
+                                edit_cust_code = r1_1.text_input("顧客コード", value=_v("cust_code"), key=f"kz_re_ccode_{row_id}_{row_sig}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=_v("cust_name"), key=f"kz_re_cname_{row_id}_{row_sig}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=_v("store_code"), key=f"kz_re_scode_{row_id}_{row_sig}")
 
                                 r2_1, r2_2 = st.columns(2)
-                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"kz_re_sname_{row_id}")
-                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"kz_re_app_{row_id}")
+                                edit_store_name = r2_1.text_input("加盟店", value=_v("store_name"), key=f"kz_re_sname_{row_id}_{row_sig}")
+                                edit_applicant = r2_2.text_input("担当者", value=_v("applicant"), key=f"kz_re_app_{row_id}_{row_sig}")
 
                                 st.caption("商品内容は上の表の内容がそのまま再申請されます。商品自体を修正したい場合は新規申請からやり直してください。")
 
-                                edit_reason = st.text_input("理由", value=_v("reason"), key=f"kz_re_reason_{row_id}")
-                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"kz_re_contact_{row_id}")
-                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"kz_re_comment_{row_id}")
+                                edit_reason = st.text_input("理由", value=_v("reason"), key=f"kz_re_reason_{row_id}_{row_sig}")
+                                edit_contact = st.text_input("連絡担当者様", value=_v("contact_person"), key=f"kz_re_contact_{row_id}_{row_sig}")
+                                edit_comment = st.text_area("特記事項", value=_v("comment"), key=f"kz_re_comment_{row_id}_{row_sig}")
 
                                 btn_resubmit = st.form_submit_button(
                                     "🔄 修正して再申請", type="primary",

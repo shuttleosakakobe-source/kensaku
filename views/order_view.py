@@ -616,6 +616,19 @@ def render_product_order_tabs():
                 else:
                     for idx, row in rejected_df.iloc[::-1].iterrows():
                         row_id = idx + 2
+                        # 💡 row_sigはこの行の内容のハッシュ。差戻し→再申請→（再び差戻し）を
+                        #    繰り返すとrow_idは使い回されるため、ウィジェットのkeyがrow_idだけ
+                        #    だとStreamlitが前回編集時の値をsession_stateに持ったままにしてしまい、
+                        #    2回目以降の差戻しで最新の差戻し理由・内容ではなく前回入力した古い値が
+                        #    フォームに残り続ける不具合があった（route_viewで先に対応済みの手法）。
+                        #    内容が変わるたびにrow_sigも変わるので、keyに含めることで確実に
+                        #    最新の内容でフォームが初期化される。
+                        row_sig = hashlib.md5(
+                            "|".join(
+                                "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                for i in range(len(row))
+                            ).encode("utf-8")
+                        ).hexdigest()[:8]
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
                         rej_comment = str(row.iloc[32]) if len(row) > 32 and pd.notna(row.iloc[32]) else ""
                         rejector_name = str(row.iloc[33]) if len(row) > 33 and pd.notna(row.iloc[33]) else ""
@@ -629,7 +642,7 @@ def render_product_order_tabs():
                             #    「➕ 商品を追加」ボタンで1行ずつ表示する（既存データを隠さないため、
                             #    最初から表示される行数は「入力済みの件数」が下限になる）。
                             #    st.buttonはst.form内に置けないため、商品欄全体をフォームの外に出す。
-                            re_visible_key = f"re_visible_rows_{row_id}"
+                            re_visible_key = f"re_visible_rows_{row_id}_{row_sig}"
                             if re_visible_key not in st.session_state:
                                 _filled_count = 0
                                 for _i in range(5):
@@ -653,13 +666,13 @@ def render_product_order_tabs():
                                     continue
 
                                 r1, r2, r3, r4 = st.columns([3, 2, 2, 2])
-                                p_in = r1.text_input(f"商品コード {i+1}", value=p_val, key=f"re_p_{row_id}_{i}")
-                                q_in = r2.text_input(f"数量 {i+1}", value=q_val, key=f"re_q_{row_id}_{i}")
-                                pr_in = r3.text_input(f"単価 {i+1}", value=pr_val, key=f"re_pr_{row_id}_{i}")
+                                p_in = r1.text_input(f"商品コード {i+1}", value=p_val, key=f"re_p_{row_id}_{i}_{row_sig}")
+                                q_in = r2.text_input(f"数量 {i+1}", value=q_val, key=f"re_q_{row_id}_{i}_{row_sig}")
+                                pr_in = r3.text_input(f"単価 {i+1}", value=pr_val, key=f"re_pr_{row_id}_{i}_{row_sig}")
 
                                 opts = ["", "有", "無"]
                                 flg_idx = opts.index(flg_val) if flg_val in opts else 0
-                                flg_in = r4.selectbox(f"伝票出力 {i+1}", opts, index=flg_idx, key=f"re_flg_{row_id}_{i}")
+                                flg_in = r4.selectbox(f"伝票出力 {i+1}", opts, index=flg_idx, key=f"re_flg_{row_id}_{i}_{row_sig}")
 
                                 if p_in.strip():
                                     edit_items.extend([p_in, q_in, pr_in, flg_in])
@@ -667,35 +680,35 @@ def render_product_order_tabs():
                                     edit_items.extend(["", "", "", ""])
 
                             if re_visible_rows < 5:
-                                if st.button("➕ 商品を追加", key=f"re_add_row_{row_id}"):
+                                if st.button("➕ 商品を追加", key=f"re_add_row_{row_id}_{row_sig}"):
                                     st.session_state[re_visible_key] = re_visible_rows + 1
                                     st.rerun()
 
-                            re_submitting_key = f"ord_re_submitting_{row_id}"
+                            re_submitting_key = f"ord_re_submitting_{row_id}_{row_sig}"
                             if re_submitting_key not in st.session_state:
                                 st.session_state[re_submitting_key] = False
 
-                            with st.form(key=f"resubmit_form_{row_id}"):
+                            with st.form(key=f"resubmit_form_{row_id}_{row_sig}"):
                                 st.form_submit_button("（Enterキー無効化用）", disabled=True, use_container_width=True)
 
                                 st.write("**📋 入力情報修正**")
 
                                 r1_1, r1_2, r1_3 = st.columns(3)
-                                edit_cust_code = r1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}")
-                                edit_cust_name = r1_2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}")
-                                edit_store_code = r1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}")
+                                edit_cust_code = r1_1.text_input("顧客コード", value=str(row.iloc[2]) if pd.notna(row.iloc[2]) else "", key=f"re_ccode_{row_id}_{row_sig}")
+                                edit_cust_name = r1_2.text_input("顧客名", value=str(row.iloc[3]) if pd.notna(row.iloc[3]) else "", key=f"re_cname_{row_id}_{row_sig}")
+                                edit_store_code = r1_3.text_input("加盟店コード", value=str(row.iloc[5]) if pd.notna(row.iloc[5]) else "", key=f"re_scode_{row_id}_{row_sig}")
 
                                 r2_1, r2_2, r2_3 = st.columns(3)
-                                edit_store_name = r2_1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}")
-                                edit_route_code = r2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"re_rcode_{row_id}")
-                                edit_deliv_date = r2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"re_ddate_{row_id}")
+                                edit_store_name = r2_1.text_input("加盟店名", value=str(row.iloc[4]) if pd.notna(row.iloc[4]) else "", key=f"re_sname_{row_id}_{row_sig}")
+                                edit_route_code = r2_2.text_input("ルートコード", value=str(row.iloc[7]) if pd.notna(row.iloc[7]) else "", key=f"re_rcode_{row_id}_{row_sig}")
+                                edit_deliv_date = r2_3.text_input("納品日", value=str(row.iloc[6]) if pd.notna(row.iloc[6]) else "", key=f"re_ddate_{row_id}_{row_sig}")
 
                                 r3_1, r3_2, r3_3 = st.columns(3)
-                                edit_deliv_person = r3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"re_dperson_{row_id}")
-                                edit_applicant = r3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"re_app_{row_id}")
+                                edit_deliv_person = r3_1.text_input("納品者", value=str(row.iloc[8]) if pd.notna(row.iloc[8]) else "", key=f"re_dperson_{row_id}_{row_sig}")
+                                edit_applicant = r3_2.text_input("申請者名", value=str(row.iloc[1]) if pd.notna(row.iloc[1]) else "", key=f"re_app_{row_id}_{row_sig}")
 
                                 st.write("---")
-                                edit_app_comment = st.text_area("申請コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"re_com_{row_id}")
+                                edit_app_comment = st.text_area("申請コメント", value=str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else "", key=f"re_com_{row_id}_{row_sig}")
 
                                 btn_resubmit = st.form_submit_button(
                                     "🔄 修正して再申請", type="primary",
