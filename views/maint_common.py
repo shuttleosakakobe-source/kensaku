@@ -769,21 +769,77 @@ def is_already_transferred(dest_sheet_csv, col, cust_code, timestamp):
     return not matched.empty
 
 
-def render_duplicate_transfer_guard(session_key, row, row_id, col, target_sheet_url, approve_action):
+def find_already_transferred_row_id(dest_sheet_csv, col, cust_code, timestamp):
+    """is_already_transferred()と同じ条件（顧客コード＋タイムスタンプ）でDEST_SHEET側を
+    検索し、一致した行の実際のシート行番号（1始まり）を返す。一致しなければNone。
+    is_already_transferred()は真偽値しか返さないため、重複検出時に「上書きして終了」
+    （render_duplicate_transfer_guard参照）で上書き対象を特定するためにこちらを使う。"""
+    try:
+        df = read_csv_cached(dest_sheet_csv)
+    except Exception:
+        return None
+    if df.empty:
+        return None
+    cust_code_series = _safe_col_series(df, col["cust_code"])
+    timestamp_series = _safe_col_series(df, col["timestamp"])
+    matched = df[
+        (cust_code_series == str(cust_code).strip()) &
+        (timestamp_series == str(timestamp).strip())
+    ]
+    if matched.empty:
+        return None
+    return int(matched.index[0]) + 2
+
+
+def render_duplicate_transfer_guard(
+    session_key, row, row_id, col, target_sheet_url, approve_action,
+    dest_sheet_url=None, update_check_action=None,
+):
     """TAB3でis_already_transferred()が「転記済み」と検出した直後に呼ぶ。
-    以前は警告を出して中止するだけだったが、業務担当が「もう転記されている
-    なら、この申請はここで終わらせたい」というケースに対応できるよう、
-    「🗑️ 重複のため破棄して終了」ボタンも選択肢として表示する。
-    押された場合、実際の転記（DEST_SHEETへの追加）は行わず、TARGET_SHEET側の
-    status_signだけ「業務転記済」に書き換えて一覧から外す（他の列は一切変更
-    しない＝既に転記されている本物のデータには触れない）。
+    以前は「🗑️ 重複のため破棄して終了」で中止するだけだったが、業務担当が
+    「内容を直してから再度転記しようとしたら、もう転記済みだった」というケースにも
+    対応できるよう、「📝 既存データを上書きして終了」も選択肢として表示する。
+    - 破棄：実際の転記（DEST_SHEETへの追加）は行わず、TARGET_SHEET側のstatus_signだけ
+      「業務転記済」に書き換えて一覧から外す（他の列は一切変更しない＝既に転記されている
+      本物のデータには触れない）。
+    - 上書き：DEST_SHEET側の既存行（重複と判定された行）を、今回送信しようとした内容で
+      丸ごと上書きしたうえで、TARGET_SHEET側のstatus_signも「業務転記済」に書き換える。
+    上書きを使うには、呼び出し側が重複を検出した時点で、session_state[session_key]=True
+    に加えて以下もセットしておく必要がある（この関数自身では計算できないため）：
+      st.session_state[f"{session_key}_destrow"]      … DEST_SHEET上の上書き対象行番号
+      st.session_state[f"{session_key}_transferrow"]  … 上書きする内容（transfer_row）
+    またdest_sheet_url・update_check_action（UPDATE_◯◯_CHECK系のアクション名。DEST_SHEET
+    の指定行をupdated_rowで丸ごと上書きする、TAB4で使っているのと同じGAS側の処理を流用する）
+    も渡す必要がある。どれか欠けている場合は上書きボタンを出さず、従来通り破棄のみにする。
     呼び出し側は、重複を検出した時点でst.session_state[session_key]=Trueを
     セットしてからst.rerun()すること（st.form内のボタンから、form外に置く
     このボタンを次の描画で出すため）。"""
     if not st.session_state.get(session_key):
         return
-    st.warning("⚠️ この申請はすでに業務担当へ転記済みです。画面を更新するか、重複のため破棄してこの申請を終了できます。")
-    if st.button("🗑️ 重複のため破棄して終了（転記は行いません）", key=f"{session_key}_btn"):
+
+    dest_row_id = st.session_state.get(f"{session_key}_destrow")
+    transfer_row = st.session_state.get(f"{session_key}_transferrow")
+    can_overwrite = bool(dest_sheet_url and update_check_action and dest_row_id and transfer_row is not None)
+
+    def _clear_pending():
+        st.session_state.pop(session_key, None)
+        st.session_state.pop(f"{session_key}_destrow", None)
+        st.session_state.pop(f"{session_key}_transferrow", None)
+
+    if can_overwrite:
+        st.warning("⚠️ この申請はすでに業務担当へ転記済みです。画面を更新するか、重複のため破棄するか、最新の内容で上書きしてこの申請を終了できます。")
+    else:
+        st.warning("⚠️ この申請はすでに業務担当へ転記済みです。画面を更新するか、重複のため破棄してこの申請を終了できます。")
+
+    if can_overwrite:
+        col_discard, col_overwrite = st.columns(2)
+    else:
+        col_discard, col_overwrite = st.container(), None
+
+    if col_discard.button(
+        "🗑️ 重複のため破棄して終了（転記は行いません）", key=f"{session_key}_btn",
+        use_container_width=can_overwrite,
+    ):
         updated_row = ["" if pd.isna(v) else str(v) for v in row]
         while len(updated_row) < col["status_sign"] + 1:
             updated_row.append("")
@@ -795,13 +851,45 @@ def render_duplicate_transfer_guard(session_key, row, row_id, col, target_sheet_
             "updated_row": updated_row,
         })
         if res.get("status") == "success":
-            st.session_state.pop(session_key, None)
+            _clear_pending()
             read_csv_cached.clear()
             st.toast("重複していたため、転記せずにこの申請を終了しました。", icon="🗑️")
             time.sleep(1)
             st.rerun()
         else:
             st.error(f"処理に失敗しました: {res.get('message')}")
+
+    if can_overwrite and col_overwrite.button(
+        "📝 既存データを上書きして終了（再転記）", key=f"{session_key}_overwrite_btn",
+        use_container_width=True,
+    ):
+        res1 = post_to_gas({
+            "action": update_check_action,
+            "target_sheet_url": dest_sheet_url,
+            "row_index": dest_row_id,
+            "updated_row": transfer_row,
+        })
+        if res1.get("status") != "success":
+            st.error(f"上書きに失敗しました: {res1.get('message')}")
+        else:
+            updated_row = ["" if pd.isna(v) else str(v) for v in row]
+            while len(updated_row) < col["status_sign"] + 1:
+                updated_row.append("")
+            updated_row[col["status_sign"]] = "業務転記済"
+            res2 = post_to_gas({
+                "action": approve_action,
+                "target_sheet_url": target_sheet_url,
+                "row_index": row_id,
+                "updated_row": updated_row,
+            })
+            if res2.get("status") == "success":
+                _clear_pending()
+                read_csv_cached.clear()
+                st.toast("既存データを上書きして転記を完了しました。", icon="📝")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error(f"処理に失敗しました: {res2.get('message')}")
 
 
 def handle_tab2_cancel_approval(row, row_id, col, target_sheet_url, resubmit_action):
