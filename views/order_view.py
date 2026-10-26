@@ -1218,8 +1218,15 @@ def render_product_order_tabs():
                                         st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
                                     else:
                                         clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
-                                        base_data = clean_base_row[:29]
-                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
+                                        # 💡 以前はここが固定の29（申請コメント列の1つ手前まで）になっており、
+                                        #    status_sign（col30）に本来入るはずの「差戻し」が1列ずれて
+                                        #    申請コメント（col29）に書き込まれ、status_signには代わりに
+                                        #    action_timeが入ってしまっていた。差戻ししても業務担当の
+                                        #    転記待ち一覧（status_signで判定）から消えなかったのはこれが原因。
+                                        #    ORDER_CHECK_COL["status_sign"]を使い、申請コメントまでを
+                                        #    正しく含めてから差戻し用の列を追加する。
+                                        base_data = clean_base_row[:ORDER_CHECK_COL["status_sign"]]
+                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason, op_user, action_time]
 
                                         payload = {
                                             "action": "REJECT_MAINTENANCE",
