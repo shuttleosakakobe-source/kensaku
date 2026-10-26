@@ -1177,7 +1177,10 @@ def render_contract_change_tabs():
                                             "" if pd.isna(row.iloc[i]) else str(row.iloc[i])
                                             for i in range(CC_COL["status_sign"])
                                         ]
-                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
+                                        # 💡 TAB2・TAB4の差戻しと同様に、差し戻した担当者名・差戻し日時（status_sign+3,+4）も記録する。
+                                        #    以前は書いておらず、前回の差戻しの古い値が残ったり空欄のままになり、再申請時の通知先や
+                                        #    「差戻し一覧」の表示（差し戻した人・再送／削除の判定）が正しくならなかった。
+                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason, op_user, action_time]
 
                                         payload = {
                                             "action": "REJECT_CONTRACT_CHANGE",

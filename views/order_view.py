@@ -1217,9 +1217,18 @@ def render_product_order_tabs():
                                     if not op_reject_reason.strip():
                                         st.error("⚠️ 差戻しを行う場合は「差戻し理由」を入力してください。")
                                     else:
-                                        clean_base_row = ["" if pd.isna(row.iloc[i]) else str(row.iloc[i]) for i in range(len(df.columns))]
-                                        base_data = clean_base_row[:29]
-                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason]
+                                        # 💡 ステータス列（col30）の手前まで（申請者コメントcol29を含む）を引き継ぐ。
+                                        #    以前は[:29]で1列足りず、「差戻し」がcol29（申請者コメント）に
+                                        #    書き込まれてcol30の承認者名が残ったままになり、差し戻しても
+                                        #    業務担当（TAB3）の一覧から消えない不具合になっていた。
+                                        base_data = [
+                                            "" if i >= len(row) or pd.isna(row.iloc[i]) else str(row.iloc[i])
+                                            for i in range(ORDER_CHECK_COL["status_sign"])
+                                        ]
+                                        # 💡 TAB2・TAB4の差戻しと同様に、差し戻した担当者名・差戻し日時（status_sign+3,+4）も記録する。
+                                        #    以前は書いておらず、前回の差戻しの古い値が残ったり空欄のままになり、再申請時の通知先や
+                                        #    「差戻し一覧」の表示（差し戻した人・再送／削除の判定）が正しくならなかった。
+                                        final_reject_row = base_data + ["差戻し", action_time, op_reject_reason, op_user, action_time]
 
                                         payload = {
                                             "action": "REJECT_MAINTENANCE",
