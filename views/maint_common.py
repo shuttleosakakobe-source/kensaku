@@ -75,10 +75,17 @@ def build_print_pdf_url(row_end=46, col_end=5, gid=None):
 JST = timezone(timedelta(hours=+9), 'JST')
 
 
-def post_to_gas(payload):
+def post_to_gas(payload, timeout=30):
+    """GAS Webアプリへ書き込みリクエストを送る共通ヘルパー。
+    顧客マスター・ご契約データの一括置き換え（REPLACE_CUSTOMER_MASTER/REPLACE_CONTRACT_DATA）は
+    数千行規模になることがあり、既定の30秒では読み取りタイムアウトになることがあるため、
+    呼び出し側で長めのtimeoutを指定できるようにしている。
+    💡 タイムアウトはあくまでPython側が応答を待つのをやめるだけで、GAS側の処理自体は
+    そのまま継続・完了することが多い。タイムアウトエラーが出た場合も、実際にはシートへの
+    書き込みが成功している可能性があるため、再試行前にスプレッドシートの内容を確認すること。"""
     headers = {"Content-Type": "application/json"}
     try:
-        response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers, timeout=30)
+        response = requests.post(GAS_URL, data=json.dumps(payload), headers=headers, timeout=timeout)
         return response.json()
     except Exception as e:
         return {"status": "error", "message": str(e)}

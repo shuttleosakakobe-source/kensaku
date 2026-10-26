@@ -64,21 +64,21 @@ else:
             if raw and len(raw) > 1:
                 # 行ごとに判定 (A列: 0[メール], B列: 1[拠点], C列: 2[名前], D列: 3[パスワード],
                 # F列: 5[権限], G列: 6[エリア])
-                # 💡 拠点・エリアはこのアプリでは今のところ使っていないが、将来1つの業務アプリに
-                #    統合する際にそのまま使えるよう、campaign-tallyと同じ列の読み方・
-                #    session_stateキー名（user_branch, user_area）で取得しておく。
-                #    同じメール・パスワードで複数行（拠点違い）がある場合も、このアプリでは
-                #    拠点を使わないため選択させず、従来通り最初に見つかった行を使う。
+                # 💡 京都中央店版（kyoto-chuo-mente）・campaign-tally・sales-tallyと共通のユーザーマスターを
+                #    参照するため、このアプリでは拠点（B列）が「神戸中央店」の行だけをログイン対象とする
+                #    （他店舗のアカウントと同じメール・パスワードでも、拠点が違えばログインさせない）。
+                KOBE_BRANCH_NAME = "神戸中央店"
                 user_found = None
                 for row in raw[1:]:
                     if len(row) >= 6:
                         email_val = str(row[0]).strip() # A列
+                        branch_val = str(row[1]).strip()  # B列
                         pass_val = str(row[3]).strip()  # D列
 
-                        if email_val and pass_val and email_val.lower() == u_email.lower() and pass_val == u_pass:
+                        if email_val and pass_val and branch_val == KOBE_BRANCH_NAME and email_val.lower() == u_email.lower() and pass_val == u_pass:
                             user_found = {
                                 "email": email_val,
-                                "branch": str(row[1]).strip(),  # B列
+                                "branch": branch_val,
                                 "name": str(row[2]).strip(), # C列
                                 "role": str(row[5]).strip(),  # F列
                                 "area": str(row[6]).strip() if len(row) >= 7 else "",  # G列

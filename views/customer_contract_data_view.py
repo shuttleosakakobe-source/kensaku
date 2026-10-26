@@ -105,14 +105,25 @@ def _render_replace_section(label, action_name, target_sheet_url, state_key):
             "target_sheet_url": target_sheet_url,
             "rows": rows,
         }
-        with st.spinner(f"{label}を反映しています..."):
-            res = post_to_gas(payload)
+        # 💡 数千行規模のデータになることがあり、既定の30秒だと読み取りタイムアウトに
+        #    なりやすいため、この一括置き換え操作だけ長めのタイムアウトを指定する。
+        with st.spinner(f"{label}を反映しています...（データ量によっては数分かかることがあります）"):
+            res = post_to_gas(payload, timeout=180)
 
         if res.get("status") == "success":
             st.success(f"✅ {label}を反映しました。")
             st.session_state[reset_key] = gen + 1
             read_csv_cached.clear()
             st.rerun()
+        elif "timed out" in str(res.get("message", "")).lower() or "timeout" in str(res.get("message", "")).lower():
+            st.warning(
+                f"⚠️ 反映処理がタイムアウトしました（{res.get('message')}）。"
+                "ただし、タイムアウトはこちらが応答を待つのをやめただけで、"
+                "Google側の処理自体は裏側で完了している可能性があります。"
+                f"**再試行する前に、実際の「{label}」シートを開いて反映されていないか確認してください。**"
+                "反映されていた場合に再試行すると、同じ内容でもう一度上書きされるだけなので、"
+                "データが壊れる心配はありません。"
+            )
         else:
             st.error(f"❌ 反映に失敗しました（データは変更されていません）: {res.get('message')}")
 
