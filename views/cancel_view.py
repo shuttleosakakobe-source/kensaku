@@ -351,8 +351,8 @@ def render_cancel_tabs():
                 )
 
                 if btn_submit:
-                    if not customer_code.strip():
-                        st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                    if not customer_code.strip() or not cx_reason.strip() or not cx_contact.strip():
+                        st.error("⚠️ 「顧客コード」「解約理由」「連絡担当者様」は必須項目です。入力してください。")
                     else:
                         st.session_state["cx_submitting"] = True
                         try:
@@ -463,8 +463,8 @@ def render_cancel_tabs():
                                 )
 
                                 if btn_resubmit:
-                                    if not edit_cust_code.strip():
-                                        st.error("⚠️ 「顧客コード」は必須項目です。")
+                                    if not edit_cust_code.strip() or not edit_reason.strip() or not edit_contact.strip():
+                                        st.error("⚠️ 「顧客コード」「解約理由」「連絡担当者様」は必須項目です。")
                                     else:
                                         st.session_state[cx_re_submitting_key] = True
                                         try:

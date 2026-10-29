@@ -322,8 +322,8 @@ def render_period_stop_tabs():
                 )
 
                 if btn_submit:
-                    if not customer_code.strip():
-                        st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                    if not customer_code.strip() or not ps_stop_dates.strip() or not ps_next_visit:
+                        st.error("⚠️ 「顧客コード」「ストップ日」「次回訪問日」は必須項目です。入力してください。")
                     else:
                         st.session_state["ps_submitting"] = True
                         try:
@@ -430,8 +430,8 @@ def render_period_stop_tabs():
                                 )
 
                                 if btn_resubmit:
-                                    if not edit_cust_code.strip():
-                                        st.error("⚠️ 「顧客コード」は必須項目です。")
+                                    if not edit_cust_code.strip() or not edit_stop_dates.strip() or not edit_next_visit.strip():
+                                        st.error("⚠️ 「顧客コード」「ストップ日」「次回訪問日」は必須項目です。")
                                     else:
                                         st.session_state[ps_re_submitting_key] = True
                                         try:

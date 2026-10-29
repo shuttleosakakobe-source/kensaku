@@ -474,8 +474,8 @@ def render_route_change_tabs():
                 )
 
                 if btn_submit:
-                    if not customer_code.strip() or not route_after.strip():
-                        st.error("⚠️ 「顧客コード」と「変更後ルート」は必須項目です。入力してください。")
+                    if not customer_code.strip() or not route_before.strip() or not route_after.strip() or not next_visit:
+                        st.error("⚠️ 「顧客コード」「変更前ルート」「変更後ルート」「次回訪問日」は必須項目です。入力してください。")
                     else:
                         st.session_state["rt_submitting"] = True
                         try:
@@ -587,8 +587,8 @@ def render_route_change_tabs():
                                 )
 
                                 if btn_resubmit:
-                                    if not edit_cust_code.strip() or not edit_route_after.strip():
-                                        st.error("⚠️ 「顧客コード」と「変更後ルート」は必須項目です。")
+                                    if not edit_cust_code.strip() or not edit_route_before.strip() or not edit_route_after.strip() or not edit_next_visit.strip():
+                                        st.error("⚠️ 「顧客コード」「変更前ルート」「変更後ルート」「次回訪問日」は必須項目です。")
                                     else:
                                         st.session_state[rt_re_submitting_key] = True
                                         try:

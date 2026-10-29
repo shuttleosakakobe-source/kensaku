@@ -444,8 +444,20 @@ def render_customer_balance_correction_tabs():
                 )
 
                 if btn_submit:
+                    # 💡 商品記号を入力した行だけ、現在の客中残・変更後の客中残を必須にする
+                    #    （商品記号が空の未使用スロットはチェックしない）。
+                    missing_item_fields = []
+                    for idx, item in enumerate(items_data, start=1):
+                        if item["code"].strip():
+                            if not item["current_balance"].strip():
+                                missing_item_fields.append(f"商品{idx}の現在の客中残")
+                            if not item["new_balance"].strip():
+                                missing_item_fields.append(f"商品{idx}の変更後の客中残")
+
                     if not customer_code.strip():
                         st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                    elif missing_item_fields:
+                        st.error("⚠️ 商品記号を入力した場合、現在の客中残・変更後の客中残は必須です。未入力: " + "、".join(missing_item_fields))
                     else:
                         st.session_state["kz_submitting"] = True
                         try:

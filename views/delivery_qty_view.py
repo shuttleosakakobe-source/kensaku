@@ -583,8 +583,17 @@ def render_delivery_qty_change_tabs():
                 )
 
                 if btn_submit:
-                    if not customer_code.strip():
-                        st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                    # 💡 商品記号を入力した行だけ、変更数を必須にする
+                    #    （商品記号が空の未使用スロットはチェックしない）。
+                    missing_item_fields = []
+                    for idx, item in enumerate(items_data, start=1):
+                        if item["code"].strip() and not item["change_qty"].strip():
+                            missing_item_fields.append(f"商品{idx}の変更数")
+
+                    if not customer_code.strip() or not dq_route.strip() or not dq_delivery_date:
+                        st.error("⚠️ 「顧客コード」「納品ルート」「納品日」は必須項目です。入力してください。")
+                    elif missing_item_fields:
+                        st.error("⚠️ 商品記号を入力した場合、変更数は必須です。未入力: " + "、".join(missing_item_fields))
                     else:
                         st.session_state["dq_submitting"] = True
                         try:
@@ -699,8 +708,8 @@ def render_delivery_qty_change_tabs():
                                 )
 
                                 if btn_resubmit:
-                                    if not edit_cust_code.strip():
-                                        st.error("⚠️ 「顧客コード」は必須項目です。")
+                                    if not edit_cust_code.strip() or not edit_route.strip() or not edit_delivery_date.strip():
+                                        st.error("⚠️ 「顧客コード」「納品ルート」「納品日」は必須項目です。")
                                     else:
                                         st.session_state[dq_re_submitting_key] = True
                                         try:

@@ -566,8 +566,23 @@ def render_product_order_tabs():
                 )
 
                 if btn_submit:
+                    # 💡 商品コードを入力した行だけ、数量・単価・伝票出力を必須にする
+                    #    （商品コードが空の未使用スロットはチェックしない）。
+                    missing_item_fields = []
+                    for i in range(5):
+                        p_code, qty, price, print_flg = items_flat[i * 4:i * 4 + 4]
+                        if p_code.strip():
+                            if not qty.strip():
+                                missing_item_fields.append(f"商品{i + 1}の数量")
+                            if not price.strip():
+                                missing_item_fields.append(f"商品{i + 1}の単価")
+                            if not print_flg.strip():
+                                missing_item_fields.append(f"商品{i + 1}の伝票出力")
+
                     if not route_code.strip() or not delivery_date:
                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
+                    elif missing_item_fields:
+                        st.error("⚠️ 商品コードを入力した場合、数量・単価・伝票出力は必須です。未入力: " + "、".join(missing_item_fields))
                     else:
                         st.session_state["ord_submitting"] = True
                         try:
@@ -720,8 +735,21 @@ def render_product_order_tabs():
                                 )
 
                                 if btn_resubmit:
+                                    missing_item_fields = []
+                                    for i in range(5):
+                                        p_code, qty, price, print_flg = edit_items[i * 4:i * 4 + 4]
+                                        if p_code.strip():
+                                            if not qty.strip():
+                                                missing_item_fields.append(f"商品{i + 1}の数量")
+                                            if not price.strip():
+                                                missing_item_fields.append(f"商品{i + 1}の単価")
+                                            if not print_flg.strip():
+                                                missing_item_fields.append(f"商品{i + 1}の伝票出力")
+
                                     if not edit_route_code.strip() or not edit_deliv_date.strip():
                                         st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。")
+                                    elif missing_item_fields:
+                                        st.error("⚠️ 商品コードを入力した場合、数量・単価・伝票出力は必須です。未入力: " + "、".join(missing_item_fields))
                                     else:
                                         st.session_state[re_submitting_key] = True
                                         try:
