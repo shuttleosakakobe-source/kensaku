@@ -206,10 +206,14 @@ def calc_cc_amount(price, cycle, week_a, week_b, week_c, week_d):
 
 
 def _cc_sum4(week_a, week_b, week_c, week_d):
-    """A〜D週のうち0以外の納品数を「契約数」として文字列で返す（整数ならそのまま、それ以外は元の値を保持）"""
-    total = _cc_nonzero_qty(week_a, week_b, week_c, week_d)
-    if total == 0:
+    """A〜D週のうち0以外の納品数を「契約数」として文字列で返す（整数ならそのまま、それ以外は元の値を保持）。
+    💡 A〜Dが全て未入力（空欄）の場合だけ空文字を返す。以前はtotal==0（計算結果が0）の場合も
+    空文字にしていたため、A〜Dのどれかに意図的に「0」を入力しても契約数欄が空のままになり、
+    「0を入れたのに反映されない」ように見える不具合があった。どれか1つでも入力されていれば、
+    結果が0でもその値（"0"）をそのまま表示する。"""
+    if not any(str(v).strip() for v in (week_a, week_b, week_c, week_d)):
         return ""
+    total = _cc_nonzero_qty(week_a, week_b, week_c, week_d)
     return str(int(total)) if total == int(total) else str(total)
 
 
@@ -706,10 +710,12 @@ def render_contract_change_tabs():
                                 missing_item_fields.append(f"商品{idx}（{label}）の単価")
                             if not item[f"{prefix}_cycle"].strip():
                                 missing_item_fields.append(f"商品{idx}（{label}）の周期")
-                            qty = _cc_nonzero_qty(
+                            # 💡 「未入力」の判定はA〜Dが全て空欄かどうかで行う（計算結果が0かどうかでは
+                            #    判定しない）。どれかに明示的に「0」が入力されていれば、契約数は
+                            #    「入力済み（結果は0）」として扱い、必須エラーにはしない。
+                            if not any(str(v).strip() for v in (
                                 item[f"{prefix}_a"], item[f"{prefix}_b"], item[f"{prefix}_c"], item[f"{prefix}_d"],
-                            )
-                            if qty == 0:
+                            )):
                                 missing_item_fields.append(f"商品{idx}（{label}）の契約数（A〜D週のいずれか）")
 
                     if not customer_code.strip():
