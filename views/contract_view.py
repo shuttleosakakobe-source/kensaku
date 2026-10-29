@@ -692,8 +692,30 @@ def render_contract_change_tabs():
                 )
 
                 if btn_submit:
+                    # 💡 商品記号を入力したのに契約数（A〜D週）・単価・周期が未入力のまま
+                    #    送信されると、計算金額が0円になってしまったり、後工程（転記・チェック）
+                    #    で不完全なデータとして扱われてしまうため、商品記号がある行だけ
+                    #    これらの入力を必須にする（商品記号が空の行＝未使用スロットはチェックしない）。
+                    missing_item_fields = []
+                    for idx, item in enumerate(items_data, start=1):
+                        for prefix, label in (("before", "変更前"), ("after", "変更後")):
+                            code = item[f"{prefix}_code"].strip()
+                            if not code:
+                                continue
+                            if not item[f"{prefix}_price"].strip():
+                                missing_item_fields.append(f"商品{idx}（{label}）の単価")
+                            if not item[f"{prefix}_cycle"].strip():
+                                missing_item_fields.append(f"商品{idx}（{label}）の周期")
+                            qty = _cc_nonzero_qty(
+                                item[f"{prefix}_a"], item[f"{prefix}_b"], item[f"{prefix}_c"], item[f"{prefix}_d"],
+                            )
+                            if qty == 0:
+                                missing_item_fields.append(f"商品{idx}（{label}）の契約数（A〜D週のいずれか）")
+
                     if not customer_code.strip():
                         st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                    elif missing_item_fields:
+                        st.error("⚠️ 商品記号を入力した場合、契約数・単価・周期は必須です。未入力: " + "、".join(missing_item_fields))
                     else:
                         st.session_state["cc_submitting"] = True
                         try:
