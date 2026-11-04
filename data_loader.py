@@ -1,3 +1,4 @@
+import io
 import streamlit as st
 import pandas as pd
 import requests
@@ -38,9 +39,17 @@ def load_navi_data_from_url(url_or_gid="0"):
 
 @st.cache_data(ttl=15)
 def _read_csv_cached(url):
-    return pd.read_csv(url)
+    # 💡 pd.read_csv(url)はタイムアウトを指定できず、通信状況が悪いとリクエストが
+    #    ハングしたまま返ってこなくなり、画面が「読み込み中」のまま固まって見える
+    #    原因になっていた。requests.getで明示的にタイムアウトを設定してから
+    #    pd.read_csvに渡すことで、一定時間で確実にエラーとして打ち切られるようにする。
+    response = requests.get(url, timeout=20)
+    response.raise_for_status()
+    return pd.read_csv(io.StringIO(response.text))
 
 
 @st.cache_data(ttl=15)
 def _read_csv_cached_str(url):
-    return pd.read_csv(url, dtype=str)
+    response = requests.get(url, timeout=20)
+    response.raise_for_status()
+    return pd.read_csv(io.StringIO(response.text), dtype=str)

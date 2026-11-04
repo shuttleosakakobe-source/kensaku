@@ -1,5 +1,6 @@
 """メンテナンス業務（商品発注／ルート変更／契約内容変更）で共通して使う定数・ヘルパー関数。
 route_view.py / contract_view.py / order_view.py から読み込まれる。"""
+import io
 import streamlit as st
 import pandas as pd
 import requests
@@ -98,8 +99,14 @@ def read_csv_cached(url, **kwargs):
     （各画面が毎回 st.cache_data.clear() でアプリ全体のキャッシュを巻き添えにして
     いたのを、この関数専用のキャッシュに置き換えることで解消する）。
     承認・差戻し・削除・転記など自分の操作の直後で確実に最新データが欲しい場合は、
-    read_csv_cached.clear() を呼んでからこの関数を呼び出す。"""
-    return pd.read_csv(url, dtype=str, **kwargs)
+    read_csv_cached.clear() を呼んでからこの関数を呼び出す。
+    💡 pd.read_csv(url)はタイムアウトを指定できず、通信状況が悪いとリクエストが
+    ハングしたまま返ってこなくなり、画面が「読み込み中」のまま固まって見える
+    原因になっていた。requests.getで明示的にタイムアウトを設定してから
+    pd.read_csvに渡すことで、一定時間で確実にエラーとして打ち切られるようにする。"""
+    response = requests.get(url, timeout=20)
+    response.raise_for_status()
+    return pd.read_csv(io.StringIO(response.text), dtype=str, **kwargs)
 
 
 def get_anthropic_client():
