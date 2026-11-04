@@ -103,8 +103,14 @@ def read_csv_cached(url, **kwargs):
     💡 pd.read_csv(url)はタイムアウトを指定できず、通信状況が悪いとリクエストが
     ハングしたまま返ってこなくなり、画面が「読み込み中」のまま固まって見える
     原因になっていた。requests.getで明示的にタイムアウトを設定してから
-    pd.read_csvに渡すことで、一定時間で確実にエラーとして打ち切られるようにする。"""
-    response = requests.get(url, timeout=20)
+    pd.read_csvに渡すことで、一定時間で確実にエラーとして打ち切られるようにする。
+    💡 呼び出し側がstorage_options={"User-Agent": ...}を渡してくる場合がある
+    （元はfsspec経由でpd.read_csvがURLを直接開く際にヘッダーを渡すためのもの）。
+    ここではrequests.get自体のheadersとして使うため、kwargsから取り出して
+    pd.read_csvには渡さない（io.StringIOにはstorage_optionsを渡せないため）。"""
+    storage_options = kwargs.pop("storage_options", None)
+    headers = storage_options if isinstance(storage_options, dict) else None
+    response = requests.get(url, timeout=20, headers=headers)
     response.raise_for_status()
     return pd.read_csv(io.StringIO(response.text), dtype=str, **kwargs)
 
