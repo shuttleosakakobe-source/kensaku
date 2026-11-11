@@ -69,7 +69,7 @@ def render_rejection_overview():
 
     status_filter = st.multiselect(
         "状況で絞り込み", ["未処理", "削除", "再送"],
-        default=["未処理", "削除", "再送"], key="reject_overview_status_filter",
+        default=["未処理"], key="reject_overview_status_filter",
     )
     mode_labels = [label for _k, label, *_r in MODE_DEFS]
     mode_filter = st.multiselect(
