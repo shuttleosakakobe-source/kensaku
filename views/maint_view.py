@@ -199,10 +199,25 @@ def maintenance_admin_screen():
     _branch = html.escape(st.session_state.get("user_branch", ""))
     _user_name = html.escape(st.session_state.get("user_name", ""))
     _who = "　".join(s for s in [_branch, _user_name] if s)
+
+    # 💡 見出しの文字の横に、未処理（差戻し・承認待ち・転記待ち・未チェック・未印刷の
+    # いずれか）が残っているメンテナンス種別の名前を表示する。下のモードボタン自体の
+    # 赤枠だけでは、ボタンを探さないと「何が残っているか」が分からなかったため、
+    # 見出しを見ただけで対応が必要な種別が一目で分かるようにする。
+    _mode_label_by_key = {mode_key: label for mode_key, label, *_rest in MODE_DEFS}
+    _pending_labels = [_mode_label_by_key[k] for k in pending_modes if k in _mode_label_by_key]
+    _pending_html = ""
+    if _pending_labels:
+        _pending_text = html.escape("・".join(_pending_labels))
+        _pending_html = (
+            f'<span style="font-size:0.85rem;font-weight:700;color:#e53935;'
+            f'margin-left:10px">⚠️ 未処理あり：{_pending_text}</span>'
+        )
+
     st.markdown(
         f"""
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-            <div style="font-size:1.3rem;font-weight:700">📦🗺️📋 メンテナンス業務</div>
+            <div style="font-size:1.3rem;font-weight:700">📦🗺️📋 メンテナンス業務{_pending_html}</div>
             <div style="font-size:1rem;color:#5B6B7F">{_who}</div>
         </div>
         """,
