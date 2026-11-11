@@ -388,11 +388,12 @@ def _pending_reasons_from_dfs(df_t, df_d, status_col, check_col, print_col, appl
     💡 以前は会社全体のデータを見て、誰の・どの担当範囲の対応待ちでも無条件に赤枠にしていた
     （自分の管轄外の対応待ちでも赤枠が点いてしまっていた）。これを、対応待ちの種類ごとに
     「本来それに対応すべき人」にだけ赤枠が見えるよう絞り込む：
-    - 差戻し（要再修正・再申請）：その申請の担当者（申請者）本人のみ
+    - 差戻し（要再修正・再申請）：その申請の担当者（申請者）本人のみ（権限0含め例外なし。
+      差戻し修正タブ自体が常に申請者本人のみに絞り込んで表示するため、ここで権限0を
+      例外にすると「バナーは出るのに該当タブには何も無い」という不一致が起きる）
     - 申請中（要承認）：管理職（権限0・1）のみ
     - 承認済みだが未転記（要業務転記）／チェック未完了（要チェック）／
       チェック済みだが未印刷（要印刷）：業務担当（権限0・3）のみ
-    権限0（全権限）は、どの種類の対応待ちでも対象として見る。
     💡 「ボタンが赤いのに、見ているTABには何も残っていない」という混乱が繰り返し起きたため、
     単純なTrue/Falseではなく、どの種類が・何件該当したかのリストを返すようにしている
     （例: ["差戻し1件", "未チェック2件"]）。空リスト＝対応待ちなし。
@@ -401,7 +402,6 @@ def _pending_reasons_from_dfs(df_t, df_d, status_col, check_col, print_col, appl
     role = str(user_role).strip()
     if role.endswith(".0"):
         role = role[:-2]
-    is_all = role == "0"
     is_manager = role in {"0", "1"}
     is_operator = role in {"0", "3"}
     my_name = str(user_name).strip()
@@ -412,11 +412,14 @@ def _pending_reasons_from_dfs(df_t, df_d, status_col, check_col, print_col, appl
         if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
             status_series = df_t.iloc[:, status_col].astype(str).str.strip()
 
-            if is_all:
-                cnt = int((status_series == "差戻し").sum())
-                if cnt:
-                    reasons.append(f"差戻し{cnt}件")
-            elif my_name and len(df_t.columns) > applicant_col:
+            # 💡 差戻しは権限0（全権限）でも「自分が申請したものだけ」に絞る。
+            # 以前はis_all（権限0）のときだけ申請者を問わず全社分の件数をそのまま
+            # 数えていたため、他の人が申請して差し戻された件数までトップ画面の
+            # バナーに出てしまい、「差戻しがあると言われたのに、該当モードを開いても
+            # 何も表示されない（＝自分の申請ではないので差戻し修正タブには出ない）」
+            # という混乱の原因になっていた。差戻し修正タブ自体が常に申請者本人のみに
+            # 絞り込んでいる（route_view.py等）ため、バナー側もそれに合わせる。
+            if my_name and len(df_t.columns) > applicant_col:
                 applicant_series = df_t.iloc[:, applicant_col].astype(str).str.strip()
                 my_rejected = (status_series == "差戻し") & (applicant_series == my_name)
                 cnt = int(my_rejected.sum())
