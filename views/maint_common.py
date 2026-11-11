@@ -1350,7 +1350,8 @@ def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, p
     中身に出す文言、こちらはタブを開く前から見出し自体の色でひと目でわかるようにするためのもの。
     💡 TAB1の差戻しは、ログイン中のユーザー（st.session_state の user_role / user_name）が
     本人の申請分を持っている場合だけ対象にする（_pending_reasons_from_dfsと同じ絞り込み。
-    権限0は全員分を対象にする）。
+    差戻し修正タブ自体が常に申請者本人のみに絞り込んで表示するため、権限0でも例外にせず
+    本人の申請分だけで判定する）。
     💡 st.tabsの各タブは個別のkeyを持てずCSSで直接狙えないため、実際に表示されている
     タブ番号の並び順（tab_visible_nums＝tab_visible()でフィルタ済みのもの）から、
     何番目のタブボタンか（nth-child）を逆算して当てる。権限によって表示されるタブの
@@ -1360,9 +1361,6 @@ def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, p
     df_t = _fetch_csv_or_none(target_csv)
     df_d = _fetch_csv_or_none(dest_csv)
 
-    user_role = str(st.session_state.get("user_role", "")).strip()
-    if user_role.endswith(".0"):
-        user_role = user_role[:-2]
     my_name = str(st.session_state.get("user_name", "")).strip()
 
     pending = {1: False, 2: False, 3: False, 4: False, 5: False}
@@ -1370,9 +1368,7 @@ def render_tab_header_pending_css(target_csv, dest_csv, status_col, check_col, p
         if df_t is not None and not df_t.empty and len(df_t.columns) > status_col:
             status_series = df_t.iloc[:, status_col].astype(str).str.strip()
 
-            if user_role == "0":
-                pending[1] = bool((status_series == "差戻し").any())
-            elif my_name and len(df_t.columns) > applicant_col:
+            if my_name and len(df_t.columns) > applicant_col:
                 applicant_series = df_t.iloc[:, applicant_col].astype(str).str.strip()
                 pending[1] = bool(((status_series == "差戻し") & (applicant_series == my_name)).any())
 
