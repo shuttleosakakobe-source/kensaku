@@ -17,6 +17,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 
 CC_MODE_NAME = "契約内容変更"
@@ -482,7 +483,7 @@ def render_contract_change_tabs():
             CC_COL["status_sign"], CC_COL["check_time"], CC_COL["print_time"],
             _c_tab_visible_nums,
         )
-        _c_tab_objs = st.tabs([_c_tab_all_labels[_n - 1] for _n in _c_tab_visible_nums])
+        _c_tab_objs = st.tabs([_c_tab_all_labels[_n - 1] for _n in _c_tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_c_tab_visible_nums, _c_tab_objs))
 
     # ==========================================

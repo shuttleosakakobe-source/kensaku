@@ -19,6 +19,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 
 SR_MODE_NAME = "単発ルート変更"
@@ -241,7 +242,7 @@ def render_spot_route_change_tabs():
             SR_COL["status_sign"], SR_COL["check_time"], SR_COL["print_time"],
             _s_tab_visible_nums,
         )
-        _s_tab_objs = st.tabs([_s_tab_all_labels[_n - 1] for _n in _s_tab_visible_nums])
+        _s_tab_objs = st.tabs([_s_tab_all_labels[_n - 1] for _n in _s_tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_s_tab_visible_nums, _s_tab_objs))
 
     # ==========================================

@@ -21,6 +21,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 from views.contract_view import get_contract_products, _cc_product_labels
 
@@ -305,7 +306,7 @@ def render_customer_balance_correction_tabs():
             KZ_COL["status_sign"], KZ_COL["check_time"], KZ_COL["print_time"],
             _k_tab_visible_nums,
         )
-        _k_tab_objs = st.tabs([_k_tab_all_labels[_n - 1] for _n in _k_tab_visible_nums])
+        _k_tab_objs = st.tabs([_k_tab_all_labels[_n - 1] for _n in _k_tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_k_tab_visible_nums, _k_tab_objs))
 
     # ==========================================

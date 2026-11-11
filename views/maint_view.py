@@ -22,6 +22,7 @@ from views.maint_common import (
     get_pending_modes, get_current_role,
     get_unconfirmed_staff_comments, confirm_staff_comment,
     read_csv_cached, pending_reason_color, render_top_rejection_alerts,
+    PENDING_REASON_COLORS, BUSINESS_TAB_KEY, BUSINESS_TAB_LABELS,
 )
 import pandas as pd
 from views.navi_view import route_navigation_screen
@@ -200,12 +201,30 @@ def maintenance_admin_screen():
     _user_name = html.escape(st.session_state.get("user_name", ""))
     _who = "　".join(s for s in [_branch, _user_name] if s)
 
-    # 💡 見出しの文字の横に、未処理（差戻し・承認待ち・転記待ち・未チェック・未印刷の
-    # いずれか）が残っているメンテナンス種別の名前を表示する。下のモードボタン自体の
-    # 赤枠だけでは、ボタンを探さないと「何が残っているか」が分からなかったため、
-    # 見出しを見ただけで対応が必要な種別が一目で分かるようにする。
+    # 💡 見出しの文字の横に、「今自分が開いている業務タブ」の種類（差戻し／承認待ち／
+    # 転記待ち／未チェック／未印刷のいずれか1つ）で未処理が残っているメンテナンス種別の
+    # 名前だけを表示する（全種類まとめてではなく、今見ているタブに関係あるものだけに
+    # 絞ることで、「業務担当がメンテナンス処理タブを開いているときは転記待ちだけ」
+    # 「メンテナンスチェックタブを開いているときは未チェックだけ」のように、今の作業に
+    # 関係ない種類で混乱しないようにしている）。
+    # 選択中のタブ名は、各view側のst.tabs(key=BUSINESS_TAB_KEY, on_change="rerun")で
+    # session_stateに記録されたものをそのまま読む（9モードとも同じタブ見出し文言・同じ
+    # keyを使っているため、今開いているモードがどれであっても正しく読める）。
+    # まだどのモードも開いていない（1度もst.tabs()が描画されていない）場合は、
+    # タブを開けば最初に表示されるTAB1（差戻し）相当として扱う。
     _mode_label_by_key = {mode_key: label for mode_key, label, *_rest in MODE_DEFS}
-    _pending_labels = [_mode_label_by_key[k] for k in pending_modes if k in _mode_label_by_key]
+    _active_tab_label = st.session_state.get(BUSINESS_TAB_KEY)
+    _active_tab_num = (
+        BUSINESS_TAB_LABELS.index(_active_tab_label) + 1
+        if _active_tab_label in BUSINESS_TAB_LABELS else 1
+    )
+    _pending_labels = []
+    if 1 <= _active_tab_num <= len(PENDING_REASON_COLORS):
+        _reason_prefix = PENDING_REASON_COLORS[_active_tab_num - 1][0]
+        _pending_labels = [
+            _mode_label_by_key[k] for k, reasons in pending_modes.items()
+            if k in _mode_label_by_key and any(r.startswith(_reason_prefix) for r in reasons)
+        ]
     _pending_html = ""
     if _pending_labels:
         _pending_text = html.escape("・".join(_pending_labels))

@@ -17,6 +17,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 
 ROUTE_MODE_NAME = "ルート変更"
@@ -305,7 +306,7 @@ def render_route_change_tabs():
             ROUTE_COL["status_sign"], ROUTE_COL["check_time"], ROUTE_COL["print_time"],
             _r_tab_visible_nums,
         )
-        _r_tab_objs = st.tabs([_r_tab_all_labels[_n - 1] for _n in _r_tab_visible_nums])
+        _r_tab_objs = st.tabs([_r_tab_all_labels[_n - 1] for _n in _r_tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_r_tab_visible_nums, _r_tab_objs))
 
     # ==========================================

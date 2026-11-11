@@ -479,6 +479,23 @@ PENDING_REASON_COLORS = [
     ("未印刷", "#ec4899"),
 ]
 
+# 💡 9モード共通のタブ見出し文言（各view内の*_tab_all_labelsと同じ内容）。
+# メンテナンス業務トップの見出し横に「今開いているタブの種類」を表示するため、
+# st.tabs()のkeyをこの文字列で統一し（9モードのうち実際に描画されるのは常に1つだけ
+# なので、同じkeyを使い回しても衝突しない）、選択中のタブ名を
+# st.session_state[BUSINESS_TAB_KEY] から直接読み取れるようにしている。
+# st.tabs()のkey／on_changeによる状態追跡は比較的新しいStreamlitの機能のため、
+# 古いバージョンでは使えない可能性がある点に注意。
+BUSINESS_TAB_KEY = "biz_tab_selected_label"
+BUSINESS_TAB_LABELS = [
+    "📝 メンテナンス / 差戻し修正",
+    "🔍 管理職チェック",
+    "🚚 業務担当メンテナンス処理",
+    "✅ メンテナンスチェック画面",
+    "🖨️ 加盟店別 印刷",
+    "🔍 過去の申請検索",
+]
+
 
 def pending_reason_color(reasons):
     """get_pending_modes()が返す理由リスト（例: ["差戻し1件", "未チェック2件"]）のうち、

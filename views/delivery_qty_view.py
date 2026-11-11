@@ -22,6 +22,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 from views.contract_view import (
     get_contract_products, _cc_product_labels, _cc_hide_zero, _cc_sum4,
@@ -325,7 +326,7 @@ def render_delivery_qty_change_tabs():
             DQ_COL["status_sign"], DQ_COL["check_time"], DQ_COL["print_time"],
             _d_tab_visible_nums,
         )
-        _d_tab_objs = st.tabs([_d_tab_all_labels[_n - 1] for _n in _d_tab_visible_nums])
+        _d_tab_objs = st.tabs([_d_tab_all_labels[_n - 1] for _n in _d_tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_d_tab_visible_nums, _d_tab_objs))
 
     # ==========================================

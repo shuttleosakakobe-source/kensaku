@@ -17,6 +17,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 
 ORDER_MODE_NAME = "商品発注"
@@ -347,7 +348,7 @@ def render_product_order_tabs():
         render_tab_header_pending_css(
             TARGET_SHEET_CSV, DEST_SHEET_CSV, 30, CHECK_TIME_COL_IDX, PRINT_TIME_COL_IDX, _tab_visible_nums
         )
-        _tab_objs = st.tabs([_tab_all_labels[_n - 1] for _n in _tab_visible_nums])
+        _tab_objs = st.tabs([_tab_all_labels[_n - 1] for _n in _tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_tab_visible_nums, _tab_objs))
 
     # ==========================================

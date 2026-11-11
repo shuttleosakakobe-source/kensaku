@@ -21,6 +21,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 from views.contract_view import (
     get_contract_products, calc_cc_amount, _cc_to_float, _cc_format_yen,
@@ -250,7 +251,7 @@ def render_cancel_tabs():
             CX_COL["status_sign"], CX_COL["check_time"], CX_COL["print_time"],
             _x_tab_visible_nums,
         )
-        _x_tab_objs = st.tabs([_x_tab_all_labels[_n - 1] for _n in _x_tab_visible_nums])
+        _x_tab_objs = st.tabs([_x_tab_all_labels[_n - 1] for _n in _x_tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_x_tab_visible_nums, _x_tab_objs))
 
     # ==========================================

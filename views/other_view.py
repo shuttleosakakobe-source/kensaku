@@ -19,6 +19,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
+    BUSINESS_TAB_KEY,
 )
 
 OT_MODE_NAME = "その他"
@@ -235,7 +236,7 @@ def render_other_maintenance_tabs():
             OT_COL["status_sign"], OT_COL["check_time"], OT_COL["print_time"],
             _o_tab_visible_nums,
         )
-        _o_tab_objs = st.tabs([_o_tab_all_labels[_n - 1] for _n in _o_tab_visible_nums])
+        _o_tab_objs = st.tabs([_o_tab_all_labels[_n - 1] for _n in _o_tab_visible_nums], key=BUSINESS_TAB_KEY, on_change="rerun")
         _tab_map = dict(zip(_o_tab_visible_nums, _o_tab_objs))
 
     # ==========================================
