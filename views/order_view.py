@@ -5,12 +5,14 @@ import requests
 from datetime import datetime
 import time
 import hashlib
+import concurrent.futures
 
 from views.maint_common import (
     JST, CUSTOMER_MASTER_CSV, PRINT_SHEET_ID,
     post_to_gas, build_print_pdf_url, read_csv_cached,
     tab_visible, RESTRICTED_TAB_MSG,
     ai_check_order_anomaly, check_route_roster_match, get_route_dates_for_code,
+    get_anthropic_client,
     send_staff_comment, render_section_pending_banner, render_tab_header_pending_css, handle_tab4_reject,
     render_tab2_own_approvals_section, render_tab2_notifications_section, render_tab3_own_transfers_section,
     render_internal_note, render_tab4_own_checks_section, is_already_transferred,
@@ -861,6 +863,83 @@ def render_product_order_tabs():
                     auto_approved_count = 0
                     now_str_ai = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
+                    # 💡 未キャッシュの行（内容が変わっていて新たにAIチェックが必要な行）を
+                    # まず全て洗い出し、ThreadPoolExecutorで並列にAnthropic APIへ問い合わせる。
+                    # 以前はこの下のループで1件ずつ順番に問い合わせていたため、承認待ちが複数件
+                    # あって再チェックが必要な件数が多いと、管理職チェック画面を開いてから最後の
+                    # 行が描画されるまでに数秒〜十数秒かかることがあった。その「まだ描画中」の
+                    # 間に「承認」ボタンを押しても、サーバー側が前の処理で手一杯でクリックを
+                    # 取りこぼし、1回目の押下が反映されず2回目でようやく反応する、という不具合
+                    # （「承認ボタンを2回押さないと反応しない」）の主な原因になっていた。
+                    # 事前にまとめて並列実行してキャッシュへ詰めておくことで、実際に画面を
+                    # 描画する下のループはキャッシュを読むだけになり、高速に完了する。
+                    _pending_ai_work = []
+                    for idx, row in pending_df.iloc[::-1].iterrows():
+                        row_id = idx + 2
+                        row_raw = "|".join(
+                            str(row.iloc[i]) if i < len(row) and pd.notna(row.iloc[i]) else ""
+                            for i in range(30)
+                        )
+                        ai_sig = f"{row_id}_{hashlib.md5(row_raw.encode('utf-8')).hexdigest()}"
+                        if ai_sig in st.session_state["ai_checked_row_sigs"]:
+                            continue
+
+                        cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
+                        cust_code = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
+                        ai_items = []
+                        for i in range(5):
+                            base_idx = 9 + i * 4
+                            code = str(row.iloc[base_idx]) if pd.notna(row.iloc[base_idx]) else ""
+                            if code.strip():
+                                qty = str(row.iloc[base_idx + 1]) if pd.notna(row.iloc[base_idx + 1]) else ""
+                                price = str(row.iloc[base_idx + 2]) if pd.notna(row.iloc[base_idx + 2]) else ""
+                                ai_items.append({"code": code, "qty": qty, "price": price})
+                        _pending_ai_work.append({
+                            "ai_sig": ai_sig,
+                            "cust_code": cust_code,
+                            "cust_name": cust_name,
+                            "ai_items": ai_items,
+                            "ai_past_items": _get_past_order_items_for_ai(cust_code),
+                            "route_date": str(row.iloc[6]) if pd.notna(row.iloc[6]) else "",
+                            "route_code": str(row.iloc[7]) if pd.notna(row.iloc[7]) else "",
+                            "route_staff": str(row.iloc[8]) if pd.notna(row.iloc[8]) else "",
+                        })
+
+                    if _pending_ai_work:
+                        # 💡 Anthropicクライアントはメインスレッド側で1回だけ作っておく
+                        # （st.secretsの参照はStreamlitのスクリプト実行コンテキストに
+                        # 依存するため、ワーカースレッド内では行わない）。
+                        _ai_client = get_anthropic_client()
+
+                        def _run_one_ai_check(_item):
+                            _ai_result = ai_check_order_anomaly(
+                                _item["cust_code"], _item["cust_name"],
+                                _item["ai_items"], _item["ai_past_items"],
+                                _client=_ai_client,
+                            )
+                            # 💡 ルート担当表との照合：申請のルートコード・納品日・担当者（納品者）が
+                            #    担当表の記載と食い違っている場合は、AIの判定に関わらず必ず
+                            #    「異常あり」にして人の確認に回す（担当表が読めない・該当データが
+                            #    無いだけの場合は判定不能＝matched=Noneとして、AIの結果はそのまま使う）。
+                            _route_matched, _route_detail = check_route_roster_match(
+                                _item["route_date"], _item["route_code"], _item["route_staff"],
+                            )
+                            if _route_matched is False:
+                                _ai_result = {
+                                    "checked": True,
+                                    "has_anomaly": True,
+                                    "reason": (
+                                        f"{_ai_result['reason']} / 🗺️ {_route_detail}"
+                                        if _ai_result["checked"] and _ai_result["reason"]
+                                        else f"🗺️ {_route_detail}"
+                                    ),
+                                }
+                            return _item["ai_sig"], _ai_result
+
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(_pending_ai_work))) as _executor:
+                            for _ai_sig, _ai_result in _executor.map(_run_one_ai_check, _pending_ai_work):
+                                st.session_state["ai_checked_row_sigs"][_ai_sig] = _ai_result
+
                     for idx, row in pending_df.iloc[::-1].iterrows():
                         row_id = idx + 2
                         cust_name = str(row.iloc[3]) if pd.notna(row.iloc[3]) else ""
@@ -871,42 +950,7 @@ def render_product_order_tabs():
                             for i in range(30)
                         )
                         ai_sig = f"{row_id}_{hashlib.md5(row_raw.encode('utf-8')).hexdigest()}"
-
-                        if ai_sig not in st.session_state["ai_checked_row_sigs"]:
-                            ai_items = []
-                            for i in range(5):
-                                base_idx = 9 + i * 4
-                                code = str(row.iloc[base_idx]) if pd.notna(row.iloc[base_idx]) else ""
-                                if code.strip():
-                                    qty = str(row.iloc[base_idx + 1]) if pd.notna(row.iloc[base_idx + 1]) else ""
-                                    price = str(row.iloc[base_idx + 2]) if pd.notna(row.iloc[base_idx + 2]) else ""
-                                    ai_items.append({"code": code, "qty": qty, "price": price})
-                            ai_past_items = _get_past_order_items_for_ai(cust_code)
-                            ai_result = ai_check_order_anomaly(cust_code, cust_name, ai_items, ai_past_items)
-
-                            # 💡 ルート担当表との照合：申請のルートコード・納品日・担当者（納品者）が
-                            #    担当表の記載と食い違っている場合は、AIの判定に関わらず必ず
-                            #    「異常あり」にして人の確認に回す（担当表が読めない・該当データが
-                            #    無いだけの場合は判定不能＝matched=Noneとして、AIの結果はそのまま使う）。
-                            route_matched, route_detail = check_route_roster_match(
-                                str(row.iloc[6]) if pd.notna(row.iloc[6]) else "",
-                                str(row.iloc[7]) if pd.notna(row.iloc[7]) else "",
-                                str(row.iloc[8]) if pd.notna(row.iloc[8]) else "",
-                            )
-                            if route_matched is False:
-                                ai_result = {
-                                    "checked": True,
-                                    "has_anomaly": True,
-                                    "reason": (
-                                        f"{ai_result['reason']} / 🗺️ {route_detail}"
-                                        if ai_result["checked"] and ai_result["reason"]
-                                        else f"🗺️ {route_detail}"
-                                    ),
-                                }
-
-                            st.session_state["ai_checked_row_sigs"][ai_sig] = ai_result
-                        else:
-                            ai_result = st.session_state["ai_checked_row_sigs"][ai_sig]
+                        ai_result = st.session_state["ai_checked_row_sigs"][ai_sig]
 
                         if ai_result["checked"] and not ai_result["has_anomaly"]:
                             ai_updated_row = [

@@ -138,11 +138,17 @@ def get_anthropic_client():
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def ai_check_order_anomaly(cust_code, cust_name, items, past_items_list):
+def ai_check_order_anomaly(cust_code, cust_name, items, past_items_list, _client=None):
     """商品発注の申請内容をAIでチェックし、異常（数量・単価の急激な変化や桁間違いなど）が
     無いかを判定する。
     items: 今回の申請の商品リスト [{"code":..., "qty":..., "price":...}, ...]
     past_items_list: 同じ顧客の過去の発注履歴（新しい順、最大5件）のリスト
+    _client: 呼び出し側で既に作成済みのAnthropicクライアント（省略時はここで
+      get_anthropic_client()を呼んで作成する）。引数名が"_"で始まるため
+      st.cache_dataのキャッシュキーには含まれない（同じ申請内容なら、どの
+      クライアントインスタンスで呼んでもキャッシュが共有される）。複数件を
+      並列実行する呼び出し側が、st.secrets参照を伴うクライアント作成を
+      ワーカースレッドごとに行わずに済むようにするためのもの。
     戻り値: {"checked": bool, "has_anomaly": bool, "reason": str}
     - checked=False（APIキー未設定など）の場合は has_anomaly=False とし、
       これまで通り人がチェックする（AI機能が無効なだけで、動作は変わらない）。
@@ -152,7 +158,7 @@ def ai_check_order_anomaly(cust_code, cust_name, items, past_items_list):
     これにより、以前はブラウザを再読み込みするたびに全件AI問い合わせをやり直して
     いたのが、同じ内容なら（TTL 30分の間は）アプリ全体で使い回されるようになり、
     管理職チェック画面を開くたびに数十秒待たされる、という遅さの主因を解消する。"""
-    client = get_anthropic_client()
+    client = _client if _client is not None else get_anthropic_client()
     if client is None:
         return {"checked": False, "has_anomaly": False, "reason": ""}
 
