@@ -577,7 +577,11 @@ def render_period_stop_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時はストップ日が空のまま確定してしまわないよう必須チェックする
+                                # （差戻し・削除は内容を確定させるわけではないためチェックしない）。
+                                if btn_approve and not edit_stop_dates.strip():
+                                    st.error("⚠️ 「ストップ日」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[ps_mgr_submitting_key] = True
                                     try:
                                         updated_row = [
