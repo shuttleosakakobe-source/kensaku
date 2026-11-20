@@ -997,7 +997,9 @@ def render_contract_change_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                if btn_approve and not edit_ccode.strip():
+                                    st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[cc_mgr_submitting_key] = True
                                     try:
                                         item_values = []

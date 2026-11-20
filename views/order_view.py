@@ -1057,7 +1057,12 @@ def render_product_order_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請と同じ必須項目（ルートコード・納品日）が
+                                # 空のまま確定してしまわないようチェックする（差戻し・削除は
+                                # 内容を確定させる操作ではないためチェックしない）。
+                                if btn_approve and (not edit_rcode.strip() or not edit_ddate.strip()):
+                                    st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[mgr_submitting_key] = True
                                     try:
                                         updated_row = [

@@ -730,7 +730,12 @@ def render_customer_balance_correction_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請と同じ必須項目（顧客コード）が空のまま
+                                # 確定してしまわないようチェックする（差戻し・削除は内容を
+                                # 確定させる操作ではないためチェックしない）。
+                                if btn_approve and not edit_ccode.strip():
+                                    st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[kz_mgr_submitting_key] = True
                                     try:
                                         item_values = []

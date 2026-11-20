@@ -870,7 +870,15 @@ def render_delivery_qty_change_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請と同じ必須項目（顧客コード・納品ルート・
+                                # 納品日）が空のまま確定してしまわないようチェックする（差戻し・
+                                # 削除は内容を確定させる操作ではないためチェックしない）。
+                                if btn_approve and (
+                                    not edit_ccode.strip() or not edit_route.strip()
+                                    or not edit_delivery_date.strip()
+                                ):
+                                    st.error("⚠️ 「顧客コード」「納品ルート」「納品日」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[dq_mgr_submitting_key] = True
                                     try:
                                         item_values = []

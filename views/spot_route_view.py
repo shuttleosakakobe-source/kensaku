@@ -637,7 +637,17 @@ def render_spot_route_change_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請と同じ必須項目（顧客コード・変更前ルート・
+                                # 変更前日付・変更後ルート・変更後日付）が空のまま確定してしまわない
+                                # ようチェックする（差戻し・削除は内容を確定させる操作ではないため
+                                # チェックしない）。
+                                if btn_approve and (
+                                    not edit_ccode.strip() or not edit_rbefore.strip()
+                                    or not edit_dbefore.strip() or not edit_rafter.strip()
+                                    or not edit_dafter.strip()
+                                ):
+                                    st.error("⚠️ 「顧客コード」「変更前ルート」「変更前日付」「変更後ルート」「変更後日付」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[sr_mgr_submitting_key] = True
                                     try:
                                         updated_row = [
