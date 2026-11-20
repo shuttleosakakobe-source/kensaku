@@ -577,10 +577,11 @@ def render_period_stop_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                # 💡 承認時はストップ日が空のまま確定してしまわないよう必須チェックする
-                                # （差戻し・削除は内容を確定させるわけではないためチェックしない）。
-                                if btn_approve and not edit_stop_dates.strip():
-                                    st.error("⚠️ 「ストップ日」は必須項目です。入力してください。")
+                                # 💡 承認時はストップ日・次回訪問日が空のまま確定してしまわないよう
+                                # 必須チェックする（新規申請・差戻し修正と同じ必須項目。差戻し・
+                                # 削除は内容を確定させるわけではないためチェックしない）。
+                                if btn_approve and (not edit_stop_dates.strip() or not edit_next_visit.strip()):
+                                    st.error("⚠️ 「ストップ日」「次回訪問日」は必須項目です。入力してください。")
                                 elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[ps_mgr_submitting_key] = True
                                     try:
