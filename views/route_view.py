@@ -17,7 +17,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
-    BUSINESS_TAB_KEY,
+    BUSINESS_TAB_KEY, is_self_approving_applicant,
 )
 
 ROUTE_MODE_NAME = "ルート変更"
@@ -482,11 +482,21 @@ def render_route_change_tabs():
                         try:
                             now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
+                            # 💡 申請者自身が権限0・1（全権限・管理職）の場合は、
+                            # 管理職チェック（TAB2）を経由せず、自分の名前をサインとして
+                            # 入れた「承認済み」状態で申請する（self-approve）。
+                            if is_self_approving_applicant():
+                                status_sign, approval_time, approval_comment = (
+                                    applicant, now_str, "権限者本人の申請のため管理職チェック不要"
+                                )
+                            else:
+                                status_sign, approval_time, approval_comment = "申請中", "", ""
+
                             full_row = [
                                 now_str, applicant, customer_code, customer_name, store_name, store_code,
                                 route_before, op_before_code, op_before_name,
                                 route_after, op_after_code, op_after_name, next_visit,
-                                rt_comment, rt_reason, rt_contact, "申請中", "", ""
+                                rt_comment, rt_reason, rt_contact, status_sign, approval_time, approval_comment
                             ]
 
                             payload = {
@@ -593,13 +603,24 @@ def render_route_change_tabs():
                                     else:
                                         st.session_state[rt_re_submitting_key] = True
                                         try:
+                                            re_now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                            if is_self_approving_applicant():
+                                                re_status_sign, re_approval_time, re_approval_comment = (
+                                                    edit_applicant, re_now_str, "権限者本人の再申請のため管理職チェック不要"
+                                                )
+                                                re_rejector_name, re_reject_date = "", ""
+                                            else:
+                                                re_status_sign, re_approval_time, re_approval_comment = "申請中", "", ""
+                                                re_rejector_name, re_reject_date = rejector_name, reject_date
+
                                             updated_row = [
                                                 _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                                 edit_store_name, edit_store_code,
                                                 edit_route_before, edit_op_before_code, edit_op_before_name,
                                                 edit_route_after, edit_op_after_code, edit_op_after_name, edit_next_visit,
-                                                edit_comment, edit_reason, edit_contact, "申請中", "", "",
-                                                rejector_name, reject_date,
+                                                edit_comment, edit_reason, edit_contact,
+                                                re_status_sign, re_approval_time, re_approval_comment,
+                                                re_rejector_name, re_reject_date,
                                             ]
 
                                             payload = {
@@ -755,7 +776,19 @@ def render_route_change_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請・差戻し再申請と同じ必須項目
+                                # （顧客コード・変更前ルート・変更後ルート・次回訪問日）が
+                                # 空のまま確定してしまわないようチェックする（差戻し・削除は
+                                # 内容を確定させる操作ではないためチェックしない）。これが
+                                # 無いと、管理職が編集中に誤って欄を空にしたまま承認しても
+                                # 気付けず、変更前・変更後ルートが空欄のまま業務担当へ進んで
+                                # しまう不具合があった。
+                                if btn_approve and (
+                                    not edit_ccode.strip() or not edit_rbefore.strip()
+                                    or not edit_rafter.strip() or not edit_nvisit.strip()
+                                ):
+                                    st.error("⚠️ 「顧客コード」「変更前ルート」「変更後ルート」「次回訪問日」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[rt_mgr_submitting_key] = True
                                     try:
                                         updated_row = [

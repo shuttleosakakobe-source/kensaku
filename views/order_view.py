@@ -19,7 +19,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
-    BUSINESS_TAB_KEY,
+    BUSINESS_TAB_KEY, is_self_approving_applicant,
 )
 
 ORDER_MODE_NAME = "商品発注"
@@ -591,10 +591,17 @@ def render_product_order_tabs():
                         try:
                             now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
+                            if is_self_approving_applicant():
+                                status_sign, approval_time, approval_comment = (
+                                    applicant, now_str, "権限者本人の申請のため管理職チェック不要"
+                                )
+                            else:
+                                status_sign, approval_time, approval_comment = "申請中", "", ""
+
                             full_row = [
                                 now_str, applicant, customer_code, customer_name,
                                 store_name, store_code, delivery_date, route_code, delivery_person
-                            ] + items_flat + [app_comment, "申請中", "", ""]
+                            ] + items_flat + [app_comment, status_sign, approval_time, approval_comment]
 
                             payload = {
                                 "action": "SUBMIT_MAINTENANCE",
@@ -759,10 +766,25 @@ def render_product_order_tabs():
                                             # 💡 col33（差し戻した管理職名）・col34（差戻し日時）は、ここでは
                                             #    クリアせずそのまま引き継ぐ。「差戻し一覧」ページで、再申請済み
                                             #    （再送）の行を元々の差戻し情報とともに表示できるようにするため。
+                                            # 💡 ただし申請者自身が権限0・1（自動承認対象）の場合は、通常の承認と
+                                            #    同じ扱いで差戻し情報をクリアする。
+                                            re_now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                            if is_self_approving_applicant():
+                                                re_status_sign, re_approval_time, re_approval_comment = (
+                                                    edit_applicant, re_now_str, "権限者本人の再申請のため管理職チェック不要"
+                                                )
+                                                re_rejector_name, re_reject_date = "", ""
+                                            else:
+                                                re_status_sign, re_approval_time, re_approval_comment = "申請中", "", ""
+                                                re_rejector_name, re_reject_date = rejector_name, reject_date
+
                                             updated_row = [
                                                 str(row.iloc[0]), edit_applicant, edit_cust_code, edit_cust_name,
                                                 edit_store_name, edit_store_code, edit_deliv_date, edit_route_code, edit_deliv_person
-                                            ] + edit_items + [edit_app_comment, "申請中", "", "", rejector_name, reject_date]
+                                            ] + edit_items + [
+                                                edit_app_comment, re_status_sign, re_approval_time, re_approval_comment,
+                                                re_rejector_name, re_reject_date,
+                                            ]
 
                                             payload = {
                                                 "action": "RESUBMIT_MAINTENANCE",
@@ -1057,7 +1079,12 @@ def render_product_order_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請と同じ必須項目（ルートコード・納品日）が
+                                # 空のまま確定してしまわないようチェックする（差戻し・削除は
+                                # 内容を確定させる操作ではないためチェックしない）。
+                                if btn_approve and (not edit_rcode.strip() or not edit_ddate.strip()):
+                                    st.error("⚠️ 「ルートコード」と「納品日」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[mgr_submitting_key] = True
                                     try:
                                         updated_row = [

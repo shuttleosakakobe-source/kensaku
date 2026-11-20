@@ -19,7 +19,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
-    BUSINESS_TAB_KEY,
+    BUSINESS_TAB_KEY, is_self_approving_applicant,
 )
 
 PS_MODE_NAME = "期間ストップ"
@@ -330,10 +330,17 @@ def render_period_stop_tabs():
                         try:
                             now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
+                            if is_self_approving_applicant():
+                                status_sign, approval_time, approval_comment = (
+                                    applicant, now_str, "権限者本人の申請のため管理職チェック不要"
+                                )
+                            else:
+                                status_sign, approval_time, approval_comment = "申請中", "", ""
+
                             full_row = [
                                 now_str, applicant, customer_code, customer_name, store_name, store_code,
                                 ps_stop_dates, ps_next_visit, ps_reason, ps_contact, ps_comment,
-                                "申請中", "", ""
+                                status_sign, approval_time, approval_comment
                             ]
 
                             payload = {
@@ -436,11 +443,22 @@ def render_period_stop_tabs():
                                     else:
                                         st.session_state[ps_re_submitting_key] = True
                                         try:
+                                            re_now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                            if is_self_approving_applicant():
+                                                re_status_sign, re_approval_time, re_approval_comment = (
+                                                    edit_applicant, re_now_str, "権限者本人の再申請のため管理職チェック不要"
+                                                )
+                                                re_rejector_name, re_reject_date = "", ""
+                                            else:
+                                                re_status_sign, re_approval_time, re_approval_comment = "申請中", "", ""
+                                                re_rejector_name, re_reject_date = rejector_name, reject_date
+
                                             updated_row = [
                                                 _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                                 edit_store_name, edit_store_code,
                                                 edit_stop_dates, edit_next_visit, edit_reason, edit_contact, edit_comment,
-                                                "申請中", "", "", rejector_name, reject_date,
+                                                re_status_sign, re_approval_time, re_approval_comment,
+                                                re_rejector_name, re_reject_date,
                                             ]
 
                                             payload = {
@@ -577,10 +595,11 @@ def render_period_stop_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                # 💡 承認時はストップ日が空のまま確定してしまわないよう必須チェックする
-                                # （差戻し・削除は内容を確定させるわけではないためチェックしない）。
-                                if btn_approve and not edit_stop_dates.strip():
-                                    st.error("⚠️ 「ストップ日」は必須項目です。入力してください。")
+                                # 💡 承認時はストップ日・次回訪問日が空のまま確定してしまわないよう
+                                # 必須チェックする（新規申請・差戻し修正と同じ必須項目。差戻し・
+                                # 削除は内容を確定させるわけではないためチェックしない）。
+                                if btn_approve and (not edit_stop_dates.strip() or not edit_next_visit.strip()):
+                                    st.error("⚠️ 「ストップ日」「次回訪問日」は必須項目です。入力してください。")
                                 elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[ps_mgr_submitting_key] = True
                                     try:

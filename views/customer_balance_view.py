@@ -21,7 +21,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
-    BUSINESS_TAB_KEY,
+    BUSINESS_TAB_KEY, is_self_approving_applicant,
 )
 from views.contract_view import get_contract_products, _cc_product_labels
 
@@ -464,11 +464,18 @@ def render_customer_balance_correction_tabs():
                         try:
                             now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
+                            if is_self_approving_applicant():
+                                status_sign, approval_time, approval_comment = (
+                                    applicant, now_str, "権限者本人の申請のため管理職チェック不要"
+                                )
+                            else:
+                                status_sign, approval_time, approval_comment = "申請中", "", ""
+
                             full_row = [now_str, applicant, customer_code, customer_name, store_name, store_code]
                             for item in items_data:
                                 for f in KZ_ITEM_FIELDS:
                                     full_row.append(item[f])
-                            full_row += [kz_reason, kz_contact, kz_comment, "申請中", "", ""]
+                            full_row += [kz_reason, kz_contact, kz_comment, status_sign, approval_time, approval_comment]
 
                             payload = {
                                 "action": "SUBMIT_CUSTOMER_BALANCE_CHANGE",
@@ -581,12 +588,23 @@ def render_customer_balance_correction_tabs():
                                                 for f in KZ_ITEM_FIELDS:
                                                     item_values.append(item[f])
 
+                                            re_now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                            if is_self_approving_applicant():
+                                                re_status_sign, re_approval_time, re_approval_comment = (
+                                                    edit_applicant, re_now_str, "権限者本人の再申請のため管理職チェック不要"
+                                                )
+                                                re_rejector_name, re_reject_date = "", ""
+                                            else:
+                                                re_status_sign, re_approval_time, re_approval_comment = "申請中", "", ""
+                                                re_rejector_name, re_reject_date = rejector_name, reject_date
+
                                             updated_row = [
                                                 _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                                 edit_store_name, edit_store_code
                                             ] + item_values + [
                                                 edit_reason, edit_contact, edit_comment,
-                                                "申請中", "", "", rejector_name, reject_date,
+                                                re_status_sign, re_approval_time, re_approval_comment,
+                                                re_rejector_name, re_reject_date,
                                             ]
 
                                             payload = {
@@ -730,7 +748,12 @@ def render_customer_balance_correction_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請と同じ必須項目（顧客コード）が空のまま
+                                # 確定してしまわないようチェックする（差戻し・削除は内容を
+                                # 確定させる操作ではないためチェックしない）。
+                                if btn_approve and not edit_ccode.strip():
+                                    st.error("⚠️ 「顧客コード」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[kz_mgr_submitting_key] = True
                                     try:
                                         item_values = []
