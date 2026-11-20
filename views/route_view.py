@@ -755,7 +755,19 @@ def render_route_change_tabs():
                                 mgr_name = st.session_state["user_name"]
                                 now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
-                                if btn_approve or btn_reject or btn_delete:
+                                # 💡 承認時は、新規申請・差戻し再申請と同じ必須項目
+                                # （顧客コード・変更前ルート・変更後ルート・次回訪問日）が
+                                # 空のまま確定してしまわないようチェックする（差戻し・削除は
+                                # 内容を確定させる操作ではないためチェックしない）。これが
+                                # 無いと、管理職が編集中に誤って欄を空にしたまま承認しても
+                                # 気付けず、変更前・変更後ルートが空欄のまま業務担当へ進んで
+                                # しまう不具合があった。
+                                if btn_approve and (
+                                    not edit_ccode.strip() or not edit_rbefore.strip()
+                                    or not edit_rafter.strip() or not edit_nvisit.strip()
+                                ):
+                                    st.error("⚠️ 「顧客コード」「変更前ルート」「変更後ルート」「次回訪問日」は必須項目です。入力してください。")
+                                elif btn_approve or btn_reject or btn_delete:
                                     st.session_state[rt_mgr_submitting_key] = True
                                     try:
                                         updated_row = [
