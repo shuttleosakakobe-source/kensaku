@@ -1,0 +1,8 @@
+.git
+.github
+.devcontainer
+cloudrun
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+*.md
