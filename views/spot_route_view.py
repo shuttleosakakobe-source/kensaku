@@ -19,7 +19,7 @@ from views.maint_common import (
     find_already_transferred_row_id,
     render_duplicate_transfer_guard, render_tab5_own_prints_section,
     render_tab1_notifications_section,
-    BUSINESS_TAB_KEY,
+    BUSINESS_TAB_KEY, is_self_approving_applicant,
 )
 
 SR_MODE_NAME = "単発ルート変更"
@@ -371,11 +371,18 @@ def render_spot_route_change_tabs():
                         try:
                             now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
 
+                            if is_self_approving_applicant():
+                                status_sign, approval_time, approval_comment = (
+                                    applicant, now_str, "権限者本人の申請のため管理職チェック不要"
+                                )
+                            else:
+                                status_sign, approval_time, approval_comment = "申請中", "", ""
+
                             full_row = [
                                 now_str, applicant, customer_code, customer_name, store_name, store_code,
                                 route_before, date_before,
                                 route_after, date_after,
-                                sr_comment, sr_reason, sr_contact, "申請中", "", ""
+                                sr_comment, sr_reason, sr_contact, status_sign, approval_time, approval_comment
                             ]
 
                             payload = {
@@ -485,13 +492,24 @@ def render_spot_route_change_tabs():
                                     else:
                                         st.session_state[sr_re_submitting_key] = True
                                         try:
+                                            re_now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S")
+                                            if is_self_approving_applicant():
+                                                re_status_sign, re_approval_time, re_approval_comment = (
+                                                    edit_applicant, re_now_str, "権限者本人の再申請のため管理職チェック不要"
+                                                )
+                                                re_rejector_name, re_reject_date = "", ""
+                                            else:
+                                                re_status_sign, re_approval_time, re_approval_comment = "申請中", "", ""
+                                                re_rejector_name, re_reject_date = rejector_name, reject_date
+
                                             updated_row = [
                                                 _v("timestamp"), edit_applicant, edit_cust_code, edit_cust_name,
                                                 edit_store_name, edit_store_code,
                                                 edit_route_before, edit_date_before,
                                                 edit_route_after, edit_date_after,
-                                                edit_comment, edit_reason, edit_contact, "申請中", "", "",
-                                                rejector_name, reject_date,
+                                                edit_comment, edit_reason, edit_contact,
+                                                re_status_sign, re_approval_time, re_approval_comment,
+                                                re_rejector_name, re_reject_date,
                                             ]
 
                                             payload = {
