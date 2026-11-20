@@ -107,11 +107,18 @@ def read_csv_cached(url, **kwargs):
     💡 呼び出し側がstorage_options={"User-Agent": ...}を渡してくる場合がある
     （元はfsspec経由でpd.read_csvがURLを直接開く際にヘッダーを渡すためのもの）。
     ここではrequests.get自体のheadersとして使うため、kwargsから取り出して
-    pd.read_csvには渡さない（io.StringIOにはstorage_optionsを渡せないため）。"""
+    pd.read_csvには渡さない（io.StringIOにはstorage_optionsを渡せないため）。
+    💡 keep_default_na=Falseを指定する。これが無いと、セルの値が偶然
+    pandasの既定の欠損値扱いの文字列（"NA"・"N/A"・"NULL"・"None"・"null"等）と
+    一致した場合、dtype=strを指定していても強制的に欠損値（NaN）として読み込まれて
+    しまい、スプレッドシート上にはちゃんと文字が入っているのにアプリ上では空欄に
+    なって消えて見える、という不具合の原因になっていた（例：ルートコードが
+    たまたま"NA"だった場合に、変更前・変更後ルートが表示されなくなる）。"""
     storage_options = kwargs.pop("storage_options", None)
     headers = storage_options if isinstance(storage_options, dict) else None
     response = requests.get(url, timeout=20, headers=headers)
     response.raise_for_status()
+    kwargs.setdefault("keep_default_na", False)
     return pd.read_csv(io.StringIO(response.text), dtype=str, **kwargs)
 
 

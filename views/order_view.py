@@ -1442,6 +1442,10 @@ def render_product_order_tabs():
                             if not has_item:
                                 st.info("登録されている商品明細はありません。")
 
+                            app_com_val = str(row.iloc[29]) if len(row) > 29 and pd.notna(row.iloc[29]) else ""
+                            if app_com_val.strip():
+                                st.text_area("申請者コメント", value=app_com_val, disabled=True, key=f"chk_app_com_{row_id}")
+
                             st.write("---")
                             chk_memo = st.text_input("チェック用メモ / 特記事項", key=f"chk_memo_{row_id}")
                             

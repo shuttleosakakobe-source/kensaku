@@ -43,13 +43,18 @@ def _read_csv_cached(url):
     #    ハングしたまま返ってこなくなり、画面が「読み込み中」のまま固まって見える
     #    原因になっていた。requests.getで明示的にタイムアウトを設定してから
     #    pd.read_csvに渡すことで、一定時間で確実にエラーとして打ち切られるようにする。
+    # 💡 keep_default_na=Falseも指定する。これが無いと、セルの値が偶然pandasの
+    #    既定の欠損値扱いの文字列（"NA"・"N/A"・"NULL"・"None"・"null"等）と一致
+    #    した場合、強制的に欠損値（NaN）として読み込まれてしまい、スプレッドシート
+    #    上にはちゃんと文字が入っているのにアプリ上では空欄になって消えて見える、
+    #    という不具合の原因になっていた。
     response = requests.get(url, timeout=20)
     response.raise_for_status()
-    return pd.read_csv(io.StringIO(response.text))
+    return pd.read_csv(io.StringIO(response.text), keep_default_na=False)
 
 
 @st.cache_data(ttl=15)
 def _read_csv_cached_str(url):
     response = requests.get(url, timeout=20)
     response.raise_for_status()
-    return pd.read_csv(io.StringIO(response.text), dtype=str)
+    return pd.read_csv(io.StringIO(response.text), dtype=str, keep_default_na=False)
