@@ -1,0 +1,95 @@
+# main に変更が入ったら、自動で Google Cloud Run に新しい版を載せる仕組み
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-cloudrun
+  cancel-in-progress: false
+
+env:
+  SERVICE: kensaku-mente
+  REGION: asia-northeast1
+  AR_REPO: mente-apps
+  RUNTIME_SA_NAME: mente-app-runner
+  SECRET_NAME: anthropic-api-key
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 設定が登録済みか確認
+        id: check
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_WIF: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SA: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$GCP_PROJECT_ID" ] || [ -z "$GCP_WIF" ] || [ -z "$GCP_SA" ]; then
+            echo "::notice::GitHub Secrets（GCP_PROJECT_ID / GCP_WORKLOAD_IDENTITY_PROVIDER / GCP_SERVICE_ACCOUNT）が未登録のため、Cloud Run へのデプロイをスキップしました。"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+
+      - name: Google Cloud にログイン（鍵ファイルなし）
+        if: steps.check.outputs.ready == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.check.outputs.ready == 'true'
+
+      - name: アプリを箱詰めして保管庫に送る
+        if: steps.check.outputs.ready == 'true'
+        id: image
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/${SERVICE}:${GITHUB_SHA}"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Cloud Run に載せる
+        if: steps.check.outputs.ready == 'true'
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          EXTRA=()
+          # AI チェック用の鍵が金庫（Secret Manager）にあれば渡す。無ければ AI チェックだけ無効で動く
+          if gcloud secrets describe "$SECRET_NAME" --project "$PROJECT_ID" >/dev/null 2>&1; then
+            EXTRA+=(--set-secrets "ANTHROPIC_API_KEY=${SECRET_NAME}:latest")
+          fi
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE" \
+            --service-account "${RUNTIME_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --allow-unauthenticated \
+            --port 8080 \
+            --cpu 1 \
+            --memory 1Gi \
+            --min-instances 0 \
+            --max-instances 3 \
+            --concurrency 40 \
+            --timeout 3600 \
+            --session-affinity \
+            "${EXTRA[@]}" \
+            --quiet
+          URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
+          echo "### 公開URL: $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "公開URL: $URL"
